@@ -7,6 +7,9 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
+# Marketing uses BullMQ workers, not Celery. Clear any dashboard Start Command
+# that still says `celery ...` — it overrides this and will crash deploy.
+startCommand = "./railway-start.sh"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"

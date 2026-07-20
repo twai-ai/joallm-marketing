@@ -6,6 +6,7 @@
   },
   "deploy": {
     "numReplicas": 1,
+    "startCommand": "./railway-start.sh",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",

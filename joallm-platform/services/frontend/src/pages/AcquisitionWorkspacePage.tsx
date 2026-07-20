@@ -29,6 +29,7 @@ import type {
   GrowthIntent,
   GrowthIntentId,
 } from '@joallm/shared';
+import { AssetsPanel } from '../components/acquisition/AssetsPanel';
 import { UseCaseHomeShell } from '../components/use-cases/UseCaseHomeShell';
 import { getUseCaseById } from '../constants/useCases';
 import { getProgramById, PRIMARY_GROWTH_PROGRAM } from '../constants/programs';
@@ -756,7 +757,8 @@ export function AcquisitionWorkspacePage() {
               <li className="font-medium text-teal-800">✓ Sprint 1 — this workspace</li>
               <li className="font-medium text-teal-800">✓ Sprint 2 — Campaign CRUD</li>
               <li className="font-medium text-teal-800">✓ Sprint 2b — Intent catalog</li>
-              <li>Sprint 3 — Creative Projects + Assets</li>
+              <li className="font-medium text-teal-800">✓ Sprint 3 — Creative Projects + Assets</li>
+              <li>Sprint 4 — Publishing Jobs</li>
               <li>Sprint 7 — Program Interest API</li>
             </ul>
           </div>
@@ -795,10 +797,10 @@ export function AcquisitionWorkspacePage() {
       )}
 
       {tab === 'assets' && (
-        <PlaceholderPanel
-          title="Assets"
-          body="Upload posters, Canva/Figma exports, and creatives under campaigns. Intent assetTemplates will scaffold Creative Projects later — AI image generation remains postponed."
-          nextSprint="Sprint 3 — Creative Projects + Assets"
+        <AssetsPanel
+          programId={program.id}
+          campaigns={campaigns}
+          campaignsLoading={loading}
         />
       )}
 

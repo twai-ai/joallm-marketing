@@ -112,3 +112,10 @@ export * from './acquisition-campaign';
  * @see ../../docs/04-architecture/INSTITUTION_ACQUISITION_PLATFORM.md
  */
 export * from './growth-intent';
+
+/**
+ * Creative Projects + Growth Marketing Assets (Sprint 3).
+ * @see ./creative-project.ts
+ * @see ../../docs/04-architecture/INSTITUTION_ACQUISITION_PLATFORM.md
+ */
+export * from './creative-project';

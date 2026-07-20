@@ -179,7 +179,7 @@ Program: Amplify with AI
 | **1** | ~~Program → Acquisition Workspace (static UI)~~ |
 | **2** | ~~Campaign CRUD~~ |
 | **2b** | ~~Intent catalog + Intent-scoped campaigns (Amplify dogfood)~~ |
-| **3** | Creative Projects + Assets (upload / attach — Canva/Figma/manual OK) |
+| **3** | ~~Creative Projects + Assets (upload / attach — Canva/Figma/manual OK)~~ |
 | **4** | Publishing Jobs |
 | **5** | One outbound connector (LinkedIn **or** Meta Ads) |
 | **6** | Timeline ingestion + attribution → Program Interest |

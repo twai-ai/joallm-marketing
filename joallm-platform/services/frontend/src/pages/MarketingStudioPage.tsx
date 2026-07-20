@@ -131,7 +131,7 @@ export function MarketingStudioPage() {
             <li className="font-medium text-teal-800">Sprint 1 — Program → Acquisition Workspace ✓</li>
             <li className="font-medium text-teal-800">Sprint 2 — Campaign CRUD ✓</li>
             <li className="font-medium text-teal-800">Sprint 2b — Intent catalog (Amplify dogfood) ✓</li>
-            <li>Sprint 3 — Creative Projects + Assets</li>
+            <li className="font-medium text-teal-800">Sprint 3 — Creative Projects + Assets ✓</li>
             <li>Sprint 4 — Publishing Jobs</li>
             <li>Sprint 5 — One outbound connector</li>
             <li>Sprint 6 — Timeline → Program Interest</li>

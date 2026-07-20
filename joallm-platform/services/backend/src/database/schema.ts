@@ -1159,6 +1159,51 @@ export const acquisitionCampaigns = pgTable('acquisition_campaigns', {
   programIdIdx: index('acquisition_campaigns_program_id_idx').on(table.ownerUserId, table.programId),
 }));
 
+/** Growth Creative Project — work unit under a Campaign that produces Assets */
+export const creativeProjects = pgTable('creative_projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  campaignId: uuid('campaign_id').notNull().references(() => acquisitionCampaigns.id, { onDelete: 'cascade' }),
+  programId: text('program_id'),
+  name: text('name').notNull(),
+  status: text('status', {
+    enum: ['draft', 'active', 'archived'],
+  }).default('draft').notNull(),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  campaignIdIdx: index('creative_projects_campaign_id_idx').on(table.campaignId),
+  ownerUserIdIdx: index('creative_projects_owner_user_id_idx').on(table.ownerUserId),
+  programIdIdx: index('creative_projects_program_id_idx').on(table.ownerUserId, table.programId),
+}));
+
+/** Growth Marketing Asset — publishable creative; file blobs live in files table */
+export const marketingAssets = pgTable('marketing_assets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  campaignId: uuid('campaign_id').notNull().references(() => acquisitionCampaigns.id, { onDelete: 'cascade' }),
+  creativeProjectId: uuid('creative_project_id').notNull().references(() => creativeProjects.id, { onDelete: 'cascade' }),
+  programId: text('program_id'),
+  kind: text('kind').notNull().default('other'),
+  title: text('title').notNull(),
+  status: text('status', {
+    enum: ['draft', 'in_review', 'approved', 'scheduled', 'published', 'archived'],
+  }).default('draft').notNull(),
+  body: text('body'),
+  fileIds: jsonb('file_ids').$type<string[]>().default([]),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  campaignIdIdx: index('marketing_assets_campaign_id_idx').on(table.campaignId),
+  creativeProjectIdIdx: index('marketing_assets_creative_project_id_idx').on(table.creativeProjectId),
+  ownerUserIdIdx: index('marketing_assets_owner_user_id_idx').on(table.ownerUserId),
+  programIdIdx: index('marketing_assets_program_id_idx').on(table.ownerUserId, table.programId),
+}));
+
 export const acquisitionSourceConnections = pgTable('acquisition_source_connections', {
   id: uuid('id').primaryKey().defaultRandom(),
   ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

@@ -664,5 +664,45 @@ export async function ensureCorePlatformTables(): Promise<void> {
     `,
   );
 
+  await exec(
+    'creative_projects',
+    sql`
+      CREATE TABLE IF NOT EXISTS "creative_projects" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "campaign_id" uuid NOT NULL REFERENCES "acquisition_campaigns"("id") ON DELETE CASCADE,
+        "program_id" text,
+        "name" text NOT NULL,
+        "status" text NOT NULL DEFAULT 'draft',
+        "metadata" jsonb DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'marketing_assets',
+    sql`
+      CREATE TABLE IF NOT EXISTS "marketing_assets" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "campaign_id" uuid NOT NULL REFERENCES "acquisition_campaigns"("id") ON DELETE CASCADE,
+        "creative_project_id" uuid NOT NULL REFERENCES "creative_projects"("id") ON DELETE CASCADE,
+        "program_id" text,
+        "kind" text NOT NULL DEFAULT 'other',
+        "title" text NOT NULL,
+        "status" text NOT NULL DEFAULT 'draft',
+        "body" text,
+        "file_ids" jsonb DEFAULT '[]'::jsonb,
+        "metadata" jsonb DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
   logger.info('✓ Core platform tables ensured');
 }

@@ -21,6 +21,18 @@ import {
   listProgramCampaigns,
   updateProgramCampaign,
 } from '../services/acquisition-campaign-service.js';
+import {
+  createCreativeProject,
+  createMarketingAsset,
+  deleteCreativeProject,
+  deleteMarketingAsset,
+  ensureDefaultCreativeProject,
+  listCampaignAssets,
+  listCreativeProjects,
+  listProjectAssets,
+  updateCreativeProject,
+  updateMarketingAsset,
+} from '../services/creative-project-service.js';
 
 const MetaIngestSchema = z.object({
   payload: z.record(z.unknown()),
@@ -296,6 +308,306 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
     const ok = await deleteProgramCampaign(userId, campaignId);
     if (!ok) {
       return reply.status(404).send({ success: false, error: 'Campaign not found' });
+    }
+    return reply.send({ success: true });
+  });
+
+  // ── Creative Projects + Assets (Sprint 3) ──
+
+  const CreativeProjectStatusSchema = z.enum(['draft', 'active', 'archived']);
+  const AssetKindSchema = z.enum([
+    'image',
+    'video',
+    'poster',
+    'linkedin_post',
+    'instagram_caption',
+    'whatsapp_broadcast',
+    'email',
+    'landing_hero',
+    'brochure',
+    'other',
+  ]);
+  const AssetStatusSchema = z.enum([
+    'draft',
+    'in_review',
+    'approved',
+    'scheduled',
+    'published',
+    'archived',
+  ]);
+
+  const CreateProjectSchema = z.object({
+    name: z.string().min(1).max(200),
+    status: CreativeProjectStatusSchema.optional(),
+    templateKey: z.string().max(100).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  });
+
+  const UpdateProjectSchema = z.object({
+    name: z.string().min(1).max(200).optional(),
+    status: CreativeProjectStatusSchema.optional(),
+    templateKey: z.string().max(100).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  });
+
+  const CreateAssetSchema = z.object({
+    title: z.string().min(1).max(200),
+    kind: AssetKindSchema.optional(),
+    status: AssetStatusSchema.optional(),
+    body: z.string().max(20000).optional(),
+    fileIds: z.array(z.string().uuid()).optional(),
+    metadata: z.record(z.unknown()).optional(),
+    /** When true, create under a default creative project if projectId omitted */
+    useDefaultProject: z.boolean().optional(),
+  });
+
+  const UpdateAssetSchema = z.object({
+    title: z.string().min(1).max(200).optional(),
+    kind: AssetKindSchema.optional(),
+    status: AssetStatusSchema.optional(),
+    body: z.string().max(20000).nullable().optional(),
+    fileIds: z.array(z.string().uuid()).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  });
+
+  fastify.get('/programs/:programId/campaigns/:campaignId/creative-projects', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { programId, campaignId } = request.params as { programId: string; campaignId: string };
+    const projects = await listCreativeProjects(userId, programId, campaignId);
+    return reply.send({ success: true, data: projects });
+  });
+
+  fastify.post('/programs/:programId/campaigns/:campaignId/creative-projects', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId, campaignId } = request.params as { programId: string; campaignId: string };
+      const body = CreateProjectSchema.parse(request.body || {});
+      const project = await createCreativeProject({
+        ownerUserId: userId,
+        programId,
+        campaignId,
+        ...body,
+      });
+      if (!project) {
+        return reply.status(404).send({ success: false, error: 'Campaign not found' });
+      }
+      return reply.status(201).send({ success: true, data: project });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Create creative project failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create creative project',
+      });
+    }
+  });
+
+  fastify.patch('/programs/:programId/campaigns/:campaignId/creative-projects/:projectId', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId, campaignId, projectId } = request.params as {
+        programId: string;
+        campaignId: string;
+        projectId: string;
+      };
+      const body = UpdateProjectSchema.parse(request.body || {});
+      const project = await updateCreativeProject({
+        ownerUserId: userId,
+        programId,
+        campaignId,
+        projectId,
+        ...body,
+      });
+      if (!project) {
+        return reply.status(404).send({ success: false, error: 'Creative project not found' });
+      }
+      return reply.send({ success: true, data: project });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Update creative project failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update creative project',
+      });
+    }
+  });
+
+  fastify.delete('/programs/:programId/campaigns/:campaignId/creative-projects/:projectId', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { campaignId, projectId } = request.params as { campaignId: string; projectId: string };
+    const ok = await deleteCreativeProject(userId, campaignId, projectId);
+    if (!ok) {
+      return reply.status(404).send({ success: false, error: 'Creative project not found' });
+    }
+    return reply.send({ success: true });
+  });
+
+  fastify.get('/programs/:programId/campaigns/:campaignId/assets', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { programId, campaignId } = request.params as { programId: string; campaignId: string };
+    const assets = await listCampaignAssets(userId, programId, campaignId);
+    return reply.send({ success: true, data: assets });
+  });
+
+  fastify.get('/programs/:programId/campaigns/:campaignId/creative-projects/:projectId/assets', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { programId, campaignId, projectId } = request.params as {
+      programId: string;
+      campaignId: string;
+      projectId: string;
+    };
+    const assets = await listProjectAssets(userId, programId, campaignId, projectId);
+    return reply.send({ success: true, data: assets });
+  });
+
+  fastify.post('/programs/:programId/campaigns/:campaignId/assets', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId, campaignId } = request.params as { programId: string; campaignId: string };
+      const body = CreateAssetSchema.extend({
+        creativeProjectId: z.string().uuid().optional(),
+      }).parse(request.body || {});
+
+      let projectId = body.creativeProjectId;
+      if (!projectId) {
+        const project = await ensureDefaultCreativeProject({
+          ownerUserId: userId,
+          programId,
+          campaignId,
+        });
+        if (!project) {
+          return reply.status(404).send({ success: false, error: 'Campaign not found' });
+        }
+        projectId = project.id;
+      }
+
+      const asset = await createMarketingAsset({
+        ownerUserId: userId,
+        programId,
+        campaignId,
+        creativeProjectId: projectId,
+        title: body.title,
+        kind: body.kind,
+        status: body.status,
+        body: body.body,
+        fileIds: body.fileIds,
+        metadata: body.metadata,
+      });
+      if (!asset) {
+        return reply.status(404).send({ success: false, error: 'Creative project not found' });
+      }
+      return reply.status(201).send({ success: true, data: asset });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Create marketing asset failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create asset',
+      });
+    }
+  });
+
+  fastify.post('/programs/:programId/campaigns/:campaignId/creative-projects/:projectId/assets', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId, campaignId, projectId } = request.params as {
+        programId: string;
+        campaignId: string;
+        projectId: string;
+      };
+      const body = CreateAssetSchema.parse(request.body || {});
+      const asset = await createMarketingAsset({
+        ownerUserId: userId,
+        programId,
+        campaignId,
+        creativeProjectId: projectId,
+        title: body.title,
+        kind: body.kind,
+        status: body.status,
+        body: body.body,
+        fileIds: body.fileIds,
+        metadata: body.metadata,
+      });
+      if (!asset) {
+        return reply.status(404).send({ success: false, error: 'Creative project not found' });
+      }
+      return reply.status(201).send({ success: true, data: asset });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Create project asset failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create asset',
+      });
+    }
+  });
+
+  fastify.patch('/programs/:programId/campaigns/:campaignId/assets/:assetId', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId, campaignId, assetId } = request.params as {
+        programId: string;
+        campaignId: string;
+        assetId: string;
+      };
+      const body = UpdateAssetSchema.parse(request.body || {});
+      const asset = await updateMarketingAsset({
+        ownerUserId: userId,
+        programId,
+        campaignId,
+        assetId,
+        ...body,
+      });
+      if (!asset) {
+        return reply.status(404).send({ success: false, error: 'Asset not found' });
+      }
+      return reply.send({ success: true, data: asset });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Update marketing asset failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update asset',
+      });
+    }
+  });
+
+  fastify.delete('/programs/:programId/campaigns/:campaignId/assets/:assetId', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { campaignId, assetId } = request.params as { campaignId: string; assetId: string };
+    const ok = await deleteMarketingAsset(userId, campaignId, assetId);
+    if (!ok) {
+      return reply.status(404).send({ success: false, error: 'Asset not found' });
     }
     return reply.send({ success: true });
   });

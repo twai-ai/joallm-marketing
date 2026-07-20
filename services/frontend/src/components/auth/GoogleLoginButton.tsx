@@ -1,4 +1,3 @@
-import React from 'react';
 import { env } from '../../config/env';
 
 interface GoogleLoginButtonProps {
@@ -6,14 +5,22 @@ interface GoogleLoginButtonProps {
   children?: React.ReactNode;
 }
 
+function resolveApiBaseUrl(): string {
+  const raw = (env.VITE_API_URL || '').trim().replace(/\/$/, '');
+  if (!raw) return 'http://localhost:3001';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  // Railway sometimes injects host without scheme
+  return `https://${raw}`;
+}
+
 export function GoogleLoginButton({ className = '', children }: GoogleLoginButtonProps) {
   const handleGoogleLogin = () => {
-    // Redirect to backend Google OAuth endpoint
-    window.location.href = `${env.VITE_API_URL}/api/auth/google`;
+    window.location.href = `${resolveApiBaseUrl()}/api/auth/google`;
   };
 
   return (
     <button
+      type="button"
       onClick={handleGoogleLogin}
       className={`flex items-center justify-center gap-3 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors ${className}`}
     >
@@ -43,8 +50,3 @@ export function GoogleLoginButton({ className = '', children }: GoogleLoginButto
     </button>
   );
 }
-
-
-
-
-

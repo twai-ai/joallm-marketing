@@ -256,7 +256,7 @@ function initializeRedis(): IORedis | null {
 const redisInstance = initializeRedis();
 
 // Export redisInstance for health checks
-export { redisInstance };
+export { redisInstance, isRedisAvailable };
 
 // Create queues only if Redis is available
 export const documentProcessingQueue = redisInstance ? new Queue<ProcessDocumentJob>('document-processing', {

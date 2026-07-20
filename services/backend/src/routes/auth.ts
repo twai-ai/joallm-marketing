@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { randomUUID, createHash } from 'node:crypto';
 import { eq, and, ne } from 'drizzle-orm';
-import { redisInstance } from '../services/queue.js';
+import { redisInstance, isRedisAvailable } from '../services/queue.js';
 import { generateToken, generateRefreshToken, verifyRefreshToken, authenticateToken, blacklistToken, isTokenBlacklisted, AuthenticatedRequest } from '../middleware/auth.js';
 import { EndpointValidations, SanitizationUtils } from '../middleware/validation.js';
 import { db } from '../database/connection.js';
@@ -33,6 +33,40 @@ const changePasswordSchema = z.object({
 const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1)
 });
+
+/** Normalize FRONTEND_URL (Railway often injects host without scheme). */
+function getFrontendUrl(): string {
+  const raw = (process.env.FRONTEND_URL || 'http://localhost:5174').trim();
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/$/, '');
+  return `https://${raw.replace(/\/$/, '')}`;
+}
+
+type OAuthCodePayload = { accessToken: string; refreshToken: string };
+const oauthCodeMemory = new Map<string, { payload: OAuthCodePayload; expiresAt: number }>();
+
+async function storeOAuthCode(code: string, payload: OAuthCodePayload): Promise<void> {
+  if (isRedisAvailable && redisInstance) {
+    await (redisInstance as any).set(`oauth_code:${code}`, JSON.stringify(payload), 'EX', 300);
+    return;
+  }
+  oauthCodeMemory.set(code, { payload, expiresAt: Date.now() + 300_000 });
+}
+
+async function consumeOAuthCode(code: string): Promise<OAuthCodePayload | null> {
+  if (isRedisAvailable && redisInstance) {
+    const key = `oauth_code:${code}`;
+    const raw = await (redisInstance as any).get(key);
+    if (!raw) return null;
+    await (redisInstance as any).del(key);
+    return JSON.parse(raw) as OAuthCodePayload;
+  }
+
+  const entry = oauthCodeMemory.get(code);
+  if (!entry) return null;
+  oauthCodeMemory.delete(code);
+  if (entry.expiresAt < Date.now()) return null;
+  return entry.payload;
+}
 
 // Register new user
 async function register(request: FastifyRequest, reply: FastifyReply) {
@@ -590,8 +624,7 @@ async function googleAuth(request: FastifyRequest, reply: FastifyReply) {
     reply.redirect(authUrl);
   } catch (error) {
     logger.error('Google auth error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5175';
-    reply.redirect(`${frontendUrl}/auth/error?message=Google authentication setup failed`);
+    reply.redirect(`${getFrontendUrl()}/auth/error?message=Google authentication setup failed`);
   }
 }
 
@@ -603,25 +636,25 @@ async function googleCallback(request: FastifyRequest, reply: FastifyReply) {
     
     if (!code) {
       logger.error('No authorization code in callback');
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5175';
-      reply.redirect(`${frontendUrl}/auth/error?message=No authorization code provided`);
+      reply.redirect(`${getFrontendUrl()}/auth/error?message=No authorization code provided`);
       return;
     }
 
     // Get user info from Google
     logger.info('Exchanging code for tokens...');
-    const { tokens, userInfo } = await googleAuthService.getTokenAndUserInfo(code);
+    const { userInfo } = await googleAuthService.getTokenAndUserInfo(code);
     logger.info('Successfully got user info:', { email: userInfo.email, name: userInfo.name });
 
     // Check if user exists
     let [user] = await db.select().from(users).where(eq(users.email, userInfo.email)).limit(1);
 
     if (!user) {
-      // Create new user
+      // Create new user — store a bcrypt hash so password column constraints stay valid
+      const placeholderPassword = await bcrypt.hash(`oauth-${randomUUID()}`, 12);
       const newUser = await db.insert(users).values({
         email: userInfo.email,
         name: userInfo.name,
-        password: `oauth-${randomUUID()}`, // OAuth users don't have passwords, use placeholder
+        password: placeholderPassword,
         avatar: userInfo.picture || null,
         role: 'casual', // Default role for OAuth users
         subscriptionTier: 'free',
@@ -669,32 +702,19 @@ async function googleCallback(request: FastifyRequest, reply: FastifyReply) {
       email: user.email
     });
 
-    // Use a short-lived one-time code to avoid exposing JWTs in the URL/browser history
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5175';
-    let redirectUrl: string;
-
-    if (redisInstance) {
-      // Store tokens under a random code in Redis (TTL: 5 minutes)
-      const oauthCode = randomUUID();
-      await (redisInstance as any).set(
-        `oauth_code:${oauthCode}`,
-        JSON.stringify({ accessToken, refreshToken }),
-        'EX',
-        300
-      );
-      redirectUrl = `${frontendUrl}/auth/callback?code=${oauthCode}`;
-    } else {
-      // Redis unavailable — redirect to an error page rather than expose tokens in the URL
-      reply.redirect(`${frontendUrl}/auth/error?message=Authentication+service+temporarily+unavailable`);
-      return;
-    }
-
+    // One-time code avoids JWTs in the URL/browser history (Redis preferred; memory fallback)
+    const oauthCode = randomUUID();
+    await storeOAuthCode(oauthCode, { accessToken, refreshToken });
+    const redirectUrl = `${getFrontendUrl()}/auth/callback?code=${oauthCode}`;
+    logger.info('Google OAuth success, redirecting to frontend', {
+      frontendUrl: getFrontendUrl(),
+      redis: isRedisAvailable,
+    });
     reply.redirect(redirectUrl);
 
   } catch (error) {
     logger.error('Google callback error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5175';
-    reply.redirect(`${frontendUrl}/auth/error?message=Authentication failed`);
+    reply.redirect(`${getFrontendUrl()}/auth/error?message=Authentication failed`);
   }
 }
 
@@ -828,18 +848,12 @@ async function exchangeOAuthCode(request: FastifyRequest, reply: FastifyReply) {
   if (!code) {
     return reply.status(400).send({ error: 'Missing code parameter' });
   }
-  if (!redisInstance) {
-    return reply.status(503).send({ error: 'Token exchange unavailable' });
-  }
   try {
-    const key = `oauth_code:${code}`;
-    const data = await (redisInstance as any).get(key);
-    if (!data) {
+    const payload = await consumeOAuthCode(code);
+    if (!payload) {
       return reply.status(401).send({ error: 'Invalid or expired code' });
     }
-    await (redisInstance as any).del(key); // One-time use
-    const { accessToken, refreshToken } = JSON.parse(data);
-    return reply.send({ token: accessToken, refreshToken });
+    return reply.send({ token: payload.accessToken, refreshToken: payload.refreshToken });
   } catch (error) {
     logger.error('OAuth code exchange error:', error);
     return reply.status(500).send({ error: 'Token exchange failed' });

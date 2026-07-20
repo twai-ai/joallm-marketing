@@ -27,14 +27,16 @@ export class GoogleAuthService {
   generateAuthUrl(): string {
     try {
       const scopes = [
+        'openid',
         'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/userinfo.profile'
+        'https://www.googleapis.com/auth/userinfo.profile',
       ];
 
       const authUrl = this.client.generateAuthUrl({
         access_type: 'offline',
         scope: scopes,
-        include_granted_scopes: true
+        include_granted_scopes: true,
+        prompt: 'select_account',
       });
 
       logger.info('Generated Google OAuth URL', { 
@@ -58,30 +60,61 @@ export class GoogleAuthService {
     userInfo: GoogleUserInfo;
   }> {
     try {
-      // Exchange code for tokens
       const { tokens } = await this.client.getToken(code);
       this.client.setCredentials(tokens);
 
-      // Get user info from Google
-      const ticket = await this.client.verifyIdToken({
-        idToken: tokens.id_token!,
-        audience: config.googleClientId,
-      });
+      // Prefer id_token (requires openid scope); fall back to userinfo endpoint
+      if (tokens.id_token) {
+        const ticket = await this.client.verifyIdToken({
+          idToken: tokens.id_token,
+          audience: config.googleClientId,
+        });
 
-      const payload = ticket.getPayload();
-      if (!payload) {
-        throw new Error('Invalid token payload');
+        const payload = ticket.getPayload();
+        if (!payload?.email) {
+          throw new Error('Invalid token payload');
+        }
+
+        return {
+          tokens,
+          userInfo: {
+            id: payload.sub,
+            email: payload.email,
+            name: payload.name || payload.email,
+            picture: payload.picture,
+            verified_email: payload.email_verified || false,
+          },
+        };
       }
 
-      const userInfo: GoogleUserInfo = {
-        id: payload.sub,
-        email: payload.email!,
-        name: payload.name!,
-        picture: payload.picture,
-        verified_email: payload.email_verified || false,
+      if (!tokens.access_token) {
+        throw new Error('Google did not return an access token or id_token');
+      }
+
+      const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+      if (!userinfoRes.ok) {
+        throw new Error(`Google userinfo failed: ${userinfoRes.status}`);
+      }
+      const profile = (await userinfoRes.json()) as {
+        id: string;
+        email: string;
+        name?: string;
+        picture?: string;
+        verified_email?: boolean;
       };
 
-      return { tokens, userInfo };
+      return {
+        tokens,
+        userInfo: {
+          id: profile.id,
+          email: profile.email,
+          name: profile.name || profile.email,
+          picture: profile.picture,
+          verified_email: profile.verified_email || false,
+        },
+      };
     } catch (error) {
       logger.error('Google OAuth error:', error);
       throw new Error('Failed to authenticate with Google');

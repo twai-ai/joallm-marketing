@@ -23,8 +23,9 @@
       "environment": {
         "NODE_ENV": "production",
         "NODE_OPTIONS": "--max-old-space-size=2048",
-        "CORS_ORIGIN": "${{frontend.RAILWAY_PUBLIC_DOMAIN}},${{landing-page.RAILWAY_PUBLIC_DOMAIN}}",
-        "FRONTEND_URL": "${{frontend.RAILWAY_PUBLIC_DOMAIN}}",
+        "CORS_ORIGIN": "https://${{frontend.RAILWAY_PUBLIC_DOMAIN}},https://${{landing-page.RAILWAY_PUBLIC_DOMAIN}}",
+        "FRONTEND_URL": "https://${{frontend.RAILWAY_PUBLIC_DOMAIN}}",
+        "GOOGLE_REDIRECT_URI": "https://${{backend.RAILWAY_PUBLIC_DOMAIN}}/api/auth/google/callback",
         "STORAGE_PROVIDER": "volume",
         "STORAGE_PATH": "/app/data/uploads"
       }
@@ -43,8 +44,8 @@
       ],
       "environment": {
         "NODE_ENV": "production",
-        "VITE_API_URL": "${{backend.RAILWAY_PUBLIC_DOMAIN}}",
-        "VITE_API_BASE_URL": "${{backend.RAILWAY_PUBLIC_DOMAIN}}",
+        "VITE_API_URL": "https://${{backend.RAILWAY_PUBLIC_DOMAIN}}",
+        "VITE_API_BASE_URL": "https://${{backend.RAILWAY_PUBLIC_DOMAIN}}",
         "VITE_APP_ENV": "production",
         "VITE_ENABLE_ANALYTICS": "false",
         "VITE_ENABLE_DEBUG_MODE": "false"
@@ -64,7 +65,7 @@
       ],
       "environment": {
         "NODE_ENV": "production",
-        "VITE_API_URL": "${{backend.RAILWAY_PUBLIC_DOMAIN}}",
+        "VITE_API_URL": "https://${{backend.RAILWAY_PUBLIC_DOMAIN}}",
         "VITE_APP_ENV": "production"
       }
     }

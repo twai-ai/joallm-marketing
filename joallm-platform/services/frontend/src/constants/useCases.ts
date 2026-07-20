@@ -89,10 +89,10 @@ export const USE_CASES: UseCaseDefinition[] = [
     assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
     status: 'placeholder',
     description:
-      'Create, review, and publish Marketing Assets through Channels — Studio owns intent, Platform owns Connectors and Creative AI.',
+      'Program Growth workspace: select a Program, run Campaigns, generate Assets, publish via Channels — not a blank campaign canvas.',
     helper:
-      'Studio = create & publish. ATRISI Marketing = acquire, Timeline, Knowledge, intelligence. Not a second CRM.',
-    audience: 'Growth, communications, and institutional marketing teams',
+      'Start from Program (e.g. Amplify with AI). Studio creates; ATRISI Marketing operates Timelines and intelligence; hand off to Applications → Enrollment.',
+    audience: 'Growth, admissions marketing, and institutional program teams',
     supportsAssetDetail: true,
   },
 ];

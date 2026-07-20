@@ -4,6 +4,7 @@ import { ONTOLOGY } from './ontology';
 export const PLATFORM_NAME = ONTOLOGY.product.name;
 export const PLATFORM_SHORT_NAME = ONTOLOGY.product.shortName;
 export const PLATFORM_TAGLINE = ONTOLOGY.product.tagline;
+export const PLATFORM_CAPABILITY = ONTOLOGY.product.capability;
 
 /** Constitutional: Studio creates. Products operate. Platform remembers. */
 export const PLATFORM_CONSTITUTION = ONTOLOGY.constitution;
@@ -34,9 +35,9 @@ export const PRODUCT_DESCRIPTIONS = {
   workflows: 'Guided Studio workspaces for create, review, and publish intent',
   notebooks: 'Advanced interactive sessions (Platform tooling)',
   documentation: 'Architecture notes and operator guides',
-  acquisition: 'Connect Channels into one Person Timeline',
+  acquisition: 'Connect Channels into Person Timelines (toward Program Growth)',
   documentAi: 'Ingest document sets and launch grounded retrieval',
-  marketingStudio: 'Create and publish Marketing Assets via Channels',
+  marketingStudio: 'Program Growth workspace — Campaigns and Assets under a Program',
 } as const;
 
 export const PRODUCT_ROUTES = {

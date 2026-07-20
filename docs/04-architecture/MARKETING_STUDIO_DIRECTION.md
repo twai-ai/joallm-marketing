@@ -3,28 +3,32 @@
 Status: **constitutional product direction**  
 Last updated: 2026-07-21  
 Parent: [Platform Constitution](./PLATFORM_CONSTITUTION.md)  
+Canonical problem framing: [Program Growth Direction](./PROGRAM_GROWTH_DIRECTION.md)  
 Sibling: [Knowledge Acquisition Direction](./KNOWLEDGE_ACQUISITION_DIRECTION.md) · [Creative AI Direction](./CREATIVE_AI_DIRECTION.md)
 
 ## Principle
 
-Marketing Studio is the **execution workspace** and **integration contract** between the Marketing Brain and external platforms — not merely an asset editor.
+Marketing Studio is the **Program-scoped execution workspace** between the Marketing Brain (Program Growth) and external platforms — not a blank campaign canvas and not a second CRM.
+
+**Marketers start from a Program**, then Campaign → Creative Project → Assets → Publish.
 
 ```text
                  ATRISI
 
         ┌──────────────────────┐
         │ Marketing Brain       │
-        │ Strategy · Campaigns  │
-        │ Intelligence · Timeline│
+        │ Program Growth        │
+        │ Strategy · Timelines  │
+        │ Cross-program IQ      │
         └──────────┬────────────┘
                    │
                    ▼
         ┌──────────────────────┐
         │ Marketing Studio     │
+        │ Programs → Campaigns │
         │ Assets · Channels    │
         │ Profiles · Jobs      │
         │ Generation Profiles  │
-        │ Approvals · Brand    │
         └──────────┬────────────┘
                    │
          publish intent · creative intent
@@ -43,17 +47,18 @@ Marketing Studio is the **execution workspace** and **integration contract** bet
 Constitutional split:
 
 > **Studio owns publishing intent. Platform owns execution capability.**  
-> **Studio owns creative intent. Platform owns generative capability.**
+> **Studio owns creative intent. Platform owns generative capability.**  
+> **Program is the primary object. Campaigns live under Programs.**
 
 ---
 
-## Three-layer marketing architecture
+## Three-layer Program Growth architecture
 
 | Layer | Questions | Owner |
 |---|---|---|
-| **Marketing Brain** | Why? Who? What are we learning? | ATRISI Marketing (product) |
-| **Marketing Studio** | What are we creating? Where? Which channel/profile? What is scheduled? | Studio workspace |
-| **Execution platforms** | Deliver ads, send email, optimize delivery | External vendors via Platform Connectors |
+| **Marketing Brain** | Which Programs need growth? What are we learning across Programs? | ATRISI Marketing (Program Growth) |
+| **Marketing Studio** | For this Program: which Campaign, Creative, Channel, publish? | Studio workspace |
+| **Execution platforms** | Deliver ads, send WhatsApp/email, optimize delivery | External vendors via Platform Connectors |
 
 ---
 

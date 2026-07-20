@@ -11,19 +11,21 @@ Last updated: 2026-07-21
 
 > **Studio owns creative intent. Platform owns generative capability.**
 
-These apply to the entire JoaLLM platform and every ATRISI product — not only ATRISI Marketing.
+> **Program is the primary growth object. Campaigns live under Programs.**
+
+These apply to the entire JoaLLM platform and every ATRISI product — not only ATRISI Marketing (Program Growth).
 
 ```text
 Creator
         │
         ▼
 Studio
-(Create / Edit / Review / Publish intent · Channels · Profiles
- · Generation Profiles · Brand Kits)
+(Program-scoped Create / Edit / Review / Publish
+ · Campaigns · Channels · Profiles · Generation Profiles)
         │
         ▼
 Product (Brain)
-(Strategy · Campaigns · Intelligence · Timeline UI)
+(Program Growth · Strategy · Timelines · Intelligence)
         │
         ▼
 Platform
@@ -36,16 +38,28 @@ External systems
 (Meta · LinkedIn · Mailchimp · OpenAI · Imagen · FLUX · Ideogram · …)
 ```
 
+Canonical Marketing framing: [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md).
+
 ---
 
 ## Separation of concerns
 
 | Layer | Role | Buys / uses |
 |---|---|---|
-| **Studio** | Workspace for humans + AI to create, edit, review, approve, express **publish intent** and **creative intent** | Not sold as “the CRM/LMS” |
-| **Product (Brain)** | Domain operating surface — strategy, campaigns, intelligence, outcomes | ATRISI Marketing, Education, … |
+| **Studio** | Workspace for humans + AI to create, edit, review, approve, express **publish intent** and **creative intent** — for ATRISI Marketing, always **Program-scoped** | Not sold as “the CRM/LMS” |
+| **Product (Brain)** | Domain operating surface — for Marketing: **Program Growth** (strategy, campaigns under Programs, intelligence, Timelines) | ATRISI Marketing, Education, … |
 | **Platform** | Shared constitutional services + Integration + **Creative AI** | Identity, Timeline, Knowledge, Connectors, Generative media |
 | **External** | Delivery, vendor AI models, optimization | Ads, email, LMS, image/video APIs |
+
+### ATRISI Marketing = Program Growth
+
+The primary object is **Program** (course, bootcamp, workshop, event, initiative) — not Campaign.
+
+```text
+Program → Campaign → Creative → Assets → Channel → Application → Enrollment → Learning
+```
+
+See [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md). Do not become a generic marketing suite.
 
 ### Studio must not become another product
 

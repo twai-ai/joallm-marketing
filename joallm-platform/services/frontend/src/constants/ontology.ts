@@ -12,14 +12,25 @@
 export const ONTOLOGY = {
   constitution: 'Studio creates. Products operate. Platform remembers.',
   philosophy: 'Institution Capability — capabilities plug into durable aggregates.',
+  /**
+   * Surface map:
+   * - atrisi.org → public programs/jobs (Education already consumes these)
+   * - education.atrisi.org → delivery / admissions
+   * - this platform → student acquisition from the market
+   */
+  surfaces: {
+    publicSite: 'atrisi.org',
+    education: 'education.atrisi.org',
+    thisPlatform: 'Marketing / student acquisition (this codebase)',
+  },
   product: {
     name: 'ATRISI Marketing',
     shortName: 'ATRISI',
     role: 'Brain',
     capability: 'Growth',
-    tagline: 'Programs first — capabilities plug in',
+    tagline: 'Student acquisition from the market',
     meaning:
-      'Cross-program Growth Brain. Operations live in Program Capability Workspaces (Growth, Admissions, Learning, …).',
+      'Acquire students/prospects via campaigns and channels. Program context aligns with atrisi.org; Education pulls interest later — programs/jobs are not sourced from here.',
   },
   studio: {
     name: 'Studio',

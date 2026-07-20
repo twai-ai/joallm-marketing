@@ -112,7 +112,8 @@ export type GrowthApplicationHandoff = {
 };
 
 /**
- * Program Core is local catalog (atrisi.org/programs + institution edits).
- * No LMS/SIS/education source-system sync for program definitions.
+ * Program ids here are Growth targeting context (aligned with atrisi.org catalog).
+ * education.atrisi.org already loads Program + job definitions from atrisi.org.
+ * This platform owns student acquisition from the market — not program/job SoR.
  */
-export type ProgramCatalogSource = 'atrisi_catalog' | 'institution_manual';
+export type ProgramCatalogSource = 'atrisi_catalog_reference' | 'institution_manual';

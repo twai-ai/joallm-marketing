@@ -34,34 +34,41 @@ Public catalog: [atrisi.org/programs](https://atrisi.org/programs)
 
 ---
 
-## This product is Marketing / Growth — not Education sync
+## ATRISI surface map (current reality)
 
-**Do not connect Program Core to a source system** (no LMS/SIS/education.atrisi.org sync for program definitions).
-
-Program details are **already provided** — seed/maintain them in this platform from the ATRISI catalog (and institution edits). Education is a **consumer**, not the system of record for Program Core here.
-
-### Data flow (canonical)
+| Surface | Role today |
+|---|---|
+| **[atrisi.org](https://atrisi.org)** | Public institution site — Programs catalog, jobs, narrative. **Source** of program/job definitions for Education. |
+| **[education.atrisi.org](https://education.atrisi.org)** | Education OS — Learning, Admissions, etc. **Already gets Program + job data from atrisi.org.** |
+| **This platform** (`platform.atrisi.org` / joallm-marketing) | **Student acquisition from the market** — Growth, Acquisition Intelligence, campaigns, channel ingest, Person Timelines. |
 
 ```text
-Channels / Campaigns (WhatsApp, ads, forms, …)
-        │  send / webhook / ingest
-        ▼
-ATRISI Marketing  (this platform)
-  Program catalog (local)
-  Growth: Campaigns · Engagement · Applications intent
-  Person Timelines · Attribution
-        │
-        │  education.atrisi.org PULLS
-        ▼
-Education (Admissions · Learning · …)
+atrisi.org  ──program/job defs──►  education.atrisi.org
+     │
+     │  catalog copy (seed / reference)
+     ▼
+this platform (Marketing / Acquisition)
+     │
+     │  campaign + channel engagement
+     │  application / interest intent
+     ▼
+education.atrisi.org  ◄── pulls acquisition outcomes (future contract)
 ```
 
-| Concern | System of record |
-|---|---|
-| Program Core (what the program is) | **This platform** (catalog / local) |
-| Growth campaigns, creatives, publish | **This platform** |
-| Inbound engagement → application intent | **This platform** (ingest) |
-| Admissions decisions, Learning delivery | **education.atrisi.org** (pulls from Marketing) |
+**Implication for this codebase:**
+
+- Do **not** become the system of record for Program/job definitions that Education already takes from atrisi.org.
+- Seed Program context here only as needed for Growth/Acquisition (which program a campaign targets).
+- Own: market channels → students/prospects → attributed interest / application intent.
+- Education continues to own delivery; it may later **pull** acquisition outcomes from this platform.
+
+---
+
+## This product is Marketing / Growth — not Education sync
+
+**Do not connect Program Core to Education as a source system.** Education already loads programs/jobs from **atrisi.org**.
+
+This platform touches **student acquisition from the market**. Program labels here are Growth context (campaign targeting), not a competing program registry.
 
 ---
 

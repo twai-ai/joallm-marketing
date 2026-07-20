@@ -1,0 +1,21 @@
+# Keep backend Docker context small when building from repo root
+**/.git
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+**/coverage
+**/.DS_Store
+**/*.md
+docs
+infrastructure
+monitoring
+performance
+scripts
+tests
+.github
+atrisi-meta-service
+joallm-platform/services/frontend
+joallm-platform/services/landing-page
+joallm-platform/docs
+joallm-platform/monitoring

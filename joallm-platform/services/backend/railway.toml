@@ -1,5 +1,6 @@
-# Used when Railway Root Directory = joallm-platform/services/backend
-# Do NOT set Dockerfile path to joallm-platform/services/backend/Dockerfile in that case.
+# Prefer the repo-root Dockerfile.backend deploy (Root Directory blank).
+# If you keep Root Directory = joallm-platform/services/backend, use this file
+# and set Dockerfile path to "Dockerfile" only (not the nested path again).
 
 [build]
 builder = "DOCKERFILE"

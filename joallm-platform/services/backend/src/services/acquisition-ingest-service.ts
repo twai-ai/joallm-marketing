@@ -424,6 +424,22 @@ export async function ingestMetaWhatsAppWebhook(options: {
           createdInteractions.push({ id: interaction.id, personId: person.id });
 
           await refreshPersonMaturity(person.id, 'engaged');
+
+          // Sprint 6 — attribute inbound to recent published campaign → Program Interest
+          try {
+            const { attributeInboundWhatsAppInterest } = await import(
+              './program-interest-service.js'
+            );
+            await attributeInboundWhatsAppInterest({
+              ownerUserId: sourceConnection.ownerUserId,
+              personId: person.id,
+              eventId: event.id,
+              textBody,
+              occurredAt,
+            });
+          } catch (attrError) {
+            logger.warn('Program Interest attribution skipped', attrError);
+          }
         }
 
         for (const status of value.statuses || []) {
@@ -515,39 +531,28 @@ export async function ingestMetaWhatsAppWebhook(options: {
 }
 
 export async function maybeSendWhatsAppAutoReply(payload: MetaWebhookPayload): Promise<void> {
-  const accessToken = config.metaAccessToken;
-  const phoneNumberId = config.metaPhoneNumberId;
-  if (!accessToken || !phoneNumberId) {
+  if (!config.metaAccessToken || !config.metaPhoneNumberId) {
     return;
   }
 
   if (payload.object !== 'whatsapp_business_account') return;
+
+  const { sendWhatsAppText } = await import('./whatsapp-send-service.js');
 
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
       for (const message of change.value?.messages || []) {
         if (!message.from) continue;
         try {
-          const response = await fetch(
-            `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: message.from,
-                type: 'text',
-                text: {
-                  body: 'Hi! Thanks for reaching out to ATRISI. We will get back to you shortly.',
-                },
-              }),
-            },
-          );
-          const data = await response.json();
-          logger.info('WhatsApp auto-reply sent', data);
+          const result = await sendWhatsAppText({
+            to: message.from,
+            body: 'Hi! Thanks for reaching out to ATRISI. We will get back to you shortly.',
+          });
+          if (result.ok) {
+            logger.info('WhatsApp auto-reply sent', { messageId: result.messageId });
+          } else {
+            logger.error('WhatsApp auto-reply failed', result.error);
+          }
         } catch (error) {
           logger.error('WhatsApp auto-reply failed', error);
         }

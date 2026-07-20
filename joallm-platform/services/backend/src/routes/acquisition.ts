@@ -36,10 +36,16 @@ import {
 import {
   createPublishingJob,
   deletePublishingJob,
+  executePublishingJob,
   listCampaignPublishingJobs,
   listProgramPublishingJobs,
   updatePublishingJobStatus,
 } from '../services/publishing-job-service.js';
+import {
+  createProgramInterest,
+  listProgramInterests,
+  toPullItem,
+} from '../services/program-interest-service.js';
 
 const MetaIngestSchema = z.object({
   payload: z.record(z.unknown()),
@@ -638,6 +644,9 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
   const PublishAssetSchema = z.object({
     channelKind: ChannelKindSchema,
     status: z.enum(['draft', 'queued']).optional(),
+    recipientPhone: z.string().min(8).max(32).optional(),
+    messageBody: z.string().max(4000).optional(),
+    executeNow: z.boolean().optional(),
   });
 
   fastify.post('/programs/:programId/campaigns/:campaignId/assets/:assetId/publish', {
@@ -658,6 +667,9 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         marketingAssetId: assetId,
         channelKind: body.channelKind,
         status: body.status || 'queued',
+        recipientPhone: body.recipientPhone,
+        messageBody: body.messageBody,
+        executeNow: body.executeNow,
       });
       if (!job) {
         return reply.status(404).send({ success: false, error: 'Asset or campaign not found' });
@@ -671,6 +683,26 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
       return reply.status(500).send({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create publishing job',
+      });
+    }
+  });
+
+  fastify.post('/programs/:programId/publishing-jobs/:jobId/execute', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { jobId } = request.params as { jobId: string };
+      const job = await executePublishingJob({ ownerUserId: userId, jobId });
+      if (!job) {
+        return reply.status(404).send({ success: false, error: 'Publishing job not found' });
+      }
+      return reply.send({ success: true, data: job });
+    } catch (error) {
+      logger.error('Execute publishing job failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to execute publishing job',
       });
     }
   });
@@ -745,6 +777,118 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
       return reply.status(404).send({ success: false, error: 'Publishing job not found' });
     }
     return reply.send({ success: true });
+  });
+
+  // ── Program Interest (Sprint 6–7) — Education pull ──
+
+  const CreateInterestSchema = z.object({
+    personId: z.string().uuid(),
+    programId: z.string().min(1).max(200),
+    programName: z.string().max(200).optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    source: z.string().min(1).max(100),
+    campaignId: z.string().uuid().optional(),
+    campaignName: z.string().max(200).optional(),
+    intent: z.string().max(100).optional(),
+    evidence: z
+      .array(
+        z.object({
+          kind: z.string(),
+          summary: z.string().optional(),
+          occurredAt: z.string().optional(),
+          channel: z.string().optional(),
+          refId: z.string().optional(),
+          attributes: z.record(z.unknown()).optional(),
+        }),
+      )
+      .optional(),
+    occurredAt: z.string().datetime().optional(),
+  });
+
+  fastify.get('/programs/:programId/interests', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { programId } = request.params as { programId: string };
+    const query = request.query as { since?: string; limit?: string };
+    const since = query.since ? new Date(query.since) : undefined;
+    const interests = await listProgramInterests({
+      ownerUserId: userId,
+      programId,
+      since,
+      limit: Number(query.limit) || 100,
+    });
+    return reply.send({ success: true, data: interests.map(toPullItem) });
+  });
+
+  /** Education / integration pull — token or API key */
+  fastify.get('/program-interests', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const query = request.query as { programId?: string; since?: string; limit?: string };
+    const interests = await listProgramInterests({
+      ownerUserId: userId,
+      programId: query.programId,
+      since: query.since ? new Date(query.since) : undefined,
+      limit: Number(query.limit) || 100,
+    });
+    return reply.send({ success: true, data: interests.map(toPullItem) });
+  });
+
+  fastify.get('/program-interests/pull', {
+    preHandler: [authenticateApiKey],
+    schema: {
+      description: 'Education pull — Program Interest only (API key auth)',
+      tags: ['acquisition'],
+    },
+  }, async (request, reply) => {
+    const userId =
+      ((request as any).user?.id as string | undefined) ||
+      config.acquisitionDefaultOwnerUserId;
+    if (!userId) {
+      return reply.status(503).send({ success: false, error: 'No acquisition owner configured' });
+    }
+    const query = request.query as { programId?: string; since?: string; limit?: string };
+    const interests = await listProgramInterests({
+      ownerUserId: userId,
+      programId: query.programId,
+      since: query.since ? new Date(query.since) : undefined,
+      limit: Number(query.limit) || 100,
+    });
+    return reply.send({ success: true, data: interests.map(toPullItem) });
+  });
+
+  fastify.post('/program-interests', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const body = CreateInterestSchema.parse(request.body || {});
+      const interest = await createProgramInterest({
+        ownerUserId: userId,
+        personId: body.personId,
+        programId: body.programId,
+        programName: body.programName,
+        confidence: body.confidence,
+        source: body.source,
+        campaignId: body.campaignId,
+        campaignName: body.campaignName,
+        intent: body.intent,
+        evidence: body.evidence,
+        occurredAt: body.occurredAt ? new Date(body.occurredAt) : undefined,
+      });
+      return reply.status(201).send({ success: true, data: toPullItem(interest) });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Create program interest failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create program interest',
+      });
+    }
   });
 }
 

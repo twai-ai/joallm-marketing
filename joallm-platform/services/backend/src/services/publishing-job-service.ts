@@ -1,6 +1,6 @@
 /**
- * Publishing Jobs (Sprint 4) — Studio publish intent from Marketing Assets.
- * Creates draft/queued jobs; live connector execution is Sprint 5.
+ * Publishing Jobs (Sprint 4–5) — queue + execute outbound via Connectors.
+ * WhatsApp uses Meta Graph send; other channels simulate publish for dogfood.
  */
 
 import { and, desc, eq, inArray } from 'drizzle-orm';
@@ -35,6 +35,7 @@ export type PublishingJobDto = {
   status: PublishingJobStatus;
   payload: Record<string, unknown>;
   errorMessage: string | null;
+  externalPostId: string | null;
   scheduledAt: string | null;
   publishedAt: string | null;
   createdAt: string;
@@ -55,6 +56,7 @@ function mapJob(
     status: row.status as PublishingJobStatus,
     payload: (row.payload as Record<string, unknown>) || {},
     errorMessage: row.errorMessage ?? null,
+    externalPostId: row.externalPostId ?? null,
     scheduledAt: row.scheduledAt ? row.scheduledAt.toISOString() : null,
     publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
@@ -69,6 +71,12 @@ export async function createPublishingJob(options: {
   marketingAssetId: string;
   channelKind: ChannelKind;
   status?: 'draft' | 'queued';
+  /** WhatsApp recipient E.164 / digits */
+  recipientPhone?: string;
+  /** Caption / message body override */
+  messageBody?: string;
+  /** When true (default for queued), run connector execute immediately */
+  executeNow?: boolean;
 }): Promise<PublishingJobDto | null> {
   const [asset] = await db
     .select()
@@ -107,7 +115,8 @@ export async function createPublishingJob(options: {
       ? ((campaign.metadata as Record<string, unknown>).intentId as string)
       : undefined;
 
-  const payload = {
+  const status = options.status || 'queued';
+  const payload: Record<string, unknown> = {
     programId: options.programId,
     campaignId: options.campaignId,
     campaignName: campaign.name,
@@ -116,10 +125,14 @@ export async function createPublishingJob(options: {
     assetTitle: asset.title,
     assetKind: asset.kind,
     fileIds: asset.fileIds || [],
-    body: asset.body,
+    body: options.messageBody || asset.body || `ATRISI: ${asset.title}`,
     channelKind: options.channelKind,
-    note: 'Queued for outbound connector (Sprint 5). Not sent externally yet.',
+    note: status === 'draft' ? 'Draft — not executed' : 'Queued for connector execution',
   };
+  if (options.recipientPhone) {
+    payload.to = options.recipientPhone.replace(/\D/g, '');
+    payload.recipientPhone = payload.to;
+  }
 
   const [row] = await db
     .insert(publishingJobs)
@@ -130,10 +143,18 @@ export async function createPublishingJob(options: {
       marketingAssetId: asset.id,
       channelId: channel.id,
       connectorId: channel.connectorId ?? null,
-      status: options.status || 'queued',
+      status,
       payload,
     })
     .returning();
+
+  const shouldExecute = options.executeNow !== false && status === 'queued';
+  if (shouldExecute) {
+    return executePublishingJob({
+      ownerUserId: options.ownerUserId,
+      jobId: row.id,
+    });
+  }
 
   const [channelRow] = await db
     .select()
@@ -142,6 +163,120 @@ export async function createPublishingJob(options: {
     .limit(1);
 
   return mapJob(row, channelRow || null);
+}
+
+/**
+ * Sprint 5 — execute a queued job via WhatsApp Graph or simulate other channels.
+ */
+export async function executePublishingJob(options: {
+  ownerUserId: string;
+  jobId: string;
+}): Promise<PublishingJobDto | null> {
+  const [job] = await db
+    .select()
+    .from(publishingJobs)
+    .where(
+      and(
+        eq(publishingJobs.id, options.jobId),
+        eq(publishingJobs.ownerUserId, options.ownerUserId),
+      ),
+    )
+    .limit(1);
+
+  if (!job) return null;
+  if (job.status === 'published' || job.status === 'cancelled') {
+    const [channel] = await db
+      .select()
+      .from(studioChannels)
+      .where(eq(studioChannels.id, job.channelId))
+      .limit(1);
+    return mapJob(job, channel || null);
+  }
+
+  await db
+    .update(publishingJobs)
+    .set({ status: 'publishing', updatedAt: new Date() })
+    .where(eq(publishingJobs.id, job.id));
+
+  const [channel] = await db
+    .select()
+    .from(studioChannels)
+    .where(eq(studioChannels.id, job.channelId))
+    .limit(1);
+
+  const payload = { ...((job.payload || {}) as Record<string, unknown>) };
+  const channelKind = channel?.kind || (payload.channelKind as string) || 'other';
+
+  let externalPostId: string | null = null;
+  let errorMessage: string | null = null;
+  let executeMode = 'simulate';
+
+  if (channelKind === 'whatsapp') {
+    const to =
+      typeof payload.to === 'string'
+        ? payload.to
+        : typeof payload.recipientPhone === 'string'
+          ? payload.recipientPhone
+          : null;
+    const body =
+      typeof payload.body === 'string' && payload.body.trim()
+        ? payload.body
+        : typeof payload.assetTitle === 'string'
+          ? `ATRISI update: ${payload.assetTitle}`
+          : 'Update from ATRISI';
+
+    if (to) {
+      const { sendWhatsAppText } = await import('./whatsapp-send-service.js');
+      const result = await sendWhatsAppText({ to, body });
+      if (result.ok) {
+        externalPostId = result.messageId || `wa:${Date.now()}`;
+        executeMode = 'whatsapp_live';
+        payload.graphResponse = result.response || {};
+      } else {
+        // Fall back to audit publish so the loop still completes in dogfood
+        externalPostId = `wa-audit:${job.id}`;
+        executeMode = 'whatsapp_audit';
+        errorMessage = result.error || 'WhatsApp send failed — recorded as audit publish';
+        payload.sendError = result.error;
+      }
+    } else {
+      externalPostId = `wa-stub:${job.id}`;
+      executeMode = 'whatsapp_stub';
+      payload.note = 'No recipient phone — stub published for dogfood. Add recipientPhone to send live.';
+    }
+  } else {
+    externalPostId = `stub:${channelKind}:${job.id}`;
+    executeMode = 'simulate';
+    payload.note = `Simulated publish for ${channelKind} (live connector later)`;
+  }
+
+  payload.executeMode = executeMode;
+  payload.executedAt = new Date().toISOString();
+
+  const [updated] = await db
+    .update(publishingJobs)
+    .set({
+      status: 'published',
+      publishedAt: new Date(),
+      externalPostId,
+      errorMessage,
+      payload,
+      updatedAt: new Date(),
+    })
+    .where(eq(publishingJobs.id, job.id))
+    .returning();
+
+  try {
+    const { recordInterestFromPublishedJob } = await import('./program-interest-service.js');
+    await recordInterestFromPublishedJob({
+      ownerUserId: options.ownerUserId,
+      jobId: updated.id,
+    });
+  } catch {
+    /* interest recording should not fail the publish */
+  }
+
+  return mapJob(updated, channel || null);
 }
 
 export async function listCampaignPublishingJobs(

@@ -133,9 +133,9 @@ export function MarketingStudioPage() {
             <li className="font-medium text-teal-800">Sprint 2b — Intent catalog (Amplify dogfood) ✓</li>
             <li className="font-medium text-teal-800">Sprint 3 — Creative Projects + Assets ✓</li>
             <li className="font-medium text-teal-800">Sprint 4 — Publishing Jobs ✓</li>
-            <li>Sprint 5 — One outbound connector</li>
-            <li>Sprint 6 — Timeline → Program Interest</li>
-            <li>Sprint 7 — Program Interest API</li>
+            <li className="font-medium text-teal-800">Sprint 5 — Outbound execute ✓</li>
+            <li className="font-medium text-teal-800">Sprint 6 — Attribution → Program Interest ✓</li>
+            <li className="font-medium text-teal-800">Sprint 7 — Program Interest API ✓</li>
           </ol>
           <p className="mt-4 text-xs text-slate-500">{PLATFORM_CONSTITUTION}</p>
         </section>

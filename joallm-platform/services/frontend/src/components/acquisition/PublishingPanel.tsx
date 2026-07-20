@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Send, Trash2 } from 'lucide-react';
+import { Loader2, Play, Send, Trash2 } from 'lucide-react';
 import type { AcquisitionCampaign, ChannelKind } from '@joallm/shared';
 import { apiClient } from '../../utils/api-client';
 import { showError, showSuccess } from '../../utils/toast';
@@ -14,6 +14,7 @@ type PublishingJobRow = {
   status: string;
   payload: Record<string, unknown>;
   errorMessage: string | null;
+  externalPostId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -65,6 +66,18 @@ export function PublishingPanel({
     void load();
   }, [load]);
 
+  const executeJob = async (job: PublishingJobRow) => {
+    try {
+      await apiClient.post(
+        `/api/acquisition/programs/${encodeURIComponent(programId)}/publishing-jobs/${job.id}/execute`,
+      );
+      showSuccess('Job executed');
+      await load();
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Execute failed');
+    }
+  };
+
   const cancelJob = async (job: PublishingJobRow) => {
     try {
       await apiClient.patch(
@@ -99,11 +112,11 @@ export function PublishingPanel({
           <div>
             <h2 className="text-xl font-semibold text-slate-950">Publishing Jobs</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Queue assets to channels. Jobs are recorded as draft/queued — live send lands in Sprint
-              5 (outbound connector).
+              Execute outbound: WhatsApp sends live when a recipient is set; other channels simulate
+              publish for dogfood. Published jobs create Program Interest.
             </p>
             <p className="mt-2 font-mono text-xs text-slate-500">
-              Intent → Campaign → Asset → Publish → (connector) → Engagement
+              Asset → Publish → Connector → Program Interest
             </p>
           </div>
         </div>
@@ -157,9 +170,16 @@ export function PublishingPanel({
                     <div className="mt-0.5 text-xs text-slate-500">
                       {job.channelName || job.channelKind || 'channel'}
                       {campaignName ? ` · ${campaignName}` : ''}
+                      {typeof job.payload.executeMode === 'string'
+                        ? ` · ${job.payload.executeMode}`
+                        : ''}
+                      {job.externalPostId ? ` · ${job.externalPostId}` : ''}
                       {' · '}
                       {new Date(job.createdAt).toLocaleString()}
                     </div>
+                    {job.errorMessage && (
+                      <p className="mt-1 text-xs text-amber-800">{job.errorMessage}</p>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span
@@ -167,6 +187,16 @@ export function PublishingPanel({
                     >
                       {job.status}
                     </span>
+                    {(job.status === 'queued' || job.status === 'draft' || job.status === 'failed') && (
+                      <button
+                        type="button"
+                        onClick={() => void executeJob(job)}
+                        className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-2 py-1 text-xs font-semibold text-white"
+                      >
+                        <Play className="h-3 w-3" />
+                        Execute
+                      </button>
+                    )}
                     {job.status === 'queued' || job.status === 'draft' ? (
                       <button
                         type="button"

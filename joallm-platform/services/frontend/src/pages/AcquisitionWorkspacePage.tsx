@@ -11,6 +11,7 @@ import {
   ArrowRight,
   BarChart3,
   Compass,
+  HeartHandshake,
   Image as ImageIcon,
   LayoutDashboard,
   Loader2,
@@ -32,6 +33,7 @@ import type {
   GrowthIntentId,
 } from '@joallm/shared';
 import { AssetsPanel } from '../components/acquisition/AssetsPanel';
+import { InterestsPanel } from '../components/acquisition/InterestsPanel';
 import { PublishingPanel } from '../components/acquisition/PublishingPanel';
 import { UseCaseHomeShell } from '../components/use-cases/UseCaseHomeShell';
 import { getUseCaseById } from '../constants/useCases';
@@ -48,6 +50,7 @@ type WorkspaceTab =
   | 'channels'
   | 'assets'
   | 'publishing'
+  | 'interests'
   | 'analytics';
 
 const TABS: { id: WorkspaceTab; label: string; icon: typeof Megaphone }[] = [
@@ -57,6 +60,7 @@ const TABS: { id: WorkspaceTab; label: string; icon: typeof Megaphone }[] = [
   { id: 'channels', label: 'Channels', icon: Radio },
   { id: 'assets', label: 'Assets', icon: ImageIcon },
   { id: 'publishing', label: 'Publishing', icon: Send },
+  { id: 'interests', label: 'Interest', icon: HeartHandshake },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ];
 
@@ -786,8 +790,8 @@ export function AcquisitionWorkspacePage() {
               <li className="font-medium text-teal-800">✓ Sprint 2b — Intent catalog</li>
               <li className="font-medium text-teal-800">✓ Sprint 3 — Creative Projects + Assets</li>
               <li className="font-medium text-teal-800">✓ Sprint 4 — Publishing Jobs</li>
-              <li>Sprint 5 — Outbound connector</li>
-              <li>Sprint 7 — Program Interest API</li>
+              <li className="font-medium text-teal-800">✓ Sprint 5 — Outbound execute</li>
+              <li className="font-medium text-teal-800">✓ Sprint 6–7 — Program Interest</li>
             </ul>
           </div>
         </section>
@@ -842,11 +846,13 @@ export function AcquisitionWorkspacePage() {
         <PublishingPanel programId={program.id} campaigns={campaigns} />
       )}
 
+      {tab === 'interests' && <InterestsPanel programId={program.id} />}
+
       {tab === 'analytics' && (
         <PlaceholderPanel
           title="Analytics"
-          body="North star is Program Interest and attributed engagement — not vanity likes. Roll up by Intent, then Campaign."
-          nextSprint="Sprint 6–7 — Timeline attribution + Program Interest API"
+          body="North star is Program Interest (Interest tab). Cross-program rollups stay in the Brain."
+          nextSprint="Growth Intelligence — Brain rollups across programs"
         />
       )}
     </UseCaseHomeShell>

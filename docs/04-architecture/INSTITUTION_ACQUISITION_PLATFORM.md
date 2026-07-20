@@ -181,9 +181,9 @@ Program: Amplify with AI
 | **2b** | ~~Intent catalog + Intent-scoped campaigns (Amplify dogfood)~~ |
 | **3** | ~~Creative Projects + Assets (upload / attach — Canva/Figma/manual OK)~~ |
 | **4** | ~~Publishing Jobs (queue to channel — live send Sprint 5)~~ |
-| **5** | One outbound connector (LinkedIn **or** Meta Ads) |
-| **6** | Timeline ingestion + attribution → Program Interest |
-| **7** | Program Interest API — Education pull |
+| **5** | ~~Outbound execute — WhatsApp live (+ simulate other channels)~~ |
+| **6** | ~~Timeline / publish attribution → Program Interest~~ |
+| **7** | ~~Program Interest API — Education pull (`/api/acquisition/program-interests/pull`)~~ |
 
 ### Deliberately postpone
 

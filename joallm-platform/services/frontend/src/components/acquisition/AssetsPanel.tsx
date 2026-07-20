@@ -50,6 +50,8 @@ export function AssetsPanel({
   const [savingProject, setSavingProject] = useState(false);
   const [publishingAssetId, setPublishingAssetId] = useState<string | null>(null);
   const [publishChannel, setPublishChannel] = useState<ChannelKind>('linkedin_organic');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [messageBody, setMessageBody] = useState('');
 
   useEffect(() => {
     if (preferredCampaignId && campaigns.some((c) => c.id === preferredCampaignId)) {
@@ -219,14 +221,30 @@ export function AssetsPanel({
     if (!campaignId) return;
     setPublishingAssetId(asset.id);
     try {
-      await apiClient.post(
+      const job = await apiClient.post<{
+        success: boolean;
+        data: { status: string; executeMode?: string; externalPostId?: string | null };
+      }>(
         `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${campaignId}/assets/${asset.id}/publish`,
-        { channelKind: publishChannel, status: 'queued' },
+        {
+          channelKind: publishChannel,
+          status: 'queued',
+          executeNow: true,
+          ...(publishChannel === 'whatsapp' && recipientPhone.trim()
+            ? { recipientPhone: recipientPhone.trim() }
+            : {}),
+          ...(messageBody.trim() ? { messageBody: messageBody.trim() } : {}),
+        },
       );
-      showSuccess(`Queued for ${publishChannel} — open Publishing to review`);
+      const status = job.data?.status || 'queued';
+      showSuccess(
+        status === 'published'
+          ? `Published to ${publishChannel}`
+          : `Queued for ${publishChannel}`,
+      );
       onGoToPublishing?.();
     } catch (error) {
-      showError(error instanceof Error ? error.message : 'Failed to queue publish');
+      showError(error instanceof Error ? error.message : 'Failed to publish');
     } finally {
       setPublishingAssetId(null);
     }
@@ -498,22 +516,44 @@ export function AssetsPanel({
       )}
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-950">Uploaded assets</h3>
-          <label className="block text-xs sm:w-56">
-            <span className="font-medium text-slate-600">Publish channel</span>
-            <select
-              value={publishChannel}
-              onChange={(e) => setPublishChannel(e.target.value as ChannelKind)}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-            >
-              {CHANNEL_OPTIONS.map((option) => (
-                <option key={option.kind} value={option.kind}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="block text-xs">
+              <span className="font-medium text-slate-600">Publish channel</span>
+              <select
+                value={publishChannel}
+                onChange={(e) => setPublishChannel(e.target.value as ChannelKind)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+              >
+                {CHANNEL_OPTIONS.map((option) => (
+                  <option key={option.kind} value={option.kind}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {publishChannel === 'whatsapp' && (
+              <label className="block text-xs">
+                <span className="font-medium text-slate-600">WhatsApp recipient (for live send)</span>
+                <input
+                  value={recipientPhone}
+                  onChange={(e) => setRecipientPhone(e.target.value)}
+                  placeholder="9198XXXXXXXX"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+                />
+              </label>
+            )}
+            <label className="block text-xs sm:col-span-2 lg:col-span-1">
+              <span className="font-medium text-slate-600">Message / caption (optional)</span>
+              <input
+                value={messageBody}
+                onChange={(e) => setMessageBody(e.target.value)}
+                placeholder="Caption sent with the publish"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+              />
+            </label>
+          </div>
         </div>
         {loading ? (
           <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-500">

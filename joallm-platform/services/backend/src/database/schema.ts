@@ -1446,3 +1446,29 @@ export const publishingJobs = pgTable('publishing_jobs', {
   channelIdIdx: index('publishing_jobs_channel_id_idx').on(table.channelId),
   statusIdx: index('publishing_jobs_status_idx').on(table.status),
 }));
+
+/** Program Interest — Education pull contract (Acquire → Convert boundary) */
+export const programInterests = pgTable('program_interests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  personId: uuid('person_id').notNull().references(() => acquisitionPersons.id, { onDelete: 'cascade' }),
+  programId: text('program_id').notNull(),
+  programName: text('program_name'),
+  confidence: real('confidence').notNull().default(0.5),
+  source: text('source').notNull(),
+  campaignId: uuid('campaign_id'),
+  campaignName: text('campaign_name'),
+  intent: text('intent'),
+  evidence: jsonb('evidence').$type<Array<Record<string, unknown>>>().default([]),
+  publishingJobId: uuid('publishing_job_id'),
+  acquisitionEventId: uuid('acquisition_event_id'),
+  occurredAt: timestamp('occurred_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('program_interests_owner_user_id_idx').on(table.ownerUserId),
+  programIdIdx: index('program_interests_program_id_idx').on(table.ownerUserId, table.programId),
+  personIdIdx: index('program_interests_person_id_idx').on(table.personId),
+  occurredAtIdx: index('program_interests_occurred_at_idx').on(table.occurredAt),
+}));

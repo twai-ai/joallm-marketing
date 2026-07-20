@@ -139,7 +139,16 @@ export async function subscriptionRoutes(fastify: FastifyInstance, options: Fast
 
       return reply.send({ days, dailyBreakdown: rows, totals });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       logger.error('Failed to get usage:', error);
+      // Fresh Marketing DBs may not have api_usage yet — don't break the home/settings UI
+      if (/api_usage|does not exist/i.test(message)) {
+        return reply.send({
+          days,
+          dailyBreakdown: [],
+          totals: { totalRequests: 0, totalTokens: 0, totalCostCents: 0 },
+        });
+      }
       return reply.status(500).send({ error: 'Failed to get usage data' });
     }
   });

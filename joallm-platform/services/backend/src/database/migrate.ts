@@ -408,6 +408,7 @@ export async function runMigrations(): Promise<void> {
     // Additive fixes for older / partial schemas (safe after migrate)
     await ensureSchemaCompatibility();
     await ensureUsersTable();
+    await ensureApiUsageTable();
 
     logger.info('✅ Database migrations completed successfully');
   } catch (error) {
@@ -416,6 +417,7 @@ export async function runMigrations(): Promise<void> {
     logger.warn('⚠️ Attempting auth-table bootstrap so login can still work…');
     try {
       await ensureUsersTable();
+      await ensureApiUsageTable();
       await ensureSchemaCompatibility();
     } catch (bootstrapError) {
       logger.error('❌ Auth bootstrap also failed:', bootstrapError);
@@ -468,6 +470,33 @@ async function ensureUsersTable(): Promise<void> {
   `);
 
   logger.info('✓ users table ensured');
+}
+
+async function ensureApiUsageTable(): Promise<void> {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "api_usage" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "user_id" uuid REFERENCES "users"("id") ON DELETE CASCADE,
+      "endpoint" text NOT NULL,
+      "method" text NOT NULL,
+      "model" text,
+      "tokens_used" integer,
+      "cost" integer,
+      "response_time" integer,
+      "status_code" integer NOT NULL,
+      "created_at" timestamp DEFAULT NOW() NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS "api_usage_user_id_idx" ON "api_usage" ("user_id")
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS "api_usage_created_at_idx" ON "api_usage" ("created_at")
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS "api_usage_endpoint_idx" ON "api_usage" ("endpoint")
+  `);
+  logger.info('✓ api_usage table ensured');
 }
 
 // Run migrations if this file is executed directly

@@ -50,7 +50,7 @@ export const subscriptionsApi = {
   },
 
   async getUsage(days = 30): Promise<UsageResponse> {
-    return await apiClient.get(`/api/subscriptions/usage?days=${days}`);
+    return await apiClient.get(`/api/subscriptions/usage?days=${days}`, { showErrorToast: false });
   },
 
   async createCheckout(): Promise<CheckoutResponse> {

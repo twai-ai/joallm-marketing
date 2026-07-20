@@ -52,6 +52,8 @@ RUN apk update && apk add --no-cache \
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
+COPY railway-start.sh ./
+RUN chmod +x railway-start.sh
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
@@ -68,4 +70,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:3001/api/health || exit 1
 
 # Start application
-CMD ["node", "dist/index.js"]
+CMD ["./railway-start.sh"]

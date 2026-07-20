@@ -41,14 +41,15 @@ COPY --from=builder /app/dist ./dist
 # Copy serve config and entrypoint
 COPY serve.json ./
 COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh
+COPY railway-start.sh ./
+RUN chmod +x entrypoint.sh railway-start.sh
 
 # Expose port
 EXPOSE 5174
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-5174}/ || exit 1
 
 # Substitute runtime env vars into the bundle, then start serve
-ENTRYPOINT ["./entrypoint.sh"]
+CMD ["./railway-start.sh"]

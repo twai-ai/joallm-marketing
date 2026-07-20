@@ -9,6 +9,8 @@ Last updated: 2026-07-21
 
 > **Studio owns publishing intent. Platform owns execution capability.**
 
+> **Studio owns creative intent. Platform owns generative capability.**
+
 These apply to the entire JoaLLM platform and every ATRISI product — not only ATRISI Marketing.
 
 ```text
@@ -16,7 +18,8 @@ Creator
         │
         ▼
 Studio
-(Create / Edit / Review / Publish intent · Channels · Profiles)
+(Create / Edit / Review / Publish intent · Channels · Profiles
+ · Generation Profiles · Brand Kits)
         │
         ▼
 Product (Brain)
@@ -25,11 +28,12 @@ Product (Brain)
         ▼
 Platform
 (Identity · Timeline · Knowledge · Memory · Intelligence
- · Integration Platform: Connectors · OAuth · Secrets · Webhooks)
+ · Integration Platform: Connectors · OAuth · Secrets · Webhooks
+ · Creative AI: Image / Video / Audio / Voice / OCR / Upscale / …)
         │
         ▼
 External systems
-(Meta · LinkedIn · Mailchimp · LTI · Meritto · Razorpay · …)
+(Meta · LinkedIn · Mailchimp · OpenAI · Imagen · FLUX · Ideogram · …)
 ```
 
 ---
@@ -38,10 +42,10 @@ External systems
 
 | Layer | Role | Buys / uses |
 |---|---|---|
-| **Studio** | Workspace for humans + AI to create, edit, review, approve, and express **publish intent** | Not sold as “the CRM/LMS” |
+| **Studio** | Workspace for humans + AI to create, edit, review, approve, express **publish intent** and **creative intent** | Not sold as “the CRM/LMS” |
 | **Product (Brain)** | Domain operating surface — strategy, campaigns, intelligence, outcomes | ATRISI Marketing, Education, … |
-| **Platform** | Shared constitutional services + **Integration Platform** | Identity, Timeline, Knowledge, Memory, Intelligence, Connectors |
-| **External** | Delivery and optimization | Ads, email, LMS, payments, ERPs |
+| **Platform** | Shared constitutional services + Integration + **Creative AI** | Identity, Timeline, Knowledge, Connectors, Generative media |
+| **External** | Delivery, vendor AI models, optimization | Ads, email, LMS, image/video APIs |
 
 ### Studio must not become another product
 
@@ -49,7 +53,11 @@ Do not turn Studio into a second CRM, LMS, EMR, or marketing suite. Studio is th
 
 ### Studio must not own connectors
 
-Connectors are **technical** (API clients, OAuth, secrets, webhooks). They live in the **Integration Platform**. Studios and products consume them through **Channels** (business destinations). Marketing never talks directly to Meta; Learning never owns LTI; Admissions never owns Meritto; Finance never owns Razorpay.
+Connectors are **technical** (API clients, OAuth, secrets, webhooks). They live in the **Integration Platform**. Studios consume them through **Channels**.
+
+### Studio must not own generative providers
+
+Image / video / audio model vendors are **technical**. They live in the **Creative AI Platform**. Studios consume them through **Generation Profiles** (style + quality + Auto provider). Marketing never hard-codes OpenAI; Learning never hard-codes Imagen; Research never forks a private Stable Diffusion client.
 
 ---
 
@@ -63,19 +71,36 @@ PublishingJob  →  Channel  →  Connector  →  External API
 | Concept | Owner | Example |
 |---|---|---|
 | **Channel** | Studio (domain) | LinkedIn Organic, LinkedIn Ads, Meta Ads, WhatsApp, Email |
-| **Connector** | Platform Integration | LinkedIn UGC API, LinkedIn Marketing API, Meta Marketing API v23 |
-| **Publishing Profile** | Studio | “ATRISI Corporate → LinkedIn Organic” with defaults (UTM, brand, timezone) |
-| **Publishing Job** | Studio | Durable execution request: campaign + asset + profile/channel + schedule + status |
+| **Connector** | Platform Integration | LinkedIn UGC API, Meta Marketing API v23 |
+| **Publishing Profile** | Studio | “ATRISI Corporate → LinkedIn Organic” with defaults |
+| **Publishing Job** | Studio | Durable execution request |
 
-Studio UI thinks in Channels (`Publish to LinkedIn Organic`). It never cares whether Graph API, REST, or a future SDK performs the call.
+Studio UI thinks in Channels. It never cares about Graph vs REST vs SDK versions.
 
-When Meta ships API v24, the **Channel** stays; only the **Connector** binding changes.
+---
+
+## Generation Profile vs Image Provider
+
+```text
+Generate request  →  Generation Profile  →  Image Provider  →  Vendor API
+     (intent)            (business)            (technical)        (vendor)
+```
+
+| Concept | Owner | Example |
+|---|---|---|
+| **Generation Profile** | Studio (domain) | Marketing Poster · Premium · Auto |
+| **Image Generation Provider** | Platform Creative AI | OpenAI GPT Image, Google Imagen, FLUX, Ideogram, Firefly, Stability |
+| **Creative Job** | Studio / Platform | Durable generation request + outputs + cost |
+
+Studio UI exposes **Style** and **Quality** first. Provider defaults to **Auto**. Advanced users may override.
+
+When OpenAI ships a new image model, the **Generation Profile** stays; only the **Provider** binding / router changes.
 
 ---
 
 ## Product ↔ Studio pairing
 
-| Studio (create / publish intent) | Product / Brain (operate) |
+| Studio (create / publish / creative intent) | Product / Brain (operate) |
 |---|---|
 | Marketing Studio | ATRISI Marketing |
 | Learning Studio | ATRISI Education |
@@ -83,7 +108,7 @@ When Meta ships API v24, the **Channel** stays; only the **Connector** binding c
 | Assessment Studio | ATRISI Assessment |
 | Healthcare Studio | ATRISI Healthcare |
 
-Same Integration Platform underneath every Studio.
+Same Integration Platform and Creative AI Platform underneath every Studio.
 
 ---
 
@@ -106,6 +131,15 @@ Integration Platform
   ├── Secrets
   ├── API Clients
   └── Webhooks / event normalization
+Creative AI Platform
+  ├── Image Generation
+  ├── Video Generation
+  ├── Audio Generation
+  ├── Voice
+  ├── OCR
+  ├── Background Removal
+  ├── Upscaling
+  └── Style Transfer
 ```
 
 ---
@@ -117,12 +151,15 @@ Integration Platform
 * Connector, OAuth, Secrets, API clients, Webhooks
 * Event normalization into AcquisitionEvents
 * Timeline, Identity, Knowledge, Memory, Evidence services
+* **Creative AI providers** (OpenAI, Imagen, FLUX, Ideogram, Firefly, Stability, …)
+* Provider routing / Auto selection / capability negotiation
 
 ### Marketing Studio owns
 
 * Channel, Publishing Profile, Publishing Job
 * Marketing Asset, Creative, Template, Campaign Brief
-* Approval, Brand Kit, Audience Segment (studio-facing)
+* Approval, Brand Kit, Audience Segment
+* **Generation Profiles** (Marketing Poster, Social Media, Hero Banner, …)
 
 ### Marketing Brain (ATRISI Marketing) owns
 
@@ -139,7 +176,8 @@ Integration Platform
 | Product builds its own email/LP/social/CMS suite | Becomes HubSpot; mediocre at everything |
 | Studio becomes the sold “system of record” | Confuses workspace with product |
 | Studio or Product owns Meta/LinkedIn API clients | Breaks Integration Platform reuse |
-| Studio talks to vendor APIs without Channel | Couples UI to API versions |
+| Studio hard-codes OpenAI / Ideogram SDK calls | Breaks Creative AI reuse across Studios |
+| Studio talks to vendor APIs without Channel / Profile | Couples UI to API versions |
 | Product forks Identity / Timeline / Memory | Breaks institutional graph |
 | Publish without emitting platform events | Content never joins timelines / outcomes |
 | Lead score before Evidence | Scoring without provenance |
@@ -149,8 +187,9 @@ Integration Platform
 ## Correct flow (marketing)
 
 ```text
-Strategy → Campaign → Studio Asset → Publishing Job
-  → Publishing Profile → Channel → Platform Connector
+Strategy → Campaign → Studio Asset
+  → (optional) Creative AI via Generation Profile → Asset variants
+  → Publishing Job → Publishing Profile → Channel → Platform Connector
   → Meta / LinkedIn / Mailchimp
   → Webhook → Platform Timeline → Marketing Brain → Knowledge Graph
 ```
@@ -166,7 +205,8 @@ Ask: *Which LinkedIn assets produced mentors?* — answered by Platform graph, n
 ```text
 Identity → Knowledge Acquisition → Timeline Service → KnowledgeArtifact
 → Institutional Memory → Evidence → Intelligence
-→ Integration Platform (Connector registry) alongside Acquisition connectors
+→ Integration Platform (Connector registry)
+→ Creative AI Platform (Image providers + Generation Profiles)
 ```
 
 ### Product (current)
@@ -175,10 +215,11 @@ Identity → Knowledge Acquisition → Timeline Service → KnowledgeArtifact
 ATRISI Marketing (Brain) — consumes platform services
 ```
 
-### Workspace (next Studio slice)
+### Workspace
 
 ```text
-Marketing Studio — Channels, Publishing Profiles, Publishing Jobs, assets, approvals
+Marketing Studio — Channels, Publishing Profiles, Publishing Jobs,
+                   Generation Profiles (creative intent), assets, approvals
 ```
 
 Preserve this boundary as the platform grows.
@@ -187,3 +228,4 @@ See also:
 
 * [Knowledge Acquisition Direction](./KNOWLEDGE_ACQUISITION_DIRECTION.md)
 * [Marketing Studio Direction](./MARKETING_STUDIO_DIRECTION.md)
+* [Creative AI Direction](./CREATIVE_AI_DIRECTION.md)

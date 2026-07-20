@@ -76,3 +76,10 @@ export * from './integration-platform';
  * @see ../../docs/04-architecture/MARKETING_STUDIO_DIRECTION.md
  */
 export * from './studio-publishing';
+
+/**
+ * Creative AI Platform — Generation Profiles + image/video providers (Platform-owned).
+ * @see ./creative-ai.ts
+ * @see ../../docs/04-architecture/CREATIVE_AI_DIRECTION.md
+ */
+export * from './creative-ai';

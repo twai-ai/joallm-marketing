@@ -3,7 +3,7 @@
 Status: **constitutional product direction**  
 Last updated: 2026-07-21  
 Parent: [Platform Constitution](./PLATFORM_CONSTITUTION.md)  
-Sibling: [Knowledge Acquisition Direction](./KNOWLEDGE_ACQUISITION_DIRECTION.md)
+Sibling: [Knowledge Acquisition Direction](./KNOWLEDGE_ACQUISITION_DIRECTION.md) · [Creative AI Direction](./CREATIVE_AI_DIRECTION.md)
 
 ## Principle
 
@@ -23,24 +23,27 @@ Marketing Studio is the **execution workspace** and **integration contract** bet
         │ Marketing Studio     │
         │ Assets · Channels    │
         │ Profiles · Jobs      │
+        │ Generation Profiles  │
         │ Approvals · Brand    │
         └──────────┬────────────┘
-                   │  (publish intent)
-                   ▼
-        ┌──────────────────────┐
-        │ Integration Platform │  ← Platform-owned
-        │ Connectors · OAuth   │
-        │ Secrets · Webhooks   │
-        └──────────┬────────────┘
                    │
-      ┌────────────┼────────────┐
-      ▼            ▼            ▼
-   Meta API    LinkedIn API   Mailchimp API
+         publish intent · creative intent
+         ┌─────────┴─────────┐
+         ▼                   ▼
+┌──────────────────┐  ┌──────────────────┐
+│ Integration      │  │ Creative AI      │  ← Platform-owned
+│ Connectors       │  │ Image / Video / …│
+└────────┬─────────┘  └────────┬─────────┘
+         │                     │
+         ▼                     ▼
+   Meta / LinkedIn      OpenAI / Imagen / FLUX
+   Mailchimp            Ideogram / Firefly
 ```
 
 Constitutional split:
 
-> **Studio owns publishing intent. Platform owns execution capability.**
+> **Studio owns publishing intent. Platform owns execution capability.**  
+> **Studio owns creative intent. Platform owns generative capability.**
 
 ---
 
@@ -203,8 +206,11 @@ Do **not** build full Marketing Studio before Timeline + KnowledgeArtifact dogfo
 | Studio-0 | Shared contracts: Channel, Connector, PublishingProfile, PublishingJob |
 | Studio-1 | **Connector registry + WhatsApp Channel → Meta connector** (shipped) |
 | Studio-2 | Publishing Jobs + asset publish path + more Channels |
+| Creative-0 | Generation Profiles + Creative AI provider registry (contracts shipped) |
 
-Explicitly out of Studio / Marketing as owned builders: full social scheduler suite, CMS, email builder product islands. Publish through Channels; measure through Timeline.
+Explicitly out of Studio / Marketing as owned builders: full social scheduler suite, CMS, email builder product islands. Publish through Channels; generate via Creative AI; measure through Timeline.
+
+Creative media: see [CREATIVE_AI_DIRECTION.md](./CREATIVE_AI_DIRECTION.md) — Marketing consumes Generation Profiles; it does not own OpenAI/Ideogram SDKs.
 
 ---
 
@@ -214,4 +220,5 @@ Canonical TypeScript contracts:
 
 * [`joallm-platform/shared/types/integration-platform.ts`](../../joallm-platform/shared/types/integration-platform.ts) — Connector (Platform)
 * [`joallm-platform/shared/types/studio-publishing.ts`](../../joallm-platform/shared/types/studio-publishing.ts) — Channel, Profile, Job, Studio items
+* [`joallm-platform/shared/types/creative-ai.ts`](../../joallm-platform/shared/types/creative-ai.ts) — Generation Profiles + image providers
 * [`joallm-platform/shared/types/knowledge-acquisition.ts`](../../joallm-platform/shared/types/knowledge-acquisition.ts) — Brain / Timeline / KnowledgeArtifact

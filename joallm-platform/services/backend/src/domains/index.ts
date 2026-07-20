@@ -21,6 +21,7 @@ import { meRoutes } from '../routes/me.js';
 import { feedbackRoutes } from '../routes/feedback.js';
 import { integrationsRoutes } from '../routes/integrations.js';
 import { studioRoutes } from '../routes/studio.js';
+import { creativeAiRoutes } from '../routes/creative-ai.js';
 
 export async function registerDomains(fastify: FastifyInstance) {
   await registerTelemetryDomain(fastify);
@@ -57,4 +58,7 @@ export async function registerDomains(fastify: FastifyInstance) {
 
   // Marketing Studio — Channels, Publishing Profiles (publish intent)
   fastify.register(studioRoutes, { prefix: '/api/studio' });
+
+  // Creative AI Platform — Generation Profiles / image provider catalog
+  fastify.register(creativeAiRoutes, { prefix: '/api/creative' });
 }

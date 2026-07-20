@@ -44,6 +44,7 @@ Common TypeScript interfaces and types used across services:
 - Knowledge Acquisition / Brain contracts — `types/knowledge-acquisition.ts` · [Knowledge Acquisition Direction](../../docs/04-architecture/KNOWLEDGE_ACQUISITION_DIRECTION.md)
 - Integration Platform (Connectors) — `types/integration-platform.ts` · [Platform Constitution](../../docs/04-architecture/PLATFORM_CONSTITUTION.md)
 - Marketing Studio (Channels, Profiles, Jobs) — `types/studio-publishing.ts` · [Marketing Studio Direction](../../docs/04-architecture/MARKETING_STUDIO_DIRECTION.md)
+- Creative AI (Generation Profiles, image providers) — `types/creative-ai.ts` · [Creative AI Direction](../../docs/04-architecture/CREATIVE_AI_DIRECTION.md)
 
 Frontend resolves `@joallm/shared` → `shared/types` via Vite/tsconfig path alias.
 

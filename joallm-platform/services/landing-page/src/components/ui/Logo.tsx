@@ -25,14 +25,13 @@ export const Logo: React.FC<LogoProps> = ({
 
   // Logo file selection based on size and variant
   const getLogoSrc = () => {
-    if (size === 'xs' || size === 'sm') {
-      return '/JoaLLM-logo-medium.png'; // Small logo for compact spaces
-    } else if (size === 'md') {
-      return '/JoaLLM-logo-medium.png'; // Medium logo for headers
-    } else if (size === 'lg' || size === 'xl') {
-      return '/JoaLLM-logo-large.png'; // Large logo for prominent displays
+    if (size === 'xs' || size === 'sm' || size === 'md') {
+      return '/atrisi-logo-md.png';
     }
-    return '/JoaLLM-logo-medium.png'; // Default
+    if (size === 'lg') {
+      return '/atrisi-logo-lg.png';
+    }
+    return '/atrisi-logo.png';
   };
 
   // Text color based on variant
@@ -68,7 +67,7 @@ export const Logo: React.FC<LogoProps> = ({
       <img
         src={logoSrc}
         alt="ATRISI Marketing logo"
-        className={`${width} ${height} object-contain`}
+        className={`${width} ${height} rounded-md object-contain`}
       />
       {showText && (
         <h1 className={`${textSize} font-bold`}>

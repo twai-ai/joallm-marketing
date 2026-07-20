@@ -1,4 +1,3 @@
-import { useMemo, useState } from 'react';
 import { PLATFORM_NAME, PLATFORM_SHORT_NAME } from '../../constants/product';
 
 interface LogoProps {
@@ -8,6 +7,10 @@ interface LogoProps {
   variant?: 'header' | 'sidebar' | 'footer' | 'standalone';
 }
 
+const ATRISI_LOGO_MD = '/atrisi-logo-md.png';
+const ATRISI_LOGO_LG = '/atrisi-logo-lg.png';
+const ATRISI_LOGO_FULL = '/atrisi-logo.png';
+
 export function Logo({
   size = 'md',
   showText = true,
@@ -15,30 +18,12 @@ export function Logo({
   variant = 'header',
 }: LogoProps) {
   const sizeMap = {
-    xs: { width: 'w-4', height: 'h-4', textSize: 'text-xs' },
-    sm: { width: 'w-6', height: 'h-6', textSize: 'text-sm' },
-    md: { width: 'w-8', height: 'h-8', textSize: 'text-lg' },
-    lg: { width: 'w-12', height: 'h-12', textSize: 'text-xl' },
-    xl: { width: 'w-16', height: 'h-16', textSize: 'text-2xl' },
+    xs: { width: 'w-7', height: 'h-7', textSize: 'text-xs', src: ATRISI_LOGO_MD },
+    sm: { width: 'w-8', height: 'h-8', textSize: 'text-sm', src: ATRISI_LOGO_MD },
+    md: { width: 'w-9', height: 'h-9', textSize: 'text-lg', src: ATRISI_LOGO_MD },
+    lg: { width: 'w-14', height: 'h-14', textSize: 'text-xl', src: ATRISI_LOGO_LG },
+    xl: { width: 'w-20', height: 'h-20', textSize: 'text-2xl', src: ATRISI_LOGO_FULL },
   };
-
-  const logoCandidates = useMemo(() => {
-    const shared = [
-      '/JoaLLM-logo-standard.png',
-      '/JoaLLM-logo.png',
-      '/JoaLLM-logo-2-logo.png',
-      '/JoaLLM-logo-2-logo (1).png',
-      '/JoaLLM-logo-2-logo (2).png',
-    ];
-
-    if (size === 'lg' || size === 'xl') {
-      return ['/JoaLLM-logo-large.png', '/JoaLLM-logo-medium.png', ...shared];
-    }
-
-    return ['/JoaLLM-logo-medium.png', '/JoaLLM-logo-large.png', ...shared];
-  }, [size]);
-
-  const [logoIndex, setLogoIndex] = useState(0);
 
   const getTextColors = () => {
     switch (variant) {
@@ -60,22 +45,16 @@ export function Logo({
     }
   };
 
-  const { width, height, textSize } = sizeMap[size];
-  const logoSrc = logoCandidates[Math.min(logoIndex, logoCandidates.length - 1)];
+  const { width, height, textSize, src } = sizeMap[size];
   const textColors = getTextColors();
 
   return (
     <div className={`logo-container flex items-center space-x-2.5 ${className}`}>
       <img
-        src={logoSrc}
+        src={src}
         alt={`${PLATFORM_NAME} logo`}
-        className={`${width} ${height} object-contain select-none`}
+        className={`${width} ${height} rounded-md object-contain select-none shrink-0`}
         draggable={false}
-        onError={() => {
-          setLogoIndex((current) =>
-            current < logoCandidates.length - 1 ? current + 1 : current,
-          );
-        }}
       />
       {showText && (
         <h1 className={`${textSize} font-bold tracking-tight select-none`}>

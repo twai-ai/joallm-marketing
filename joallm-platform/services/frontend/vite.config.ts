@@ -24,6 +24,7 @@ export default defineConfig({
     strictPort: false,
     // Disable host checking in production - Railway proxy handles this
     allowedHosts: process.env.NODE_ENV === 'production' ? ['all'] : [
+      'platform.atrisi.org',
       'platform.joallm.ai',
       'joallm.ai',
       'localhost',

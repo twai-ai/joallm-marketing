@@ -9,19 +9,27 @@ Formerly branded JoaLLM Platform; package scopes may still use `@joallm/*` inter
 ## Architecture Overview
 
 ```
-atrisi-marketing/
-├── services/
-│   ├── backend/          # Fastify API (Node.js / TypeScript)
-│   ├── frontend/         # React application (Vite + TypeScript)
-│   └── landing-page/     # Marketing site (Vite + TypeScript)
-├── shared/               # Cross-service types, utilities, SDK, event bus
-├── infrastructure/       # Railway configs, deployment scripts
-├── docs/                 # Platform documentation
-└── .github/workflows/    # CI/CD pipeline
+atrisi-marketing/   (GitHub repo root)
+├── joallm-platform/          # Railway Root Directory prefix
+│   ├── services/
+│   │   ├── backend/
+│   │   ├── frontend/
+│   │   └── landing-page/
+│   ├── shared/
+│   └── package.json
+├── docs/
+└── infrastructure/
+```
+
+Railway service Root Directories (must match):
+
+```text
+joallm-platform/services/backend
+joallm-platform/services/frontend
+joallm-platform/services/landing-page
 ```
 
 Three independently deployed services share a common type system and event bus via the `shared/` workspace. All services are containerised with multi-stage Docker builds and deployed to Railway. PostgreSQL with pgvector handles both relational data and vector embeddings in a single database, with BullMQ + Redis managing asynchronous document processing.
-
 ---
 
 ## Services

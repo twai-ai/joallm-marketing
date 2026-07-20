@@ -8,17 +8,17 @@
   "services": [
     {
       "name": "backend",
-      "source": "joallm-platform/services/backend",
-      "dockerfilePath": "joallm-platform/services/backend/Dockerfile",
+      "source": "services/backend",
+      "dockerfilePath": "services/backend/Dockerfile",
       "healthcheckPath": "/api/health",
       "healthcheckTimeout": 100,
       "restartPolicyType": "ON_FAILURE",
       "restartPolicyMaxRetries": 10,
       "watchPaths": [
-        "joallm-platform/services/backend/**",
-        "joallm-platform/shared/**",
-        "joallm-platform/package.json",
-        "joallm-platform/package-lock.json"
+        "services/backend/**",
+        "shared/**",
+        "package.json",
+        "package-lock.json"
       ],
       "environment": {
         "NODE_ENV": "production",
@@ -31,15 +31,15 @@
     },
     {
       "name": "frontend",
-      "source": "joallm-platform/services/frontend",
-      "dockerfilePath": "joallm-platform/services/frontend/Dockerfile",
+      "source": "services/frontend",
+      "dockerfilePath": "services/frontend/Dockerfile",
       "restartPolicyType": "ON_FAILURE",
       "restartPolicyMaxRetries": 10,
       "watchPaths": [
-        "joallm-platform/services/frontend/**",
-        "joallm-platform/shared/**",
-        "joallm-platform/package.json",
-        "joallm-platform/package-lock.json"
+        "services/frontend/**",
+        "shared/**",
+        "package.json",
+        "package-lock.json"
       ],
       "environment": {
         "NODE_ENV": "production",
@@ -52,15 +52,15 @@
     },
     {
       "name": "landing-page",
-      "source": "joallm-platform/services/landing-page",
-      "dockerfilePath": "joallm-platform/services/landing-page/Dockerfile",
+      "source": "services/landing-page",
+      "dockerfilePath": "services/landing-page/Dockerfile",
       "restartPolicyType": "ON_FAILURE",
       "restartPolicyMaxRetries": 10,
       "watchPaths": [
-        "joallm-platform/services/landing-page/**",
-        "joallm-platform/shared/**",
-        "joallm-platform/package.json",
-        "joallm-platform/package-lock.json"
+        "services/landing-page/**",
+        "shared/**",
+        "package.json",
+        "package-lock.json"
       ],
       "environment": {
         "NODE_ENV": "production",

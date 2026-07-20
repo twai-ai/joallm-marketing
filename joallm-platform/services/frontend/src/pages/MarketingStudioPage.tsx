@@ -23,7 +23,7 @@ export function MarketingStudioPage() {
         </div>
       }
       title="Select a Program to acquire interest"
-      description="Open an Acquisition Workspace. Campaigns and channels produce Program Interest for Education to pull — not enrollment. Marketing/ads are one acquisition strategy."
+      description="Open an Acquisition Workspace. Organize by Growth Intents; campaigns execute them. Output is Program Interest for Education — not enrollment."
       primaryAction={
         <>
           <Link
@@ -130,6 +130,7 @@ export function MarketingStudioPage() {
           <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
             <li className="font-medium text-teal-800">Sprint 1 — Program → Acquisition Workspace ✓</li>
             <li className="font-medium text-teal-800">Sprint 2 — Campaign CRUD ✓</li>
+            <li className="font-medium text-teal-800">Sprint 2b — Intent catalog (Amplify dogfood) ✓</li>
             <li>Sprint 3 — Creative Projects + Assets</li>
             <li>Sprint 4 — Publishing Jobs</li>
             <li>Sprint 5 — One outbound connector</li>

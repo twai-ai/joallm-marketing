@@ -1,6 +1,7 @@
 /**
- * Program-scoped acquisition campaigns (Sprint 2).
- * Initiative rows are internal program buckets; UI talks Programs + Campaigns.
+ * Program-scoped acquisition campaigns (Sprint 2 / 2b).
+ * Initiative rows are internal program buckets; UI talks Programs + Intents + Campaigns.
+ * intentId is stored in metadata (catalog is code-defined).
  */
 
 import { and, desc, eq } from 'drizzle-orm';
@@ -12,6 +13,7 @@ export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'arch
 export type AcquisitionCampaignDto = {
   id: string;
   programId: string;
+  intentId?: string;
   name: string;
   channel: string | null;
   status: CampaignStatus;
@@ -26,9 +28,11 @@ function mapCampaign(
   programId: string,
 ): AcquisitionCampaignDto {
   const metadata = (row.metadata || {}) as Record<string, unknown>;
+  const intentId = typeof metadata.intentId === 'string' ? metadata.intentId : undefined;
   return {
     id: row.id,
     programId: (row as { programId?: string | null }).programId || programId,
+    intentId,
     name: row.name,
     channel: row.channel,
     status: row.status as CampaignStatus,
@@ -129,6 +133,7 @@ export async function createProgramCampaign(options: {
   programId: string;
   programName: string;
   name: string;
+  intentId?: string;
   channel?: string;
   status?: CampaignStatus;
   intentTemplate?: string;
@@ -143,6 +148,7 @@ export async function createProgramCampaign(options: {
   const metadata = {
     ...(options.metadata || {}),
     programId: options.programId,
+    ...(options.intentId ? { intentId: options.intentId } : {}),
     ...(options.intentTemplate ? { intentTemplate: options.intentTemplate } : {}),
   };
 
@@ -167,6 +173,7 @@ export async function updateProgramCampaign(options: {
   programId: string;
   campaignId: string;
   name?: string;
+  intentId?: string;
   channel?: string | null;
   status?: CampaignStatus;
   intentTemplate?: string;
@@ -190,6 +197,7 @@ export async function updateProgramCampaign(options: {
     ...prevMeta,
     ...(options.metadata || {}),
     programId: options.programId,
+    ...(options.intentId !== undefined ? { intentId: options.intentId } : {}),
     ...(options.intentTemplate !== undefined
       ? { intentTemplate: options.intentTemplate }
       : {}),

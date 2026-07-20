@@ -89,6 +89,7 @@ export const ONTOLOGY = {
   /** Growth capability aggregate */
   growthAggregate: [
     'Strategy',
+    'Intents',
     'Campaigns',
     'Creative Projects',
     'Assets',
@@ -113,6 +114,7 @@ export const ONTOLOGY = {
   /** Growth Workspace IA */
   growthWorkspace: [
     'Overview',
+    'Intents',
     'Campaigns',
     'Creative Projects',
     'Assets',
@@ -129,10 +131,13 @@ export const ONTOLOGY = {
     programCore: 'Definitional state of a Program (identity, pricing, cohorts, …).',
     capability:
       'Attached operating system under Program (Growth, Admissions, Learning, …) — not Core fields.',
-    growth: 'Capability: attract participants via campaigns, creatives, channels, applications.',
+    growth: 'Capability: attract participants via intents, campaigns, creatives, channels, applications.',
     admissions: 'Capability: who gets in — applications, evaluations, offers, enrollment.',
     learning: 'Capability: how participants learn — curriculum, evidence, progress.',
-    campaign: 'Growth operations object under a Program — never a root aggregate.',
+    intent:
+      'Durable reason to communicate about a Program (Registration, Events, Community…) — campaigns execute intents.',
+    campaign:
+      'Time-bound execution of a Growth Intent under a Program — never a root aggregate.',
     creativeProject: 'Growth work unit under a Campaign producing Assets.',
     marketingAsset: 'Publishable creative under Growth.',
     channel: 'Business destination (WhatsApp, LinkedIn Organic, …).',

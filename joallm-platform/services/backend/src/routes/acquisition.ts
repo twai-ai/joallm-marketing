@@ -181,10 +181,22 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
   // ── Program-scoped campaigns (Acquisition Platform Sprint 2) ──
 
   const CampaignStatusSchema = z.enum(['draft', 'active', 'paused', 'completed', 'archived']);
+  const GrowthIntentIdSchema = z.enum([
+    'awareness',
+    'registration',
+    'builder-challenge',
+    'cohort-conversion',
+    'community',
+    'events',
+    'success-stories',
+    'partnerships',
+    'hiring',
+  ]);
 
   const CreateCampaignSchema = z.object({
     name: z.string().min(1).max(200),
     programName: z.string().min(1).max(200).optional(),
+    intentId: GrowthIntentIdSchema.optional(),
     channel: z.string().max(100).optional(),
     status: CampaignStatusSchema.optional(),
     intentTemplate: z.string().max(100).optional(),
@@ -193,6 +205,7 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
 
   const UpdateCampaignSchema = z.object({
     name: z.string().min(1).max(200).optional(),
+    intentId: GrowthIntentIdSchema.optional(),
     channel: z.string().max(100).nullable().optional(),
     status: CampaignStatusSchema.optional(),
     intentTemplate: z.string().max(100).optional(),
@@ -228,6 +241,7 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         programId,
         programName: body.programName || programId,
         name: body.name,
+        intentId: body.intentId,
         channel: body.channel,
         status: body.status,
         intentTemplate: body.intentTemplate,

@@ -89,9 +89,9 @@ export const USE_CASES: UseCaseDefinition[] = [
     assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
     status: 'active',
     description:
-      'Acquisition Workspace: Programs → Campaigns → Channels → Interest. Marketing/ads are one acquisition strategy — not the whole product.',
+      'Acquisition Workspace: Programs → Intents → Campaigns → Channels → Interest. Marketing/ads are one acquisition strategy — not the whole product.',
     helper:
-      'Output is Program Interest for Education to pull. atrisi.org owns program defs; this platform owns market acquisition.',
+      'Intents are durable; Campaigns are time-bound. Output is Program Interest for Education to pull.',
     audience: 'Growth, outreach, and institutional acquisition teams',
     supportsAssetDetail: true,
   },

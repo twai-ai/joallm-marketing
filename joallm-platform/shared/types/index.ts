@@ -105,3 +105,10 @@ export * from './program-interest';
  * @see ../../docs/04-architecture/INSTITUTION_ACQUISITION_PLATFORM.md
  */
 export * from './acquisition-campaign';
+
+/**
+ * Growth Intents — durable reasons to communicate about a Program.
+ * @see ./growth-intent.ts
+ * @see ../../docs/04-architecture/INSTITUTION_ACQUISITION_PLATFORM.md
+ */
+export * from './growth-intent';

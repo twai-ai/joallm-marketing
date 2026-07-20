@@ -31,7 +31,7 @@ Programs (targeting context from atrisi.org)
 Acquisition Workspace
       │
       ▼
-Campaigns → Creatives → Channels → Engagement
+Intents → Campaigns → Creatives → Channels → Engagement
       │
       ▼
 Timeline
@@ -56,9 +56,54 @@ Enrollment → Learning → Assessment → Completion → Outcome
 
 ---
 
+## Organizing principle: Intent above Campaign
+
+**Intent** = durable reason to communicate about a Program.  
+**Campaign** = time-bound execution of that Intent.
+
+```text
+Program
+    ↓
+Intent          (Registration, Events, Community, …)
+    ↓
+Campaign        (July 2026 Cohort, Early Bird, …)
+    ↓
+Creative Project
+    ↓
+Assets
+    ↓
+Publishing
+    ↓
+Acquisition / Program Interest
+```
+
+Every program repeatedly needs Awareness, Registration, Events, Community, Success Stories, Partnerships — with program-specific additions (e.g. Amplify: Builder Challenge, Cohort Conversion, Hiring).
+
+Intents also carry reusable **asset template** catalogs (Poster, Countdown, FAQ, …) for later Studio scaffolding.
+
+---
+
+## Dogfood: Amplify with AI Growth Intents
+
+| Intent | Purpose | CTA |
+|---|---|---|
+| Awareness | Let people know the program exists | — |
+| Registration | Acquire registrations | Register |
+| Builder Challenge | Get people to start the Builder Challenge | Start Challenge |
+| Cohort Conversion | Move qualified builders into the cohort | Join Cohort |
+| Community | Keep builders engaged | Join Community |
+| Events | Promote webinars and workshops | Reserve Seat |
+| Success Stories | Build trust | Read Story |
+| Partnerships | Acquire institutions | Partner |
+| Hiring | Grow the ATRISI team | Apply |
+
+Catalog lives in code: `shared/types/growth-intent.ts` + `services/frontend/src/constants/growthIntents.ts`. Other programs inherit a base intent set until specialized.
+
+---
+
 ## Root outcome object: Program Interest
 
-Campaigns are not what Education consumes. Everything in Phase 1 leads to:
+Campaigns and Intents are not what Education consumes as entities. Everything in Phase 1 leads to:
 
 ```text
 Program Interest
@@ -67,19 +112,19 @@ Program Interest
   confidence
   source             (LinkedIn, WhatsApp, …)
   campaignId         (attribution — optional detail)
+  intent             (Growth Intent id/label — durable reason)
   evidence[]         (clicked, downloaded, attended webinar, …)
-  intent
   occurredAt
 ```
 
-Alias: `AcquisitionOutcome`.
+Alias: `AcquisitionOutcome`. Attribution is **Intent + optional campaignId**.
 
 ### Education must not pull
 
 - Posters, ads, creatives  
 - Publishing Jobs  
 - Creative Projects  
-- Internal campaign ops  
+- Internal campaign / intent ops  
 
 ### Education pulls only
 
@@ -97,6 +142,7 @@ That keeps the integration tiny.
 |---|---|
 | **Institution Acquisition Platform** | “Marketing suite” |
 | **Market Acquisition** / **Acquisition Workspace** | “Marketing Studio” as the long-term name |
+| **Growth Intent** | Treating Campaign as the durable organizer |
 | **Growth Intelligence** (Brain / cross-program IQ) | Growth as the only verb |
 | **Program Interest** | Syncing Campaign/Creative entities to Education |
 
@@ -112,11 +158,13 @@ Acquisition strategies under the workspace (not all “marketing”):
 
 ```text
 Program: Amplify with AI
-  └── Acquisition
-        Campaigns
+  └── Acquisition / Growth
+        Intents
+        Campaigns          (under an Intent)
         Channels
         Assets
         Analytics
+        Intelligence       (→ Acquisition Intelligence surface)
 ```
 
 (Creative Projects / Publishing Jobs live under Campaigns → Assets → Publish.)
@@ -129,6 +177,7 @@ Program: Amplify with AI
 |---|---|
 | **1** | ~~Program → Acquisition Workspace (static UI)~~ |
 | **2** | ~~Campaign CRUD~~ |
+| **2b** | ~~Intent catalog + Intent-scoped campaigns (Amplify dogfood)~~ |
 | **3** | Creative Projects + Assets (upload / attach — Canva/Figma/manual OK) |
 | **4** | Publishing Jobs |
 | **5** | One outbound connector (LinkedIn **or** Meta Ads) |
@@ -137,7 +186,7 @@ Program: Amplify with AI
 
 ### Deliberately postpone
 
-**AI image generation** — does not validate the architecture. Uploaded/manual assets still exercise Programs → Campaigns → Assets → Publishing → Timeline → Interest. Creative AI is a later Platform enhancement.
+**AI image generation** — does not validate the architecture. Uploaded/manual assets still exercise Programs → Intents → Campaigns → Assets → Publishing → Timeline → Interest. Creative AI is a later Platform enhancement.
 
 ### Keep live today
 

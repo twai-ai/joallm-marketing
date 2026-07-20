@@ -37,7 +37,7 @@ export const PRODUCT_DESCRIPTIONS = {
   documentation: 'Architecture notes and operator guides',
   acquisition: 'Connect Channels into Person Timelines (toward Program Growth)',
   documentAi: 'Ingest document sets and launch grounded retrieval',
-  marketingStudio: 'Acquisition Workspace — Programs → Campaigns → Program Interest',
+  marketingStudio: 'Acquisition Workspace — Programs → Intents → Campaigns → Program Interest',
 } as const;
 
 export const PRODUCT_ROUTES = {

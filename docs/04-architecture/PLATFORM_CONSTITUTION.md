@@ -13,32 +13,25 @@ Last updated: 2026-07-21
 
 > **Program is the primary growth object. Campaigns live under Programs.**
 
-These apply to the entire JoaLLM platform and every ATRISI product — not only ATRISI Marketing (Program Growth).
+> **Institution Capability is the philosophy. Program is the aggregate. Growth is one capability.**
+
+These apply to the entire JoaLLM platform and every ATRISI product — not only ATRISI Marketing (cross-program Brain).
 
 ```text
-Creator
+Institution
         │
         ▼
-Studio
-(Program-scoped Create / Edit / Review / Publish
- · Campaigns · Channels · Profiles · Generation Profiles)
+Program   ← durable business object
+        │
+        ├── Growth / Admissions / Learning / Assessment / Placement / Alumni
         │
         ▼
-Product (Brain)
-(Program Growth · Strategy · Timelines · Intelligence)
-        │
-        ▼
-Platform
-(Identity · Timeline · Knowledge · Memory · Intelligence
- · Integration Platform: Connectors · OAuth · Secrets · Webhooks
- · Creative AI: Image / Video / Audio / Voice / OCR / Upscale / …)
-        │
-        ▼
-External systems
-(Meta · LinkedIn · Mailchimp · OpenAI · Imagen · FLUX · Ideogram · …)
+Studio (capability workspaces) → Platform (Connectors · Creative AI · Timeline)
 ```
 
-Canonical Marketing framing: [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md).
+Canonical framing:
+- [PROGRAM_AGGREGATE_DIRECTION.md](./PROGRAM_AGGREGATE_DIRECTION.md) — Program OS model  
+- [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md) — Growth capability  
 
 ---
 
@@ -51,15 +44,15 @@ Canonical Marketing framing: [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRE
 | **Platform** | Shared constitutional services + Integration + **Creative AI** | Identity, Timeline, Knowledge, Connectors, Generative media |
 | **External** | Delivery, vendor AI models, optimization | Ads, email, LMS, image/video APIs |
 
-### ATRISI Marketing = Program Growth
+### ATRISI Marketing = cross-program Brain; Growth = Program capability
 
-The primary object is **Program** (course, bootcamp, workshop, event, initiative) — not Campaign.
+The durable object is **Program**. Marketing / Program Growth is one **capability** under Program (peer to Admissions, Learning, Assessment).
 
 ```text
-Program → Campaign → Creative → Assets → Channel → Application → Enrollment → Learning
+Institution → Program → Growth | Admissions | Learning | …
 ```
 
-See [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md). Do not become a generic marketing suite.
+See [PROGRAM_AGGREGATE_DIRECTION.md](./PROGRAM_AGGREGATE_DIRECTION.md) and [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md). Do not become a generic marketing suite. Do not invent a root object per module.
 
 ### Studio must not become another product
 

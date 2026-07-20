@@ -1,28 +1,30 @@
 /**
  * ATRISI product ontology — user-facing vocabulary.
- * Constitutional: Studio creates. Products operate. Platform remembers.
  *
- * ATRISI Marketing solves Program Growth: institutions market Programs
- * (bootcamps, degrees, workshops), not generic campaigns.
- * See docs/04-architecture/PROGRAM_GROWTH_DIRECTION.md
+ * Philosophy: Institution Capability.
+ * Aggregate: Program (not Campaign, not Marketing).
+ * Growth / Marketing is one capability under Program.
+ *
+ * See docs/04-architecture/PROGRAM_AGGREGATE_DIRECTION.md
  */
 
 export const ONTOLOGY = {
   constitution: 'Studio creates. Products operate. Platform remembers.',
+  philosophy: 'Institution Capability — Programs are how institutions deliver outcomes.',
   product: {
     name: 'ATRISI Marketing',
     shortName: 'ATRISI',
     role: 'Brain',
     capability: 'Program Growth',
-    tagline: 'Grow programs — awareness to enrollment',
+    tagline: 'Programs first — Growth to Learning',
     meaning:
-      'Program Growth brain: strategy, acquisition, timelines, and outcomes under Programs — not a generic campaign suite.',
+      'Cross-program Brain for Growth intelligence. Day-to-day work happens in Program Workspaces (Growth, Admissions, Learning, …).',
   },
   studio: {
     name: 'Studio',
     role: 'Create',
     meaning:
-      'Program-scoped workspaces: Campaign → Creative → Assets → Publish. Never start from a blank canvas.',
+      'Entry to Program catalog and capability workspaces. Growth starts from a Program — never a blank campaign canvas.',
   },
   platform: {
     name: 'Platform',
@@ -31,10 +33,13 @@ export const ONTOLOGY = {
       'Shared Identity, Timeline, Knowledge, Integration (Connectors), and Creative AI.',
   },
   terms: {
+    institution: 'Operating context / buyer — owns many Programs.',
     program:
-      'Primary object — course, bootcamp, workshop, event, or initiative that needs growth.',
-    campaign:
-      'Program-scoped growth intent (Launch, Deadline, Scholarship, …) — never orphaned from a Program.',
+      'Primary aggregate — course, bootcamp, workshop, event, or initiative (see atrisi.org/programs).',
+    capability:
+      'Workspace under a Program: Growth, Admissions, Learning, Assessment, Placement, Alumni.',
+    growth: 'Program capability for campaigns, creatives, channels, applications (Program Growth).',
+    campaign: 'Growth intent under a Program (Launch, Deadline, Scholarship, …).',
     creativeProject: 'Work unit under a Campaign that produces Marketing Assets.',
     marketingAsset: 'Creative content ready to publish via Channels for a Program Campaign.',
     channel: 'Business destination for publish/acquire (e.g. WhatsApp, LinkedIn Organic).',
@@ -42,10 +47,30 @@ export const ONTOLOGY = {
     publishingProfile: 'Studio defaults for publishing to a Channel.',
     generationProfile: 'Studio creative intent (style + quality); Platform routes providers.',
     person: 'Institutional relationship entity with a Timeline (prospect → applicant → learner).',
-    timeline: 'Chronological spine of acquisition and knowledge events — attributable to Program/Campaign.',
+    timeline: 'Chronological spine — attributable to Program / Campaign / capability.',
     knowledgeArtifact: 'Interpreted knowledge derived from media, documents, or acquisition.',
-    application: 'Handoff toward Admissions / Enrollment / Learning (Education Brain).',
+    application: 'Handoff from Growth toward Admissions → Enrollment → Learning.',
   },
+  programCapabilities: [
+    'Overview',
+    'Growth',
+    'Admissions',
+    'Learning',
+    'Assessment',
+    'Analytics',
+    'Settings',
+  ] as const,
+  growthWorkspace: [
+    'Overview',
+    'Campaigns',
+    'Creative Projects',
+    'Assets',
+    'Publishing',
+    'Channels',
+    'Applications',
+    'Analytics',
+    'Intelligence',
+  ] as const,
   layers: {
     operate: 'Brain',
     create: 'Studio',

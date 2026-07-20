@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { UseCaseHomeShell } from '../components/use-cases/UseCaseHomeShell';
 import { getUseCaseById } from '../constants/useCases';
 import { PLATFORM_CAPABILITY, PLATFORM_CONSTITUTION, PLATFORM_NAME } from '../constants/product';
-import { ATRISI_PROGRAMS, PRIMARY_GROWTH_PROGRAM, PROGRAM_FAMILIES } from '../constants/programs';
+import { ATRISI_PROGRAMS, PRIMARY_GROWTH_PROGRAM } from '../constants/programs';
 import { ONTOLOGY } from '../constants/ontology';
 
 function openCreativeSettings() {
@@ -23,11 +23,11 @@ export function MarketingStudioPage() {
       badge={
         <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
           <Radio className="h-4 w-4 text-teal-600" />
-          Program Growth · Preview
+          Program Aggregate · Growth preview
         </div>
       }
-      title="Programs from atrisi.org — grow the one that needs enrollments"
-      description="These are the live ATRISI program families. Marketing Studio starts here: pick a Program, then Campaign → Creative → Assets → Publish. Not a blank campaign canvas."
+      title="Programs are the OS — Growth is one capability"
+      description="ATRISI starts from Program, not Campaign. Each Program will carry Growth, Admissions, Learning, Assessment, and Analytics. Marketing Studio today is the entry to that Program catalog and the Growth workspace."
       primaryAction={
         <>
           <a
@@ -49,18 +49,21 @@ export function MarketingStudioPage() {
           </button>
         </>
       }
-      secondaryPanelTitle="First dogfood Program"
-      secondaryPanelBody={`${PRIMARY_GROWTH_PROGRAM.name} — ${PRIMARY_GROWTH_PROGRAM.tagline}. Campaigns like Early Bird, Campus Ambassador, and Final Call live under this Program.`}
+      secondaryPanelTitle="Program Workspace (coming)"
+      secondaryPanelBody={`Tabs: ${ONTOLOGY.programCapabilities.join(' · ')}. Selecting Growth opens campaigns, creatives, channels, and applications for that Program.`}
       secondaryPanelContent={
         <div className="space-y-2 text-sm text-slate-200">
-          {PROGRAM_FAMILIES.map((family) => (
-            <div key={family.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <div className="text-xs uppercase tracking-wide text-teal-200/80">{family.label}</div>
-              <div className="mt-1 font-medium text-white">
-                {ATRISI_PROGRAMS.filter((p) => p.family === family.id)
-                  .map((p) => p.name)
-                  .join(' · ')}
-              </div>
+          {ONTOLOGY.programCapabilities.map((tab) => (
+            <div
+              key={tab}
+              className={`rounded-lg border px-3 py-2 font-medium ${
+                tab === 'Growth'
+                  ? 'border-teal-400/40 bg-teal-500/15 text-teal-100'
+                  : 'border-white/10 bg-white/5 text-slate-200'
+              }`}
+            >
+              {tab}
+              {tab === 'Growth' ? ' ← this Studio' : ''}
             </div>
           ))}
         </div>
@@ -117,7 +120,7 @@ export function MarketingStudioPage() {
                   <p className="mt-3 text-xs text-slate-500">{program.tracks.join(' · ')}</p>
                 )}
                 <div className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-slate-400">
-                  Workspace soon
+                  Program Workspace soon
                   <ArrowRight className="h-3.5 w-3.5" />
                 </div>
               </div>
@@ -130,15 +133,15 @@ export function MarketingStudioPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-2 text-teal-700">
             <GraduationCap className="h-5 w-5" />
-            <h2 className="text-lg font-semibold text-slate-950">Program Marketing Workspace</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Growth workspace (under Program)</h2>
           </div>
           <p className="mt-2 text-sm text-slate-600">
-            Each Program will open Overview · Campaigns · Assets · Creatives · Audience · Channels ·
-            Applications · Analytics — contextual to that Program family.
+            When a Program opens, Growth exposes: {ONTOLOGY.growthWorkspace.join(' · ')}.
           </p>
           <ul className="mt-4 space-y-2 text-sm text-slate-600">
+            <li>· Dogfood first: {PRIMARY_GROWTH_PROGRAM.name}</li>
             <li>· North star: {ONTOLOGY.analyticsNorthStar.join(' · ')}</li>
-            <li>· Handoff: Application → Admissions → Enrollment → Learning</li>
+            <li>· Brain stays cross-program; Workspace stays program-specific</li>
           </ul>
           <p className="mt-4 text-xs text-slate-500">{PLATFORM_CONSTITUTION}</p>
         </section>

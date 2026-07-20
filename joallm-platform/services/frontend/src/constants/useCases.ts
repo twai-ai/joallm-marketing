@@ -89,10 +89,10 @@ export const USE_CASES: UseCaseDefinition[] = [
     assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
     status: 'placeholder',
     description:
-      'Program Growth workspace: select a Program, run Campaigns, generate Assets, publish via Channels — not a blank campaign canvas.',
+      'Program catalog → Growth workspace. Pick a Program (Amplify, Resonance, …), then Campaigns and Assets — Growth is one Program capability.',
     helper:
-      'Start from Program (e.g. Amplify with AI). Studio creates; ATRISI Marketing operates Timelines and intelligence; hand off to Applications → Enrollment.',
-    audience: 'Growth, admissions marketing, and institutional program teams',
+      'Institution → Program → Growth | Admissions | Learning. Studio starts from Program; Brain answers cross-program questions.',
+    audience: 'Growth, admissions, and institutional program teams',
     supportsAssetDetail: true,
   },
 ];

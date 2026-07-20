@@ -25,6 +25,20 @@ Their unit of work is always a **Program** (or Program-like object).
 
 ---
 
+## Relationship to Program Aggregate
+
+Program Growth is a **capability**, not the root product.
+
+See [PROGRAM_AGGREGATE_DIRECTION.md](./PROGRAM_AGGREGATE_DIRECTION.md):
+
+```text
+Institution → Program → Growth | Admissions | Learning | …
+```
+
+This document details the **Growth** capability under Program.
+
+---
+
 ## Canonical ATRISI Programs
 
 Public catalog: [atrisi.org/programs](https://atrisi.org/programs)

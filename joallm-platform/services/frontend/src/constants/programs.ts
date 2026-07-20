@@ -1,9 +1,9 @@
 /**
- * Canonical ATRISI Program catalog for Program Growth.
+ * Canonical ATRISI Program catalog for the Program aggregate.
  * Source of truth (public): https://atrisi.org/programs
  *
- * Marketing Studio / Brain work starts from one of these Programs —
- * not from a blank campaign canvas.
+ * Growth / Admissions / Learning are capabilities under Program —
+ * not separate product roots.
  */
 
 export type ProgramFamily = 'academic' | 'institutional_career' | 'enterprise';

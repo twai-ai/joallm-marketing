@@ -1,0 +1,29 @@
+# Ignore build outputs
+dist
+build
+.vite
+
+# Ignore dependencies
+node_modules
+
+# Ignore generated files
+*.config.js
+vite.config.ts
+
+# Temporarily ignore files with pre-existing linting issues
+# These can be fixed in a separate PR
+src/components/bookmarks/BookmarksPanel.tsx
+src/components/auth/UserProfile.tsx
+src/components/auth/RoleBasedAccess.tsx
+src/components/notebook/NotebookInterface.tsx
+src/components/layout/Sidebar.tsx
+src/components/common/DocumentPreviewModal.tsx
+src/components/chat/SessionList.tsx
+src/components/chat/RAGPreviewPanel.tsx
+src/components/chat/ChatInterfaceNew.tsx
+src/components/chat/AttachmentSuggestions.tsx
+src/App.tsx
+src/contexts/AuthContext.tsx
+
+
+

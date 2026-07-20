@@ -1,0 +1,167 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1761280299472,
+      "tag": "0000_sad_korvac",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1761370892709,
+      "tag": "0001_first_deathbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1761418708493,
+      "tag": "0002_broad_killer_shrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1761569136088,
+      "tag": "0003_whole_domino",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1762408807288,
+      "tag": "0004_youthful_nighthawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1731048000000,
+      "tag": "0005_fix_vector_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1731048060000,
+      "tag": "0006_add_users_password",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1731048120000,
+      "tag": "0007_add_performance_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1731048180000,
+      "tag": "0008_add_rag_search_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1731048240000,
+      "tag": "0009_add_user_api_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1731048300000,
+      "tag": "0010_add_bookmarks",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1731048360000,
+      "tag": "0011_add_user_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1731048420000,
+      "tag": "0012_add_user_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1731048480000,
+      "tag": "0013_add_notebooks",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1731048540000,
+      "tag": "0014_add_audit_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1731048600000,
+      "tag": "0015_add_embedding_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1731048660000,
+      "tag": "0016_add_workspace_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1731048720000,
+      "tag": "0017_add_training_data_layer",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1731048780000,
+      "tag": "0018_fix_storage_provider_default",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1774569600000,
+      "tag": "0019_add_enterprise_scaffolding",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1774656000000,
+      "tag": "0020_add_revoked_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1774742400000,
+      "tag": "0021_add_workspace_to_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1774828800000,
+      "tag": "0022_add_rag_mode_to_messages",
+      "breakpoints": true
+    }
+  ]
+}

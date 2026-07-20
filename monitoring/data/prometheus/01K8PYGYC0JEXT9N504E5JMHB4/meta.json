@@ -1,0 +1,18 @@
+{
+	"ulid": "01K8PYGYC0JEXT9N504E5JMHB4",
+	"minTime": 1761696001504,
+	"maxTime": 1761703200000,
+	"stats": {
+		"numSamples": 454800,
+		"numFloatSamples": 454800,
+		"numSeries": 940,
+		"numChunks": 3793
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"01K8PYGYC0JEXT9N504E5JMHB4"
+		]
+	},
+	"version": 1
+}

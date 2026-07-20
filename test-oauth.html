@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 10px 0; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔐 OAuth Test Page</h1>
+    
+    <div class="test-section info">
+        <h3>📋 OAuth Setup Checklist</h3>
+        <ul>
+            <li>✅ Backend running on port 3001</li>
+            <li>✅ Google OAuth endpoint working</li>
+            <li>❌ Google Client Secret needs to be set</li>
+            <li>❌ Google OAuth app needs to be configured</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>🧪 Test OAuth Flow</h3>
+        <p>Click the button below to test the OAuth flow:</p>
+        <button onclick="testOAuth()">Test Google OAuth</button>
+        <div id="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🔧 Configuration Check</h3>
+        <button onclick="checkConfig()">Check Backend Configuration</button>
+        <div id="config-result"></div>
+    </div>
+
+    <div class="test-section info">
+        <h3>📝 Next Steps</h3>
+        <ol>
+            <li><strong>Get Google Client Secret:</strong>
+                <ul>
+                    <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                    <li>Select your project (or create one)</li>
+                    <li>Go to "APIs & Services" → "Credentials"</li>
+                    <li>Find your OAuth 2.0 Client ID: <code><YOUR_GOOGLE_CLIENT_ID>.apps.googleusercontent.com</code></li>
+                    <li>Copy the Client Secret</li>
+                </ul>
+            </li>
+            <li><strong>Update Backend .env:</strong>
+                <pre>GOOGLE_CLIENT_SECRET=your-actual-client-secret-here</pre>
+            </li>
+            <li><strong>Configure OAuth Redirect URIs:</strong>
+                <ul>
+                    <li>In Google Cloud Console, add these authorized redirect URIs:</li>
+                    <li><code>http://localhost:3001/api/auth/google/callback</code></li>
+                    <li><code>http://127.0.0.1:3001/api/auth/google/callback</code></li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <script>
+        function testOAuth() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>🔄 Redirecting to Google OAuth...</p>';
+            
+            // Test the OAuth endpoint
+            window.location.href = 'http://localhost:3001/api/auth/google';
+        }
+
+        async function checkConfig() {
+            const resultDiv = document.getElementById('config-result');
+            resultDiv.innerHTML = '<p>🔄 Checking backend configuration...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:3001/api/health');
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ Backend is running</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Backend not responding</h4>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+

@@ -1,0 +1,26 @@
+{
+  "name": "joallm-performance-tests",
+  "version": "1.0.0",
+  "description": "Performance testing suite for JoaLLM platform",
+  "main": "load-test.js",
+  "scripts": {
+    "load": "node load-test.js load",
+    "stress": "node load-test.js stress",
+    "memory": "node load-test.js memory",
+    "all": "npm run load && npm run stress && npm run memory"
+  },
+  "dependencies": {
+    "autocannon": "^7.12.0",
+    "clinic": "^12.0.0",
+    "0x": "^5.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
+
+
+
+
+
+

@@ -1,0 +1,346 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, CheckCircle, Sparkles, Zap, Database, Workflow, MessageSquare } from 'lucide-react';
+import { useUserRole } from '../../contexts/EnhancedUserRoleContext';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface OnboardingStep {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  action?: {
+    label: string;
+    route: string;
+    description: string;
+  };
+  completed?: boolean;
+}
+
+interface RoleBasedOnboardingProps {
+  onComplete?: () => void;
+}
+
+export function RoleBasedOnboarding({ onComplete }: RoleBasedOnboardingProps) {
+  const { role, getRoleConfig, getOnboardingSteps, completeOnboarding, isFirstTime } = useUserRole();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
+
+  const roleConfig = getRoleConfig();
+  const steps = getOnboardingSteps();
+
+  // Generate role-specific onboarding steps
+  const generateOnboardingSteps = (): OnboardingStep[] => {
+    const baseSteps: OnboardingStep[] = [
+      {
+        id: 'welcome',
+        title: `Welcome to ${roleConfig.name} Mode`,
+        description: `You're now in ${roleConfig.name} mode with access to ${roleConfig.features.length} specialized features.`,
+        icon: <Sparkles className="w-8 h-8 text-blue-600" />,
+      }
+    ];
+
+    // Role-specific steps
+    switch (role) {
+      case 'developer':
+        return [
+          ...baseSteps,
+          {
+            id: 'workflow',
+            title: 'Explore Workflow Builder',
+            description: 'Create automated AI workflows with visual nodes and conditional logic.',
+            icon: <Workflow className="w-8 h-8 text-blue-600" />,
+            action: {
+              label: 'Open Workflow Builder',
+              route: '/workflow',
+              description: 'Start building your first AI workflow'
+            }
+          },
+          {
+            id: 'api-keys',
+            title: 'Configure API Keys',
+            description: 'Set up your API keys for OpenAI, Anthropic, and other providers.',
+            icon: <Zap className="w-8 h-8 text-yellow-600" />,
+            action: {
+              label: 'Manage API Keys',
+              route: '/settings',
+              description: 'Configure your AI provider credentials'
+            }
+          },
+          {
+            id: 'models',
+            title: 'Set up Model Preferences',
+            description: 'Choose your preferred AI models and configure their parameters.',
+            icon: <Database className="w-8 h-8 text-green-600" />,
+            action: {
+              label: 'Configure Models',
+              route: '/farm',
+              description: 'Explore and configure AI models'
+            }
+          }
+        ];
+
+      case 'analyst':
+        return [
+          ...baseSteps,
+          {
+            id: 'notebook',
+            title: 'Explore Interactive Notebooks',
+            description: 'Create data analysis notebooks with Python and AI integration.',
+            icon: <Database className="w-8 h-8 text-green-600" />,
+            action: {
+              label: 'Open Notebook',
+              route: '/notebook',
+              description: 'Start your first data analysis'
+            }
+          },
+          {
+            id: 'knowledge',
+            title: 'Set up Knowledge Base',
+            description: 'Upload documents and create a searchable knowledge base.',
+            icon: <Zap className="w-8 h-8 text-purple-600" />,
+            action: {
+              label: 'Manage Knowledge',
+              route: '/rag-search',
+              description: 'Upload and organize your documents'
+            }
+          },
+          {
+            id: 'analysis',
+            title: 'Create Your First Analysis',
+            description: 'Combine data analysis with AI insights for powerful results.',
+            icon: <Sparkles className="w-8 h-8 text-blue-600" />,
+            action: {
+              label: 'Start Analysis',
+              route: '/notebook',
+              description: 'Begin your data analysis journey'
+            }
+          }
+        ];
+
+      case 'business':
+        return [
+          ...baseSteps,
+          {
+            id: 'chat',
+            title: 'Explore Chat Interface',
+            description: 'Start conversations with AI models for business tasks.',
+            icon: <MessageSquare className="w-8 h-8 text-blue-600" />,
+            action: {
+              label: 'Start Chatting',
+              route: '/chat',
+              description: 'Begin your AI conversation'
+            }
+          },
+          {
+            id: 'documents',
+            title: 'Learn Document Upload',
+            description: 'Upload and analyze business documents with AI.',
+            icon: <Database className="w-8 h-8 text-green-600" />,
+            action: {
+              label: 'Upload Documents',
+              route: '/rag-search',
+              description: 'Add your business documents'
+            }
+          },
+          {
+            id: 'templates',
+            title: 'Try Business Templates',
+            description: 'Use pre-built templates for common business tasks.',
+            icon: <Zap className="w-8 h-8 text-purple-600" />,
+            action: {
+              label: 'Browse Templates',
+              route: '/chat',
+              description: 'Explore business templates'
+            }
+          }
+        ];
+
+      case 'casual':
+        return [
+          ...baseSteps,
+          {
+            id: 'chat',
+            title: 'Start Your First Chat',
+            description: 'Begin chatting with AI models for everyday tasks.',
+            icon: <MessageSquare className="w-8 h-8 text-blue-600" />,
+            action: {
+              label: 'Start Chatting',
+              route: '/chat',
+              description: 'Begin your AI conversation'
+            }
+          },
+          {
+            id: 'templates',
+            title: 'Try Quick Actions',
+            description: 'Use pre-built templates for common tasks.',
+            icon: <Zap className="w-8 h-8 text-yellow-600" />,
+            action: {
+              label: 'Explore Templates',
+              route: '/chat',
+              description: 'Try quick action templates'
+            }
+          },
+          {
+            id: 'discover',
+            title: 'Discover Features',
+            description: 'Explore the full range of AI capabilities available to you.',
+            icon: <Sparkles className="w-8 h-8 text-purple-600" />,
+            action: {
+              label: 'Explore Features',
+              route: '/',
+              description: 'Discover what you can do'
+            }
+          }
+        ];
+
+      default:
+        return baseSteps;
+    }
+  };
+
+  const onboardingSteps = generateOnboardingSteps();
+
+  const handleStepComplete = (stepId: string) => {
+    setCompletedSteps(prev => new Set([...prev, stepId]));
+  };
+
+  const handleNext = () => {
+    if (currentStep < onboardingSteps.length - 1) {
+      setCurrentStep(currentStep + 1);
+    } else {
+      completeOnboarding();
+      onComplete?.();
+    }
+  };
+
+  const handleAction = (action: OnboardingStep['action']) => {
+    if (action) {
+      handleStepComplete(onboardingSteps[currentStep].id);
+      navigate(action.route);
+    }
+  };
+
+  const handleSkip = () => {
+    completeOnboarding();
+    onComplete?.();
+  };
+
+  if (!isFirstTime) {
+    return null;
+  }
+
+  const currentStepData = onboardingSteps[currentStep];
+  const progress = ((currentStep + 1) / onboardingSteps.length) * 100;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Welcome to ATRISI Marketing</h2>
+              <p className="text-blue-100">Let's get you started with {roleConfig.name} mode</p>
+            </div>
+            <div className="text-right">
+              <div className="text-sm text-blue-100">Step {currentStep + 1} of {onboardingSteps.length}</div>
+              <div className="text-2xl font-bold">{Math.round(progress)}%</div>
+            </div>
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="mt-4 w-full bg-blue-500 rounded-full h-2">
+            <div 
+              className="bg-white rounded-full h-2 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-8">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+              {currentStepData.icon}
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              {currentStepData.title}
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 text-lg">
+              {currentStepData.description}
+            </p>
+          </div>
+
+          {/* Action Button */}
+          {currentStepData.action && (
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6 mb-6">
+              <div className="text-center">
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                  {currentStepData.action.label}
+                </h4>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">
+                  {currentStepData.action.description}
+                </p>
+                <button
+                  onClick={() => handleAction(currentStepData.action)}
+                  className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  {currentStepData.action.label}
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step Indicators */}
+          <div className="flex justify-center space-x-2 mb-6">
+            {onboardingSteps.map((_, index) => (
+              <div
+                key={index}
+                className={`w-3 h-3 rounded-full ${
+                  index === currentStep
+                    ? 'bg-blue-600'
+                    : index < currentStep
+                    ? 'bg-green-500'
+                    : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              />
+            ))}
+          </div>
+
+          {/* Navigation */}
+          <div className="flex justify-between">
+            <button
+              onClick={handleSkip}
+              className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+            >
+              Skip Onboarding
+            </button>
+            
+            <div className="flex space-x-3">
+              {currentStep > 0 && (
+                <button
+                  onClick={() => setCurrentStep(currentStep - 1)}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Previous
+                </button>
+              )}
+              
+              <button
+                onClick={handleNext}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                {currentStep === onboardingSteps.length - 1 ? 'Complete' : 'Next'}
+                <ArrowRight className="w-4 h-4 ml-2 inline" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

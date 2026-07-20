@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Complete Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 10px 0; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .step { margin: 10px 0; padding: 10px; background: #f8f9fa; border-left: 4px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>🔐 OAuth Complete Test</h1>
+    
+    <div class="test-section success">
+        <h3>✅ OAuth Status: WORKING!</h3>
+        <p>Based on the backend logs, OAuth authentication is working correctly:</p>
+        <ul>
+            <li>✅ Google OAuth initiated successfully</li>
+            <li>✅ Authorization code received</li>
+            <li>✅ Token exchange successful</li>
+            <li>✅ User info retrieved: <strong>Aeishwary Mishra (support@joallm.ai)</strong></li>
+            <li>✅ Backend redirects to frontend with tokens</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>🧪 Test Complete OAuth Flow</h3>
+        <div class="step">
+            <strong>Step 1:</strong> Click the button below to start OAuth
+        </div>
+        <div class="step">
+            <strong>Step 2:</strong> Complete Google authentication
+        </div>
+        <div class="step">
+            <strong>Step 3:</strong> You should be redirected to the welcome page
+        </div>
+        
+        <button onclick="startOAuth()">🚀 Start OAuth Test</button>
+        <div id="result"></div>
+    </div>
+
+    <div class="test-section info">
+        <h3>🔍 Expected Flow</h3>
+        <ol>
+            <li><strong>OAuth Initiation:</strong> <code>http://localhost:3001/api/auth/google</code></li>
+            <li><strong>Google Consent:</strong> Google OAuth consent screen</li>
+            <li><strong>Authorization:</strong> User authorizes the app</li>
+            <li><strong>Callback:</strong> <code>http://localhost:3001/api/auth/google/callback?code=...</code></li>
+            <li><strong>Token Exchange:</strong> Backend exchanges code for tokens</li>
+            <li><strong>User Creation:</strong> User created/updated in joallm_dev database</li>
+            <li><strong>Frontend Redirect:</strong> <code>http://localhost:5175/auth/callback?token=...&refresh=...</code></li>
+            <li><strong>Welcome Page:</strong> <code>http://localhost:5175/</code></li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h3>🛠️ Troubleshooting</h3>
+        <p>If you're not redirected to the welcome page:</p>
+        <ul>
+            <li>Check browser console for errors</li>
+            <li>Verify frontend is running on port 5175</li>
+            <li>Check if tokens are being stored in localStorage</li>
+            <li>Try refreshing the page after OAuth completion</li>
+        </ul>
+        
+        <button onclick="checkStatus()">🔍 Check Current Status</button>
+        <div id="status-result"></div>
+    </div>
+
+    <script>
+        function startOAuth() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>🔄 Starting OAuth flow...</p>';
+            
+            // Redirect to OAuth endpoint
+            window.location.href = 'http://localhost:3001/api/auth/google';
+        }
+
+        function checkStatus() {
+            const resultDiv = document.getElementById('status-result');
+            
+            // Check if we're on the callback page
+            if (window.location.pathname === '/auth/callback') {
+                const urlParams = new URLSearchParams(window.location.search);
+                const token = urlParams.get('token');
+                const refresh = urlParams.get('refresh');
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ OAuth Callback Detected</h4>
+                        <p><strong>Token:</strong> ${token ? 'Present' : 'Missing'}</p>
+                        <p><strong>Refresh:</strong> ${refresh ? 'Present' : 'Missing'}</p>
+                        <p>You should be redirected to the welcome page shortly...</p>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="info">
+                        <h4>ℹ️ Ready for OAuth Test</h4>
+                        <p>Click "Start OAuth Test" to begin the authentication flow.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Auto-check status on page load
+        window.addEventListener('load', checkStatus);
+    </script>
+</body>
+</html>
+
+
+
+
+

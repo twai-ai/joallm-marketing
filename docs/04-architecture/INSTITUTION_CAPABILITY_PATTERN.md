@@ -160,9 +160,13 @@ Studio entry today (“Marketing Studio”) is a transitional catalog → Growth
 
 Answers: *Who gets in?*
 
-Owns: Applications (accepted from Growth) · Evaluations · Offers · Decisions · Enrollment.
+**On this Marketing platform:** Growth collects application *intent* and attributed interest from campaigns/channels.
 
-Growth may *create* application intent; Admissions *owns* the admissions aggregate after handoff.
+**On education.atrisi.org:** Admissions / Learning own evaluations, offers, enrollment, delivery. Education **pulls** from Marketing — Marketing does not sync Program Core from Education, and does not run the full Admissions OS here.
+
+```text
+Growth (Marketing)  --pull-->  Education (Admissions · Learning)
+```
 
 ---
 
@@ -170,9 +174,7 @@ Growth may *create* application intent; Admissions *owns* the admissions aggrega
 
 Answers: *How do participants learn?*
 
-Owns: Curriculum · Modules · Assignments · Evidence · Capability · Progress.
-
-Handoff from Admissions/Enrollment. Consumes Platform Timeline + Knowledge; does not own Connectors or Creative AI providers.
+Owned by **education.atrisi.org**, not by this Marketing product. This platform stops at Growth outcomes (engagement, application intent, attribution) that Education can pull.
 
 ---
 

@@ -99,7 +99,10 @@ export type GrowthAggregate = {
   intelligence?: unknown;
 };
 
-/** Handoff port Growth → Admissions */
+/**
+ * Handoff: Growth produces application intent on this platform.
+ * education.atrisi.org PULLS — do not sync Program Core from Education.
+ */
 export type GrowthApplicationHandoff = {
   programId: string;
   personId?: string;
@@ -107,3 +110,9 @@ export type GrowthApplicationHandoff = {
   source?: string;
   payload?: Record<string, unknown>;
 };
+
+/**
+ * Program Core is local catalog (atrisi.org/programs + institution edits).
+ * No LMS/SIS/education source-system sync for program definitions.
+ */
+export type ProgramCatalogSource = 'atrisi_catalog' | 'institution_manual';

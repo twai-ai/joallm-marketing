@@ -118,7 +118,8 @@ Enrollment
 Learning          ← handoff to Education Brain
 ```
 
-Marketing naturally hands off to the Education Brain at Application → Admissions → Enrollment → Learning.
+Marketing naturally produces **application intent** that **education.atrisi.org pulls**.  
+Admissions → Enrollment → Learning run on Education — not by syncing Program definitions into Marketing.
 
 ---
 

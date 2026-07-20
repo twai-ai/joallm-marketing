@@ -34,6 +34,37 @@ Public catalog: [atrisi.org/programs](https://atrisi.org/programs)
 
 ---
 
+## This product is Marketing / Growth — not Education sync
+
+**Do not connect Program Core to a source system** (no LMS/SIS/education.atrisi.org sync for program definitions).
+
+Program details are **already provided** — seed/maintain them in this platform from the ATRISI catalog (and institution edits). Education is a **consumer**, not the system of record for Program Core here.
+
+### Data flow (canonical)
+
+```text
+Channels / Campaigns (WhatsApp, ads, forms, …)
+        │  send / webhook / ingest
+        ▼
+ATRISI Marketing  (this platform)
+  Program catalog (local)
+  Growth: Campaigns · Engagement · Applications intent
+  Person Timelines · Attribution
+        │
+        │  education.atrisi.org PULLS
+        ▼
+Education (Admissions · Learning · …)
+```
+
+| Concern | System of record |
+|---|---|
+| Program Core (what the program is) | **This platform** (catalog / local) |
+| Growth campaigns, creatives, publish | **This platform** |
+| Inbound engagement → application intent | **This platform** (ingest) |
+| Admissions decisions, Learning delivery | **education.atrisi.org** (pulls from Marketing) |
+
+---
+
 ## Core vs Capability
 
 ### Core (Program owns)
@@ -140,7 +171,7 @@ GrowthCampaign
 // AdmissionsApplication, LearningModule, … each carry programId
 ```
 
-Implementation milestone: shared types + DB for **Program + ProgramCore** first; Growth objects second; Workspace shell third.
+Implementation milestone: seed **Program + ProgramCore** from the ATRISI catalog (local) — no education source sync. Growth objects second; expose a pull API for education.atrisi.org third.
 
 ---
 
@@ -148,10 +179,10 @@ Implementation milestone: shared types + DB for **Program + ProgramCore** first;
 
 1. ~~Institution Capability Pattern~~  
 2. ~~Program Aggregate Core vs Capability~~ (this doc)  
-3. **Program + ProgramCore** shared types / migration  
-4. Seed ATRISI Programs as Program rows  
-5. Program Workspace shell (capability tabs)  
-6. Growth objects under `programId`  
+3. Seed ATRISI Programs as local Program rows (catalog — not synced)  
+4. Growth objects under `programId`  
+5. Campaigns + channel ingest → application intent on this platform  
+6. **Pull contract** for education.atrisi.org (applications / attributed interest)  
 7. Acquisition attribution → Program / Campaign  
 
-Resist new marketing features until Program Core is real.
+Resist inventing Program sync from Education. Education pulls Growth outcomes.

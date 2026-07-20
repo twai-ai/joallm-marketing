@@ -27,7 +27,7 @@ export function WorkflowFamilyPlaceholderPage() {
           </button>
           <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
             <Construction className="h-4 w-4" />
-            Placeholder workspace
+            Placeholder Studio workspace
           </div>
           <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-900">{family.label}</h1>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">{family.description}</p>
@@ -50,7 +50,7 @@ export function WorkflowFamilyPlaceholderPage() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <div className="text-sm font-semibold text-slate-800">Current recommendation</div>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Use Media AI for the live guided experience today while the other vertical workspaces remain placeholders.
+                Use live Studio workspaces (Media AI, Document AI, Acquisition) while this one remains Soon.
               </p>
             </div>
           </div>

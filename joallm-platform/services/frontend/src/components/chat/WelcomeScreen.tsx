@@ -21,22 +21,22 @@ export function WelcomeScreen({ onPromptSelect }: WelcomeScreenProps) {
     {
       icon: MessageSquare,
       title: PRODUCT_LABELS.chat,
-      description: 'Natural conversations with advanced AI models'
+      description: 'Grounded conversations across institutional knowledge'
     },
     {
       icon: Brain,
-      title: 'RAG Integration',
-      description: 'Chat with your documents and knowledge base'
+      title: PRODUCT_LABELS.knowledge,
+      description: 'Documents, Timelines, and Knowledge Artifacts'
     },
     {
       icon: Zap,
-      title: 'Workflow Builder',
-      description: 'Create automated AI workflows visually'
+      title: PRODUCT_LABELS.workflows,
+      description: 'Media AI, Document AI, Acquisition, Marketing Studio'
     },
     {
       icon: Sparkles,
-      title: 'Notebook Interface',
-      description: 'Interactive notebooks for data analysis'
+      title: PRODUCT_LABELS.notebooks,
+      description: 'Advanced Platform tooling for interactive sessions'
     }
   ];
 

@@ -23,7 +23,7 @@ export function ChatInterface() {
     {
       id: '1',
       role: 'system',
-      content: 'Welcome to joallm.ai - your Swiss Army Knife for Large Language Models! I\'m here to help you with any questions or tasks. You can chat with me naturally, upload files for analysis, use templates, or build complex AI workflows.',
+      content: 'Welcome to ATRISI Marketing — institutional knowledge and relationship intelligence. Chat with grounded answers, open Studio for Media AI / Document AI / Acquisition, and keep Timelines and Knowledge Artifacts on the Platform.',
       timestamp: new Date(),
     },
   ]);

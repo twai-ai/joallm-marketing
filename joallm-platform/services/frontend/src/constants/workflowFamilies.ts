@@ -1,55 +1,71 @@
-import { USE_CASES } from './useCases';
+import { USE_CASES, type UseCaseId, type UseCaseStatus } from './useCases';
 
-export type WorkflowFamilyStatus = 'active' | 'placeholder' | 'advanced';
+/**
+ * Studio family directory for Welcome / overview tiles.
+ * Prefer USE_CASES directly; this keeps a stable shape for legacy imports
+ * without collapsing Acquisition / Marketing Studio into "media".
+ */
+export type StudioFamilyStatus = UseCaseStatus | 'advanced';
 
-export interface WorkflowFamilyDefinition {
-  id: 'media' | 'documents' | 'data' | 'custom';
+export type StudioFamilyId = UseCaseId | 'custom';
+
+export interface StudioFamilyDefinition {
+  id: StudioFamilyId;
   label: string;
   route: string;
-  status: WorkflowFamilyStatus;
+  status: StudioFamilyStatus;
   description: string;
   helper: string;
   audience: string;
 }
 
-export const WORKFLOW_FAMILIES: WorkflowFamilyDefinition[] = [
+export const STUDIO_FAMILIES: StudioFamilyDefinition[] = [
   ...USE_CASES.map((useCase) => ({
-    id:
-      useCase.id === 'docs-ai'
-        ? 'documents'
-        : useCase.id === 'data-intelligence'
-          ? 'data'
-            : 'media',
+    id: useCase.id,
     label: useCase.label,
     route: useCase.homeRoute,
-    status: useCase.status,
+    status: useCase.status as StudioFamilyStatus,
     description: useCase.description,
     helper: useCase.helper,
     audience: useCase.audience,
   })),
   {
     id: 'custom',
-    label: 'Studio',
+    label: 'Custom Studio canvas',
     route: '/studio/custom',
     status: 'advanced',
-    description: 'The advanced canvas for composing bespoke pipelines, routing, and automation.',
-    helper: 'Use this when the guided family workspaces are not enough.',
+    description:
+      'Advanced canvas for bespoke pipelines when guided Studio workspaces are not enough.',
+    helper: 'Platform tooling — not the primary marketing create path.',
     audience: 'Power users and custom implementations',
   },
 ];
 
-export function getWorkflowFamilyById(id: string): WorkflowFamilyDefinition | undefined {
-  const familyIdAliases = {
-    'docs-ai': 'documents',
-    'document-ai': 'documents',
-    'data-intelligence': 'data',
+/** @deprecated Use STUDIO_FAMILIES — kept for import compatibility */
+export type WorkflowFamilyStatus = StudioFamilyStatus;
+/** @deprecated Use StudioFamilyDefinition */
+export type WorkflowFamilyDefinition = StudioFamilyDefinition;
+/** @deprecated Use STUDIO_FAMILIES */
+export const WORKFLOW_FAMILIES = STUDIO_FAMILIES;
+
+export function getStudioFamilyById(id: string): StudioFamilyDefinition | undefined {
+  const aliases: Record<string, StudioFamilyId> = {
     media: 'media',
-    documents: 'documents',
-    data: 'data',
+    acquisition: 'acquisition',
+    'docs-ai': 'docs-ai',
+    'document-ai': 'docs-ai',
+    documents: 'docs-ai',
+    'data-intelligence': 'data-intelligence',
+    data: 'data-intelligence',
+    'marketing-studio': 'marketing-studio',
+    marketing: 'marketing-studio',
     custom: 'custom',
-  } as const;
+  };
 
-  const normalizedId = familyIdAliases[id as keyof typeof familyIdAliases];
-
-  return WORKFLOW_FAMILIES.find((family) => family.id === normalizedId);
+  const normalizedId = aliases[id];
+  if (!normalizedId) return undefined;
+  return STUDIO_FAMILIES.find((family) => family.id === normalizedId);
 }
+
+/** @deprecated Use getStudioFamilyById */
+export const getWorkflowFamilyById = getStudioFamilyById;

@@ -51,11 +51,11 @@ export function LoginPage() {
           </div>
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800 shadow-sm">
             <Sparkles className="h-4 w-4 text-teal-600" />
-            Connected AI workspace
+            ATRISI Marketing
           </div>
           <h2 className="text-3xl font-bold text-slate-950 mb-2">Welcome back</h2>
           <p className="text-slate-600">
-            Sign in to continue with chat, knowledge, workflows, and model routing in one place.
+            Sign in to operate the Brain (Chat, Knowledge) and create in Studio (Media, Documents, Acquisition).
           </p>
         </div>
 
@@ -158,19 +158,19 @@ export function LoginPage() {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="flex items-center text-slate-600">
               <Workflow className="mr-2 h-4 w-4 text-teal-700" />
-              Workflow automation
+              Studio workspaces
             </div>
             <div className="flex items-center text-slate-600">
               <Search className="mr-2 h-4 w-4 text-teal-700" />
-              Grounded retrieval
+              Knowledge & Timelines
             </div>
             <div className="flex items-center text-slate-600">
               <Sparkles className="mr-2 h-4 w-4 text-teal-700" />
-              Multi-model chat
+              Acquisition Channels
             </div>
             <div className="flex items-center text-slate-600">
               <ShieldCheck className="mr-2 h-4 w-4 text-teal-700" />
-              Enterprise-aware access
+              Platform Connectors
             </div>
           </div>
         </div>

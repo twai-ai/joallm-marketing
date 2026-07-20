@@ -102,8 +102,8 @@ export const MULTIMODAL_PROCESSING_MODES: Array<{
   },
   {
     id: 'route_to_workflow',
-    label: 'Turn into workflow',
-    description: 'Treat this as the starting point for reusable automation.',
+    label: 'Open in Studio',
+    description: 'Treat this as the starting point for a Studio workspace or custom canvas.',
   },
 ];
 

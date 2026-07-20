@@ -23,23 +23,23 @@ export function RegisterPage() {
   const features = [
     {
       icon: BrainCircuit,
-      title: 'Multi-model chat',
-      description: 'Switch between providers without leaving the workspace'
+      title: 'Brain · Chat & Knowledge',
+      description: 'Operate on institutional knowledge with grounded answers'
     },
     {
       icon: Search,
-      title: 'Grounded knowledge',
-      description: 'Upload, index, and inspect source-backed answers'
+      title: 'Acquisition Intelligence',
+      description: 'Channels via Connectors into one Person Timeline'
     },
     {
       icon: Workflow,
-      title: 'Operational workflows',
-      description: 'Turn repeatable prompting into reusable AI flows'
+      title: 'Studio workspaces',
+      description: 'Media AI, Document AI, and Marketing Assets — create intent'
     },
     {
       icon: ShieldCheck,
-      title: 'Enterprise-aware controls',
-      description: 'Plan visibility, permissions, and safer team adoption'
+      title: 'Platform controls',
+      description: 'Identity, BYOK, Connectors, and Creative AI routing'
     }
   ];
 
@@ -54,13 +54,13 @@ export function RegisterPage() {
             </div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800 shadow-sm">
               <Sparkles className="h-4 w-4 text-teal-600" />
-              Connected AI workspace
+              ATRISI Marketing
             </div>
             <h1 className="text-4xl font-bold text-slate-950 mb-4">
-              Bring chat, knowledge, workflows, and governance into one workspace
+              Studio creates. ATRISI Marketing operates. Platform remembers.
             </h1>
             <p className="text-xl text-slate-600 mb-8">
-              Create your account and start with the same connected product experience the landing page promises.
+              Create your account for institutional knowledge, relationship intelligence, and guided Studio workspaces.
             </p>
           </div>
 

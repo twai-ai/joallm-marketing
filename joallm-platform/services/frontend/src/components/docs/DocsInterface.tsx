@@ -128,27 +128,36 @@ const sections: Section[] = [
           <div>
             <H1>ATRISI Marketing</H1>
             <P>
-              JoaLLM is an enterprise-grade AI platform that brings together multi-model chat,
-              retrieval-augmented generation (RAG), visual workflow automation, and interactive
-              notebooks in a single product. It is designed to be deployed by teams that want
-              the power of large language models without handing their data to a third-party
-              consumer service.
+              ATRISI Marketing is the Brain for institutional knowledge and relationship
+              intelligence. Studio workspaces create and publish intent; the Platform remembers
+              Timelines, Knowledge Artifacts, Connectors, and Creative AI.
+            </P>
+            <P>
+              Constitutional rule: <strong>Studio creates. Products operate. Platform remembers.</strong>
             </P>
             <H2>What you can do</H2>
             <UL>
-              <LI>Have multi-turn conversations with GPT-4, Claude, Llama, and other models</LI>
-              <LI>Upload documents and ask questions grounded in your own knowledge base</LI>
-              <LI>Build visual workflows that chain LLM calls, conditionals, and data transforms</LI>
-              <LI>Run interactive notebooks with AI, code, chart, and knowledge cells</LI>
-              <LI>Compare models by speed, quality, and cost in the Model Library</LI>
-              <LI>Bring your own API keys to bypass platform quotas</LI>
+              <LI>Operate in Chat and Knowledge with grounded institutional answers</LI>
+              <LI>Run Media AI and Document AI Studios to produce Knowledge Artifacts</LI>
+              <LI>Use Acquisition Intelligence — Channels via Connectors into Person Timelines</LI>
+              <LI>Prepare Marketing Studio for Marketing Assets published through Channels</LI>
+              <LI>Bring your own API keys for model routing and Creative AI providers</LI>
             </UL>
+            <H2>Three layers</H2>
+            <Table
+              headers={['Layer', 'Role', 'Examples']}
+              rows={[
+                ['Studio', 'Create / review / publish intent', 'Media AI, Document AI, Acquisition, Marketing Studio'],
+                ['Brain (Product)', 'Operate on outcomes', 'ATRISI Marketing — Chat, Knowledge, Timelines'],
+                ['Platform', 'Remember & execute', 'Connectors, Creative AI, Identity, Memory'],
+              ]}
+            />
             <H2>Three services, one monorepo</H2>
             <Table
               headers={['Service', 'Purpose', 'Default port']}
               rows={[
-                ['backend', 'Fastify API — auth, chat, RAG, files, feedback', '3001'],
-                ['frontend', 'React application — all user-facing features', '5173'],
+                ['backend', 'Fastify API — auth, chat, RAG, acquisition, studio', '3001'],
+                ['frontend', 'React application — Brain + Studio chrome', '5173'],
                 ['landing-page', 'Marketing site — product showcase and sign-up', '5174'],
               ]}
             />

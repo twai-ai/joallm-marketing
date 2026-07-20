@@ -146,7 +146,7 @@ export function DocumentAIPage() {
         </>
       }
       secondaryPanelTitle="Guided for document-heavy teams"
-      secondaryPanelBody="Keep ingestion, indexing state, and retrieval entry in one focused workflow. Studio stays available for advanced orchestration, but everyday document work no longer has to start from a placeholder."
+      secondaryPanelBody="Keep ingestion, indexing state, and Knowledge readiness in one focused Studio. The custom canvas stays available for advanced orchestration, but everyday document work starts here."
       secondaryPanelContent={
         <>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -164,7 +164,7 @@ export function DocumentAIPage() {
               Best for this stage
             </div>
             <p className="mt-2 text-sm text-slate-300">
-              Give each workflow family its own product-shaped entry point, then reuse common infrastructure underneath.
+              Give each Studio workspace its own product-shaped entry point, then reuse Platform infrastructure underneath.
             </p>
           </div>
         </>

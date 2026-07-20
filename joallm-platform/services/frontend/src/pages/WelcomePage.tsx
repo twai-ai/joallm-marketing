@@ -17,11 +17,18 @@ import {
   MessageSquare,
   Search,
   Sparkles,
+  Users,
   Workflow,
 } from 'lucide-react';
 import { StandaloneLogo } from '../components/ui/Logo';
-import { PRODUCT_LABELS, PRODUCT_ROUTES } from '../constants/product';
-import { WORKFLOW_FAMILIES } from '../constants/workflowFamilies';
+import {
+  PLATFORM_CONSTITUTION,
+  PLATFORM_TAGLINE,
+  PRODUCT_DESCRIPTIONS,
+  PRODUCT_LABELS,
+  PRODUCT_ROUTES,
+} from '../constants/product';
+import { STUDIO_FAMILIES } from '../constants/workflowFamilies';
 import { MODALITY_CAPABILITIES, MULTIMODAL_PROCESSING_MODES } from '../constants/modalities';
 import { useUserRole } from '../contexts/EnhancedUserRoleContext';
 import { apiClient } from '../utils/api-client';
@@ -204,18 +211,18 @@ export function WelcomePage() {
     canAccess('workflow')
       ? latestWorkflow
         ? {
-            title: 'Continue Workflow',
+            title: 'Continue in Studio',
             description: latestWorkflow.name,
             helper: `${latestWorkflow.nodes?.length ?? 0} nodes • ${formatRelative(latestWorkflow.updatedAt)}`,
-            action: 'Open Studio',
+            action: 'Open Studio canvas',
             onClick: () => navigate(`/studio/custom/${latestWorkflow.id}`),
             icon: Workflow,
           }
         : {
-            title: 'Create Workflow',
-            description: 'Turn repeatable prompting into something operational.',
-            helper: 'Best after chat and knowledge are already working.',
-            action: 'Open Workflows',
+            title: 'Open Studio',
+            description: 'Enter guided workspaces for Media, Documents, and Acquisition.',
+            helper: 'Studio creates. ATRISI Marketing operates on Timelines and Knowledge.',
+            action: 'Open Studio',
             onClick: () => navigate(PRODUCT_ROUTES.workflows),
             icon: Workflow,
           }
@@ -233,28 +240,28 @@ export function WelcomePage() {
     {
       label: PRODUCT_LABELS.chat,
       route: PRODUCT_ROUTES.chat,
-      description: 'Conversations, grounded answers, and recent threads.',
+      description: PRODUCT_DESCRIPTIONS.chat,
       icon: MessageSquare,
       enabled: canAccess('chat'),
     },
     {
       label: PRODUCT_LABELS.knowledge,
       route: PRODUCT_ROUTES.knowledge,
-      description: 'Documents, indexing status, and retrieval workflows.',
+      description: PRODUCT_DESCRIPTIONS.knowledge,
       icon: Search,
       enabled: canAccess('rag-search'),
     },
     {
       label: PRODUCT_LABELS.workflows,
       route: PRODUCT_ROUTES.workflows,
-      description: 'Repeatable AI automations with execution history.',
+      description: PRODUCT_DESCRIPTIONS.workflows,
       icon: Workflow,
       enabled: canAccess('workflow'),
     },
     {
       label: PRODUCT_LABELS.models,
       route: PRODUCT_ROUTES.models,
-      description: 'Browse providers and choose the right model for the job.',
+      description: PRODUCT_DESCRIPTIONS.models,
       icon: BrainCircuit,
       enabled: canAccess('farm'),
     },
@@ -263,8 +270,10 @@ export function WelcomePage() {
   const tierLabel = subscription ? subscription.tier.charAt(0).toUpperCase() + subscription.tier.slice(1) : 'Free';
   const familyIcons = {
     media: Clapperboard,
-    documents: FileText,
-    data: Database,
+    acquisition: Users,
+    'docs-ai': FileText,
+    'data-intelligence': Database,
+    'marketing-studio': Sparkles,
     custom: Workflow,
   } as const;
 
@@ -283,19 +292,16 @@ export function WelcomePage() {
             <div className="space-y-4 sm:space-y-5">
               <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-joa-primary shadow-sm sm:px-4 sm:py-2 sm:text-sm">
                 <Sparkles className="h-4 w-4" />
-                Workspace home
+                ATRISI Marketing · Brain
               </div>
 
               <div>
                 <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl md:text-6xl">
-                  Start with the clearest view
-                  <span className="block bg-gradient-to-r from-joa-primary to-teal-500 bg-clip-text text-transparent">
-                    of what is ready, active, and next
-                  </span>
+                  {PLATFORM_TAGLINE}
                 </h1>
                 <p className="mt-3 max-w-3xl text-base leading-7 text-gray-600 sm:mt-4 sm:text-lg sm:leading-relaxed md:text-xl">
-                  Review recent conversations, document readiness, workflows, and usage in one place, then jump
-                  straight into the next action that matters.
+                  {PLATFORM_CONSTITUTION} Use Chat and Knowledge to operate; open Studio to create via
+                  Media AI, Document AI, and Acquisition Intelligence.
                 </p>
               </div>
 
@@ -376,16 +382,19 @@ export function WelcomePage() {
             <section className="rounded-3xl border border-gray-200 bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:p-6">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Workflow Families</p>
-                  <h2 className="mt-2 text-xl font-semibold text-gray-900 sm:text-2xl">Choose the workspace that matches the job</h2>
+                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Studio workspaces</p>
+                  <h2 className="mt-2 text-xl font-semibold text-gray-900 sm:text-2xl">
+                    Choose the Studio that matches the job
+                  </h2>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                    Media AI and Document AI are live today, and the remaining family cards keep the Studio roadmap visible without pretending placeholder workspaces are ready yet.
+                    Media AI, Acquisition Intelligence, and Document AI are live. Marketing Studio and Data
+                    Intelligence stay visible as Soon without looking ready to click.
                   </p>
                 </div>
               </div>
               <div className="mt-5 grid gap-3 sm:mt-6 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {WORKFLOW_FAMILIES.map((family) => {
-                  const Icon = familyIcons[family.id];
+                {STUDIO_FAMILIES.map((family) => {
+                  const Icon = familyIcons[family.id] ?? Workflow;
                   const isActive = family.status === 'active';
                   const isAdvanced = family.status === 'advanced';
                   const isClickable = isActive || isAdvanced;
@@ -462,11 +471,11 @@ export function WelcomePage() {
                   <div className="flex items-start gap-3">
                     <Layers3 className="mt-0.5 h-5 w-5 text-blue-300" />
                     <div>
-                      <p className="font-medium">Workflow inventory</p>
+                      <p className="font-medium">Studio canvas inventory</p>
                       <p className="text-sm text-slate-300">
                         {workflows.length > 0
-                          ? `${workflows.length} workflow${workflows.length === 1 ? '' : 's'} available`
-                          : 'No workflows created yet'}
+                          ? `${workflows.length} custom canvas${workflows.length === 1 ? '' : 'es'} available`
+                          : 'No custom Studio canvases yet — start from a guided workspace'}
                       </p>
                     </div>
                   </div>
@@ -571,7 +580,9 @@ export function WelcomePage() {
                 The platform is evolving from text-first AI into a multimodal workspace
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-600 sm:mt-4 sm:text-base sm:leading-7 md:text-lg">
-                Vision, speech, document intelligence, and multimodal reasoning should feel native to chat, knowledge, notebooks, and workflows rather than living as disconnected tools.
+                ATRISI Marketing is the Brain for institutional knowledge and relationships.
+                Studio workspaces (Media, Documents, Acquisition, Marketing) create intent;
+                Platform remembers Timelines, Knowledge Artifacts, Connectors, and Creative AI.
               </p>
               <div className="mt-5 space-y-2">
                 {MULTIMODAL_PROCESSING_MODES.map((mode) => (

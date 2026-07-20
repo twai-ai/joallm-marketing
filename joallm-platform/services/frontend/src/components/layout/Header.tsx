@@ -7,7 +7,7 @@ import { ThemeToggle } from '../ui/ThemeToggle';
 import { CompactLogo, HeaderLogo } from '../ui/Logo';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { ViewMode } from '../../App';
-import { PRODUCT_LABELS } from '../../constants/product';
+import { PRODUCT_LABELS, PLATFORM_SHORT_NAME } from '../../constants/product';
 import { USE_CASES } from '../../constants/useCases';
 
 interface HeaderProps {
@@ -63,7 +63,7 @@ export function Header({ onToggleSidebar, onOpenSettings, currentView }: HeaderP
       case 'welcome':
         return 'Welcome';
       default:
-        return 'ATRISI';
+        return PLATFORM_SHORT_NAME;
     }
   };
 
@@ -106,7 +106,7 @@ export function Header({ onToggleSidebar, onOpenSettings, currentView }: HeaderP
       icon: Workflow,
       route: '/studio',
       isVisible: canAccess('workflow'),
-      isActive: currentView === 'workflow',
+      isActive: currentView === 'workflow' || location.pathname.startsWith('/studio'),
     },
     {
       id: 'farm',

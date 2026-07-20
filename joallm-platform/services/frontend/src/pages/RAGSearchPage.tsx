@@ -52,7 +52,7 @@ function getKnowledgeReadiness(document: any) {
     return {
       state: 'syncing' as const,
       phase: 'syncing_knowledge' as const,
-      helper: 'Media insights are ready. JoaLLM is now packaging timeline-aware Knowledge chunks for retrieval.',
+      helper: 'Media insights are ready. ATRISI is packaging timeline-aware Knowledge Artifacts for retrieval.',
     };
   }
 
@@ -60,7 +60,7 @@ function getKnowledgeReadiness(document: any) {
     return {
       state: 'syncing' as const,
       phase: 'generating_embeddings' as const,
-      helper: 'Knowledge chunks are ready. JoaLLM is generating embeddings so vector retrieval becomes available.',
+      helper: 'Knowledge Artifacts are ready. ATRISI is generating embeddings so vector retrieval becomes available.',
     };
   }
 

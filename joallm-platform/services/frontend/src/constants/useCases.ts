@@ -21,6 +21,10 @@ export interface UseCaseDefinition {
   assetKind?: UseCaseAssetKind;
 }
 
+/**
+ * Studio workspaces (create layer).
+ * Brain operates on Timelines / Knowledge; Studio creates and publishes intent.
+ */
 export const USE_CASES: UseCaseDefinition[] = [
   {
     id: 'media',
@@ -29,8 +33,10 @@ export const USE_CASES: UseCaseDefinition[] = [
     homeRoute: '/studio/media-ai',
     assetRoute: (assetId: string) => `/studio/media-ai/${assetId}`,
     status: 'active',
-    description: 'Upload audio or video, track AI processing, and review structured insights.',
-    helper: 'This is the first live guided workspace and the reference pattern for future use-case surfaces.',
+    description:
+      'Upload audio or video, track processing, and produce Knowledge Artifacts for the Brain.',
+    helper:
+      'Studio interprets media. ATRISI Marketing remembers insights on the Timeline and Knowledge spine.',
     audience: 'Creators, operators, and teams analyzing recordings',
     supportsAssetDetail: true,
     assetKind: 'media',
@@ -42,8 +48,10 @@ export const USE_CASES: UseCaseDefinition[] = [
     homeRoute: '/studio/acquisition',
     assetRoute: (assetId: string) => `/studio/acquisition/${assetId}`,
     status: 'active',
-    description: 'Connect acquisition surfaces into one trustworthy Person timeline across WhatsApp, Meta, and more.',
-    helper: 'External systems execute. ATRISI Marketing acquires, normalizes, attributes, and remembers.',
+    description:
+      'Connect Channels (WhatsApp, Meta, …) via Platform Connectors into one trustworthy Person Timeline.',
+    helper:
+      'External systems execute. ATRISI Marketing acquires, normalizes, attributes, and remembers.',
     audience: 'Growth, admissions, partnerships, and institutional relationship teams',
     supportsAssetDetail: true,
   },
@@ -54,8 +62,9 @@ export const USE_CASES: UseCaseDefinition[] = [
     homeRoute: '/studio/document-ai',
     assetRoute: (assetId: string) => `/studio/document-ai/${assetId}`,
     status: 'active',
-    description: 'A guided workspace for ingesting document sets, tracking readiness, and launching grounded retrieval workflows.',
-    helper: 'Upload documents here, then move into retrieval chat with the right sources already in focus.',
+    description:
+      'Ingest document sets, track readiness, and feed grounded Knowledge for Brain retrieval.',
+    helper: 'Upload here, then move into Chat or Knowledge with the right sources in focus.',
     audience: 'Knowledge managers and document-heavy teams',
     supportsAssetDetail: false,
   },
@@ -66,8 +75,9 @@ export const USE_CASES: UseCaseDefinition[] = [
     homeRoute: '/studio/data-intelligence',
     assetRoute: (assetId: string) => `/studio/data-intelligence/${assetId}`,
     status: 'placeholder',
-    description: 'A future workspace for structured datasets, operational metrics, and intelligence pipelines over tabular and event data.',
-    helper: 'Reserved for a guided data-first workflow family once the shared Studio patterns mature further.',
+    description:
+      'Future Studio workspace for structured datasets, operational metrics, and event intelligence.',
+    helper: 'Reserved until shared Studio patterns mature for tabular and event data.',
     audience: 'Operators, analysts, and teams working with structured data',
     supportsAssetDetail: false,
   },
@@ -79,9 +89,9 @@ export const USE_CASES: UseCaseDefinition[] = [
     assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
     status: 'placeholder',
     description:
-      'Create, review, and publish Marketing Assets (campaigns, creatives, copy) via connectors — not a second CRM.',
+      'Create, review, and publish Marketing Assets through Channels — Studio owns intent, Platform owns Connectors and Creative AI.',
     helper:
-      'Studio = create & publish. ATRISI Marketing = acquire, timeline, knowledge, intelligence. Do not become HubSpot.',
+      'Studio = create & publish. ATRISI Marketing = acquire, Timeline, Knowledge, intelligence. Not a second CRM.',
     audience: 'Growth, communications, and institutional marketing teams',
     supportsAssetDetail: true,
   },

@@ -90,7 +90,7 @@ export function PromptComposer({
         <div className="mb-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
             <Sparkles className="h-3.5 w-3.5 text-joa-primary" />
-            How Should JoaLLM Handle This Input?
+            How should ATRISI handle this input?
           </div>
           <button
             type="button"
@@ -116,7 +116,7 @@ export function PromptComposer({
               <span className="font-medium text-slate-700">Save for reuse:</span> best for content you want searchable later. For chat text, use <span className="font-medium">Save to Knowledge</span> on the message.
             </p>
             <p>
-              <span className="font-medium text-slate-700">Turn into workflow:</span> best for reusable automation. The most reliable path today is <span className="font-medium">Route to Workflow</span> on the message after it appears in chat.
+              <span className="font-medium text-slate-700">Open in Studio:</span> best for reusable create paths. Prefer a guided Studio workspace (Media, Documents, Acquisition) when available.
             </p>
           </div>
         )}
@@ -138,7 +138,7 @@ export function PromptComposer({
           ))}
         </div>
         <p className="mt-2 text-[11px] leading-5 text-gray-500">
-          Choose the handling mode before you send. After the reply arrives, JoaLLM can suggest the next best action for saving or operationalizing the result.
+          Choose the handling mode before you send. After the reply arrives, ATRISI can suggest the next best action for saving Knowledge or opening a Studio workspace.
         </p>
       </div>
 

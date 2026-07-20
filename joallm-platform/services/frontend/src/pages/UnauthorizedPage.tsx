@@ -29,7 +29,7 @@ export function UnauthorizedPage() {
 
           {/* Message */}
           <p className="text-gray-600 mb-6">
-            This page is available on JoaLLM Pro. Upgrade your plan to unlock the full feature set.
+            This page is available on ATRISI Pro. Upgrade your plan to unlock the full feature set.
           </p>
 
           {/* User Info */}

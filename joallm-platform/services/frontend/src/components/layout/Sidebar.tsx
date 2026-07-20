@@ -23,7 +23,8 @@ import { SidebarLogo } from '../ui/Logo';
 import type { ViewMode } from '../../App';
 import { apiClient } from '../../utils/api-client';
 import { showError } from '../../utils/toast';
-import { PRODUCT_DESCRIPTIONS, PRODUCT_LABELS } from '../../constants/product';
+import { PRODUCT_DESCRIPTIONS, PRODUCT_LABELS, PLATFORM_CONSTITUTION } from '../../constants/product';
+import { CHROME_SECTIONS } from '../../constants/ontology';
 import { USE_CASES, type UseCaseDefinition } from '../../constants/useCases';
 
 interface SidebarProps {
@@ -127,13 +128,14 @@ export function Sidebar({
     closeIfMobile();
   };
 
-  const coreNavigation = useMemo<NavItem[]>(
+  /** Brain = operate (Chat, Knowledge). Studio directory lives under Studio section. */
+  const brainNavigation = useMemo<NavItem[]>(
     () => [
       {
         id: 'welcome',
         icon: Home,
-        label: 'Welcome',
-        description: 'Platform overview',
+        label: 'Home',
+        description: 'Brain overview and next actions',
         status: 'live',
       },
       {
@@ -153,10 +155,16 @@ export function Sidebar({
       {
         id: 'workflow',
         icon: LayoutDashboard,
-        label: 'Studio overview',
-        description: 'Directory of guided workspaces',
+        label: 'Studio directory',
+        description: PRODUCT_DESCRIPTIONS.workflows,
         status: 'live',
       },
+    ],
+    [],
+  );
+
+  const platformTooling = useMemo<NavItem[]>(
+    () => [
       {
         id: 'notebook',
         icon: BookOpen,
@@ -251,14 +259,21 @@ export function Sidebar({
         <div className="flex-1 overflow-y-auto">
           <section className="border-b border-white/10 p-4">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Core</p>
-              <span className="text-[10px] uppercase tracking-wide text-slate-500">Platform</span>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                {CHROME_SECTIONS.brain}
+              </p>
+              <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                {CHROME_SECTIONS.brainHint}
+              </span>
             </div>
+            <p className="mt-2 text-xs leading-5 text-slate-400">{PLATFORM_CONSTITUTION}</p>
             <div className="mt-3 space-y-2">
-              {coreNavigation.map((item) => {
+              {brainNavigation.map((item) => {
                 const isActive =
                   currentView === item.id ||
-                  (item.id === 'workflow' && location.pathname.startsWith('/studio') && location.pathname === '/studio');
+                  (item.id === 'workflow' &&
+                    location.pathname.startsWith('/studio') &&
+                    location.pathname === '/studio');
 
                 return (
                   <button
@@ -297,13 +312,15 @@ export function Sidebar({
 
           <section className="border-b border-white/10 p-4">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Studio</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                {CHROME_SECTIONS.studio}
+              </p>
               <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                {studioWorkspaces.filter((w) => w.status === 'active').length} live
+                {CHROME_SECTIONS.studioHint} · {studioWorkspaces.filter((w) => w.status === 'active').length} live
               </span>
             </div>
             <p className="mt-2 text-xs leading-5 text-slate-400">
-              Live workspaces are ready to use. Soon items are reserved and not clickable yet.
+              Live Studio workspaces are ready. Soon items are reserved and not clickable.
             </p>
             <div className="mt-3 space-y-2">
               {studioWorkspaces.map((workspace) => {
@@ -347,8 +364,48 @@ export function Sidebar({
             </div>
           </section>
 
+          <section className="border-b border-white/10 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                {CHROME_SECTIONS.platform}
+              </p>
+              <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                {CHROME_SECTIONS.platformHint}
+              </span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {platformTooling.map((item) => {
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleNavigate(item.id)}
+                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                      isActive
+                        ? 'border-white/20 bg-white/12'
+                        : 'border-white/8 bg-white/4 hover:border-white/14 hover:bg-white/8'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white">
+                        <item.icon className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-white">{item.label}</div>
+                        <p className="mt-1 text-xs text-slate-400">{item.description}</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           <section className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Utilities</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              {CHROME_SECTIONS.utilities}
+            </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {utilities.map((item) => (
                 <button

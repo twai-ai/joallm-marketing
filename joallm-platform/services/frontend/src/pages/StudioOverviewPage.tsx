@@ -92,12 +92,12 @@ export function StudioOverviewPage() {
                   </div>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">{workspace.description}</p>
-                {workspace.status === 'active' ? (
+                {workspace.status === 'active' || workspace.id === 'marketing-studio' ? (
                   <Link
                     to={workspace.homeRoute}
                     className="btn-atrisi-primary mt-4 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
                   >
-                    Open workspace
+                    {workspace.id === 'marketing-studio' ? 'Open Creative AI preview' : 'Open workspace'}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 ) : (

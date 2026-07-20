@@ -173,6 +173,12 @@ function SectionCard({
 
 export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? 'workspace');
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
   const { workspaceMode, getRoleConfig, backendRole, subscriptionTier, permissions, limits } = useUserRole();
   const { parameters, setParameters, isStreaming, setIsStreaming } = useLLM();
   const { user, changePassword, logout } = useAuth();

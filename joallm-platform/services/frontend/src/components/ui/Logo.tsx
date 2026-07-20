@@ -29,8 +29,8 @@ export function Logo({
     switch (variant) {
       case 'sidebar':
         return {
-          primary: 'text-teal-300',
-          secondary: 'text-white',
+          primary: 'text-teal-700 dark:text-teal-300',
+          secondary: 'text-slate-700 dark:text-slate-200',
         };
       case 'footer':
         return {

@@ -13,6 +13,7 @@ const WelcomePage = lazy(() => import('./pages/WelcomePage').then(module => ({ d
 const StudioOverviewPage = lazy(() => import('./pages/StudioOverviewPage').then(module => ({ default: module.StudioOverviewPage })));
 const MediaAIPage = lazy(() => import('./pages/MediaAIPage').then(module => ({ default: module.MediaAIPage })));
 const AcquisitionIntelligencePage = lazy(() => import('./pages/AcquisitionIntelligencePage').then(module => ({ default: module.AcquisitionIntelligencePage })));
+const MarketingStudioPage = lazy(() => import('./pages/MarketingStudioPage').then(module => ({ default: module.MarketingStudioPage })));
 const DocumentAIPage = lazy(() => import('./pages/DocumentAIPage').then(module => ({ default: module.DocumentAIPage })));
 const MediaAssetPage = lazy(() => import('./pages/MediaAssetPage').then(module => ({ default: module.MediaAssetPage })));
 const WorkflowFamilyPlaceholderPage = lazy(() => import('./pages/WorkflowFamilyPlaceholderPage').then(module => ({ default: module.WorkflowFamilyPlaceholderPage })));
@@ -156,14 +157,22 @@ function AppLayout() {
       setSettingsOpen(true);
     };
 
+    const handleOpenSettings = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab?: 'workspace' | 'models' | 'data' | 'security' | 'billing' }>).detail;
+      setSettingsInitialTab(detail?.tab ?? 'workspace');
+      setSettingsOpen(true);
+    };
+
     window.addEventListener('toggleSidebar', handleToggleSidebar);
     window.addEventListener('navigateToView', handleNavigateToView as EventListener);
     window.addEventListener('openUpgrade', handleOpenUpgrade);
+    window.addEventListener('openSettings', handleOpenSettings);
     
     return () => {
       window.removeEventListener('toggleSidebar', handleToggleSidebar);
       window.removeEventListener('navigateToView', handleNavigateToView as EventListener);
       window.removeEventListener('openUpgrade', handleOpenUpgrade);
+      window.removeEventListener('openSettings', handleOpenSettings);
     };
   }, []);
 
@@ -178,6 +187,10 @@ function AppLayout() {
         onQuickPrompt={() => {}}
         onOpenKnowledge={() => setKnowledgeManagerOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenCreativeSettings={() => {
+          setSettingsInitialTab('models');
+          setSettingsOpen(true);
+        }}
         onOpenBookmarks={() => setBookmarksOpen(true)}
       />
 
@@ -264,6 +277,16 @@ function AppLayout() {
               <Route path="/studio/acquisition/:personId" element={
                 <ProtectedRoute>
                   <AcquisitionIntelligencePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/marketing" element={
+                <ProtectedRoute>
+                  <MarketingStudioPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/marketing/:assetId" element={
+                <ProtectedRoute>
+                  <MarketingStudioPage />
                 </ProtectedRoute>
               } />
               <Route path="/document-ai" element={

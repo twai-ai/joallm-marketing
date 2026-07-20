@@ -145,7 +145,7 @@ export function AcquisitionIntelligencePage() {
     setConnecting(true);
     try {
       await apiClient.post('/api/studio/channels/whatsapp', {});
-      showSuccess('WhatsApp channel + Meta connector ready');
+      showSuccess('WhatsApp Channel + Meta Connector + acquisition source ready');
       await load();
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to connect WhatsApp channel');
@@ -153,6 +153,33 @@ export function AcquisitionIntelligencePage() {
       setConnecting(false);
     }
   };
+
+  const setupSteps = [
+    {
+      n: '1',
+      title: 'Ensure Channel stack',
+      body: 'Creates WhatsApp Channel → Meta Connector → acquisition source on the Platform.',
+      done: Boolean(whatsappChannel || metaSource),
+    },
+    {
+      n: '2',
+      title: 'Connect Meta credentials',
+      body: 'Add WhatsApp Business / Meta tokens in your environment or connector secrets so ingest can authenticate.',
+      done: metaSource?.status === 'active',
+    },
+    {
+      n: '3',
+      title: 'Forward inbound events',
+      body: 'Point Meta webhooks at the ATRISI ingest endpoint so messages become Acquisition Events.',
+      done: (overview?.events ?? 0) > 0,
+    },
+    {
+      n: '4',
+      title: 'Open Person Timelines',
+      body: 'Resolved people appear here. Select one to review interactions, artifacts, and maturity.',
+      done: people.length > 0,
+    },
+  ];
 
   if (!useCase) return null;
 
@@ -168,8 +195,8 @@ export function AcquisitionIntelligencePage() {
           Acquisition Intelligence
         </div>
       }
-      title="One trustworthy Person timeline"
-      description="Ingest WhatsApp and Meta activity, resolve identity, and keep institutional memory without becoming another CRM."
+      title="One trustworthy Person Timeline"
+      description="Connect Channels via Platform Connectors, resolve identity, and keep institutional memory — without becoming another CRM."
       primaryAction={
         <>
           <button
@@ -187,12 +214,12 @@ export function AcquisitionIntelligencePage() {
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm disabled:cursor-not-allowed"
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            {whatsappChannel || metaSource ? 'Re-sync WhatsApp channel' : 'Connect WhatsApp channel'}
+            {whatsappChannel || metaSource ? 'Ensure WhatsApp channel stack' : 'Connect WhatsApp channel'}
           </button>
         </>
       }
       secondaryPanelTitle="Channel → Connector → Timeline"
-      secondaryPanelBody="Studio publishes intent via Channels. Platform Connectors talk to Meta. Events land on the Person Timeline."
+      secondaryPanelBody="Studio owns the business Channel. Platform owns the Connector. Events land on the Person Timeline."
       secondaryPanelContent={
         <div className="grid grid-cols-2 gap-3 text-sm">
           {[
@@ -203,15 +230,51 @@ export function AcquisitionIntelligencePage() {
           ].map(([label, value]) => (
             <div
               key={String(label)}
-              className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2"
             >
               <div className="text-xs uppercase tracking-wide text-teal-200/80">{label}</div>
-              <div className="mt-1 text-lg font-semibold text-white">{value ?? '—'}</div>
+              <div className="mt-1 text-lg font-semibold text-white">{loading ? '…' : (value ?? '—')}</div>
             </div>
           ))}
         </div>
       }
     >
+      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-slate-950">Getting started</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Follow the Channel → Connector → Event → Person path. Step 1 is one click; steps 2–3 need Meta wiring.
+        </p>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {setupSteps.map((step) => (
+            <div
+              key={step.n}
+              className={`rounded-2xl border p-4 ${
+                step.done
+                  ? 'border-teal-200 bg-teal-50/70'
+                  : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Step {step.n}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                    step.done
+                      ? 'bg-teal-100 text-teal-800'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {step.done ? 'Done' : 'Next'}
+                </span>
+              </div>
+              <div className="mt-2 font-medium text-slate-950">{step.title}</div>
+              <p className="mt-1 text-xs leading-5 text-slate-600">{step.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
@@ -227,7 +290,8 @@ export function AcquisitionIntelligencePage() {
           <div className="mt-5 space-y-3">
             {(overview?.channels || []).length === 0 && (overview?.sources || []).length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                No channels yet. Connect WhatsApp to create Channel → Connector → acquisition source.
+                No channels yet. Use <span className="font-medium">Connect WhatsApp channel</span> to create
+                Channel → Connector → acquisition source.
               </div>
             ) : (
               <>
@@ -303,7 +367,9 @@ export function AcquisitionIntelligencePage() {
             <h3 className="text-lg font-semibold text-slate-950">Recent events</h3>
             <div className="mt-3 space-y-2">
               {events.length === 0 ? (
-                <div className="text-sm text-slate-500">No events ingested yet.</div>
+                <div className="text-sm text-slate-500">
+                  No events ingested yet. After Meta webhooks fire, Acquisition Events show here.
+                </div>
               ) : (
                 events.slice(0, 8).map((event) => (
                   <div
@@ -332,7 +398,7 @@ export function AcquisitionIntelligencePage() {
             <div className="space-y-2">
               {people.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                  People will appear after the first inbound WhatsApp message is forwarded.
+                  People appear after the first inbound WhatsApp message is forwarded to ATRISI.
                 </div>
               ) : (
                 people.map((person) => {
@@ -344,14 +410,14 @@ export function AcquisitionIntelligencePage() {
                       onClick={() => navigate(`/studio/acquisition/${person.id}`)}
                       className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
                         selected
-                          ? 'border-teal-500/60 bg-slate-950 text-white shadow-[0_0_24px_rgba(20,184,166,0.18)]'
+                          ? 'border-teal-500 bg-teal-50 shadow-sm ring-1 ring-teal-200'
                           : 'border-slate-200 bg-white hover:border-teal-300 hover:bg-teal-50/30'
                       }`}
                     >
-                      <div className="font-medium">
+                      <div className="font-medium text-slate-950">
                         {person.displayName || person.primaryPhone || 'Unknown person'}
                       </div>
-                      <div className={`mt-1 text-xs ${selected ? 'text-teal-200' : 'text-slate-500'}`}>
+                      <div className={`mt-1 text-xs ${selected ? 'text-teal-800' : 'text-slate-500'}`}>
                         {formatMaturity(person.relationshipMaturity) ||
                           person.primaryPhone ||
                           person.primaryEmail ||
@@ -398,7 +464,7 @@ export function AcquisitionIntelligencePage() {
                           className={`rounded-xl border border-slate-200 border-l-4 bg-white p-3 ${entryKindClass(item.kind)}`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <div className="text-sm font-medium text-slate-950 capitalize">{item.kind}</div>
+                            <div className="text-sm font-medium capitalize text-slate-950">{item.kind}</div>
                             <div className="text-xs uppercase tracking-wide text-slate-500">
                               {String(item.attributes?.direction || item.attributes?.eventType || '—')}
                             </div>

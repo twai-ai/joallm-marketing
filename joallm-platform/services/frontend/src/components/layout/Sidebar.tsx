@@ -9,6 +9,7 @@ import {
   Home,
   LayoutDashboard,
   MessageSquare,
+  Palette,
   Radio,
   Search,
   Settings,
@@ -35,6 +36,7 @@ interface SidebarProps {
   onQuickPrompt?: (prompt: string) => void;
   onOpenKnowledge?: () => void;
   onOpenSettings?: () => void;
+  onOpenCreativeSettings?: () => void;
   onOpenBookmarks?: () => void;
 }
 
@@ -57,16 +59,38 @@ const STUDIO_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
 function StatusPill({ status }: { status: 'live' | 'soon' }) {
   if (status === 'live') {
     return (
-      <span className="inline-flex items-center rounded-full bg-teal-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-200 ring-1 ring-teal-400/30">
+      <span className="inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 ring-1 ring-teal-200 dark:bg-teal-500/20 dark:text-teal-200 dark:ring-teal-400/30">
         Live
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 ring-1 ring-white/10">
+    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200 dark:bg-slate-500/20 dark:text-slate-300 dark:ring-white/10">
       Soon
     </span>
   );
+}
+
+const sectionLabel = 'text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400';
+const sectionHint = 'text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500';
+const sectionCopy = 'mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400';
+const sectionBorder = 'border-b border-slate-200/80 dark:border-white/10';
+
+function navButtonClass(isActive: boolean, disabled = false) {
+  if (disabled) {
+    return 'cursor-not-allowed border-slate-100 bg-slate-50/60 opacity-60 dark:border-white/5 dark:bg-white/[0.02]';
+  }
+  if (isActive) {
+    return 'border-teal-300/80 bg-teal-50 shadow-sm dark:border-teal-400/40 dark:bg-teal-500/15';
+  }
+  return 'border-slate-200/80 bg-white/60 hover:border-teal-200 hover:bg-teal-50/50 dark:border-white/8 dark:bg-white/4 dark:hover:border-teal-400/30 dark:hover:bg-white/8';
+}
+
+function iconTileClass(isActive: boolean) {
+  if (isActive) {
+    return 'bg-teal-600 text-white dark:bg-teal-400 dark:text-slate-950';
+  }
+  return 'bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white';
 }
 
 export function Sidebar({
@@ -75,6 +99,7 @@ export function Sidebar({
   currentView,
   onViewChange,
   onOpenSettings,
+  onOpenCreativeSettings,
   onOpenBookmarks,
 }: SidebarProps) {
   const { getRoleConfig } = useUserRole();
@@ -123,12 +148,12 @@ export function Sidebar({
   };
 
   const handleStudioNav = (workspace: UseCaseDefinition) => {
-    if (workspace.status !== 'active') return;
+    // Live + Marketing Studio preview (Creative AI discoverability) are navigable
+    if (workspace.status !== 'active' && workspace.id !== 'marketing-studio') return;
     navigate(workspace.homeRoute);
     closeIfMobile();
   };
 
-  /** Brain = operate (Chat, Knowledge). Studio directory lives under Studio section. */
   const brainNavigation = useMemo<NavItem[]>(
     () => [
       {
@@ -163,24 +188,38 @@ export function Sidebar({
     [],
   );
 
-  const platformTooling = useMemo<NavItem[]>(
+  const platformTooling = useMemo(
     () => [
+      {
+        id: 'creative',
+        icon: Palette,
+        label: 'Creative AI',
+        description: 'BYOK providers for Generation Profiles',
+        action: () => {
+          if (onOpenCreativeSettings) {
+            onOpenCreativeSettings();
+          } else if (onOpenSettings) {
+            onOpenSettings();
+          }
+          closeIfMobile();
+        },
+      },
       {
         id: 'notebook',
         icon: BookOpen,
         label: PRODUCT_LABELS.notebooks,
         description: PRODUCT_DESCRIPTIONS.notebooks,
-        status: 'live',
+        action: () => handleNavigate('notebook'),
       },
       {
         id: 'farm',
         icon: Database,
         label: PRODUCT_LABELS.models,
         description: PRODUCT_DESCRIPTIONS.models,
-        status: 'live',
+        action: () => handleNavigate('farm'),
       },
     ],
-    [],
+    [onOpenCreativeSettings, onOpenSettings, isDesktop],
   );
 
   const studioWorkspaces = USE_CASES;
@@ -236,18 +275,18 @@ export function Sidebar({
       )}
 
       <aside
-        className={`app-sidebar-shell z-50 flex w-[min(20rem,calc(100vw-1rem))] max-w-full flex-col shadow-xl lg:m-3 lg:mr-0 lg:w-80 lg:shrink-0 lg:rounded-[28px] lg:border lg:border-white/10 ${
+        className={`app-sidebar-shell z-50 flex w-[min(20rem,calc(100vw-1rem))] max-w-full flex-col lg:m-3 lg:mr-0 lg:w-80 lg:shrink-0 lg:rounded-[28px] ${
           isDesktop
             ? 'relative h-[calc(100dvh-1.5rem)]'
             : 'fixed inset-y-0 left-0 animate-in slide-in-from-left duration-300'
         }`}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-white/10 p-4">
+        <div className={`flex shrink-0 items-center justify-between p-4 ${sectionBorder}`}>
           <SidebarLogo />
           {!isDesktop && (
             <button
               onClick={onToggle}
-              className="rounded-xl p-2 transition-colors hover:bg-white/10"
+              className="rounded-xl p-2 text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/10"
               title="Close sidebar"
               type="button"
             >
@@ -257,16 +296,12 @@ export function Sidebar({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <section className="border-b border-white/10 p-4">
+          <section className={`p-4 ${sectionBorder}`}>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {CHROME_SECTIONS.brain}
-              </p>
-              <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                {CHROME_SECTIONS.brainHint}
-              </span>
+              <p className={sectionLabel}>{CHROME_SECTIONS.brain}</p>
+              <span className={sectionHint}>{CHROME_SECTIONS.brainHint}</span>
             </div>
-            <p className="mt-2 text-xs leading-5 text-slate-400">{PLATFORM_CONSTITUTION}</p>
+            <p className={sectionCopy}>{PLATFORM_CONSTITUTION}</p>
             <div className="mt-3 space-y-2">
               {brainNavigation.map((item) => {
                 const isActive =
@@ -280,27 +315,68 @@ export function Sidebar({
                     key={item.id}
                     type="button"
                     onClick={() => handleNavigate(item.id)}
-                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                      isActive
-                        ? 'border-white/20 bg-white/12 shadow-[0_12px_24px_rgba(15,23,42,0.14)]'
-                        : 'border-white/8 bg-white/4 hover:border-white/14 hover:bg-white/8'
-                    }`}
+                    className={`w-full rounded-xl border p-3 text-left transition-colors ${navButtonClass(isActive)}`}
                   >
                     <div className="flex items-start gap-3">
                       <div
-                        className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                          isActive ? 'bg-white text-joa-primary' : 'bg-white/10 text-white'
-                        }`}
+                        className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconTileClass(isActive)}`}
                       >
                         <item.icon className="h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="font-medium text-white">{item.label}</div>
+                          <div className="font-medium text-slate-900 dark:text-white">{item.label}</div>
                           <StatusPill status={item.status} />
                         </div>
-                        <p className={`mt-1 text-xs ${isActive ? 'text-white/80' : 'text-slate-400'}`}>
-                          {item.description}
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.description}</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className={`p-4 ${sectionBorder}`}>
+            <div className="flex items-center justify-between gap-2">
+              <p className={sectionLabel}>{CHROME_SECTIONS.studio}</p>
+              <span className={sectionHint}>
+                {CHROME_SECTIONS.studioHint} · {studioWorkspaces.filter((w) => w.status === 'active').length} live
+              </span>
+            </div>
+            <p className={sectionCopy}>
+              Live workspaces are ready. Marketing Studio opens as a Creative AI preview; Data Intelligence stays Soon.
+            </p>
+            <div className="mt-3 space-y-2">
+              {studioWorkspaces.map((workspace) => {
+                const Icon = STUDIO_ICONS[workspace.id] || Workflow;
+                const isLive = workspace.status === 'active';
+                const isPreview = workspace.id === 'marketing-studio';
+                const isClickable = isLive || isPreview;
+                const isActive =
+                  isClickable && location.pathname.startsWith(workspace.homeRoute);
+
+                return (
+                  <button
+                    key={workspace.id}
+                    type="button"
+                    disabled={!isClickable}
+                    onClick={() => handleStudioNav(workspace)}
+                    className={`w-full rounded-xl border p-3 text-left transition-colors ${navButtonClass(isActive, !isClickable)}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconTileClass(isActive)}`}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-medium text-slate-900 dark:text-white">{workspace.label}</div>
+                          <StatusPill status={isLive ? 'live' : 'soon'} />
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
+                          {workspace.description}
                         </p>
                       </div>
                     </div>
@@ -310,90 +386,34 @@ export function Sidebar({
             </div>
           </section>
 
-          <section className="border-b border-white/10 p-4">
+          <section className={`p-4 ${sectionBorder}`}>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {CHROME_SECTIONS.studio}
-              </p>
-              <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                {CHROME_SECTIONS.studioHint} · {studioWorkspaces.filter((w) => w.status === 'active').length} live
-              </span>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              Live Studio workspaces are ready. Soon items are reserved and not clickable.
-            </p>
-            <div className="mt-3 space-y-2">
-              {studioWorkspaces.map((workspace) => {
-                const Icon = STUDIO_ICONS[workspace.id] || Workflow;
-                const isLive = workspace.status === 'active';
-                const isActive = isLive && location.pathname.startsWith(workspace.homeRoute);
-
-                return (
-                  <button
-                    key={workspace.id}
-                    type="button"
-                    disabled={!isLive}
-                    onClick={() => handleStudioNav(workspace)}
-                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                      !isLive
-                        ? 'cursor-not-allowed border-white/5 bg-white/[0.02] opacity-55'
-                        : isActive
-                          ? 'border-teal-400/40 bg-teal-500/15'
-                          : 'border-white/8 bg-white/4 hover:border-teal-400/30 hover:bg-white/8'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                          isActive ? 'bg-teal-400 text-slate-950' : 'bg-white/10 text-white'
-                        }`}
-                      >
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="font-medium text-white">{workspace.label}</div>
-                          <StatusPill status={isLive ? 'live' : 'soon'} />
-                        </div>
-                        <p className="mt-1 text-xs text-slate-400 line-clamp-2">{workspace.description}</p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="border-b border-white/10 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {CHROME_SECTIONS.platform}
-              </p>
-              <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                {CHROME_SECTIONS.platformHint}
-              </span>
+              <p className={sectionLabel}>{CHROME_SECTIONS.platform}</p>
+              <span className={sectionHint}>{CHROME_SECTIONS.platformHint}</span>
             </div>
             <div className="mt-3 space-y-2">
               {platformTooling.map((item) => {
-                const isActive = currentView === item.id;
+                const isActive =
+                  (item.id === 'notebook' && currentView === 'notebook') ||
+                  (item.id === 'farm' && currentView === 'farm') ||
+                  (item.id === 'creative' && location.pathname.startsWith('/studio/marketing'));
+
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => handleNavigate(item.id)}
-                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                      isActive
-                        ? 'border-white/20 bg-white/12'
-                        : 'border-white/8 bg-white/4 hover:border-white/14 hover:bg-white/8'
-                    }`}
+                    onClick={item.action}
+                    className={`w-full rounded-xl border p-3 text-left transition-colors ${navButtonClass(isActive)}`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white">
+                      <div
+                        className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconTileClass(isActive)}`}
+                      >
                         <item.icon className="h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium text-white">{item.label}</div>
-                        <p className="mt-1 text-xs text-slate-400">{item.description}</p>
+                        <div className="font-medium text-slate-900 dark:text-white">{item.label}</div>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.description}</p>
                       </div>
                     </div>
                   </button>
@@ -403,29 +423,27 @@ export function Sidebar({
           </section>
 
           <section className="p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-              {CHROME_SECTIONS.utilities}
-            </p>
+            <p className={sectionLabel}>{CHROME_SECTIONS.utilities}</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {utilities.map((item) => (
                 <button
                   key={item.label}
                   type="button"
                   onClick={item.action}
-                  className="rounded-xl border border-white/8 bg-white/4 p-3 text-left transition-colors hover:border-white/14 hover:bg-white/8"
+                  className="rounded-xl border border-slate-200/80 bg-white/60 p-3 text-left transition-colors hover:border-teal-200 hover:bg-teal-50/50 dark:border-white/8 dark:bg-white/4 dark:hover:border-white/14 dark:hover:bg-white/8"
                 >
-                  <item.icon className="h-4 w-4 text-white" />
-                  <p className="mt-2 text-sm text-white">{item.label}</p>
+                  <item.icon className="h-4 w-4 text-slate-700 dark:text-white" />
+                  <p className="mt-2 text-sm text-slate-800 dark:text-white">{item.label}</p>
                 </button>
               ))}
             </div>
           </section>
         </div>
 
-        <div className="shrink-0 border-t border-white/10 p-4">
+        <div className={`shrink-0 p-4 ${sectionBorder.replace('border-b', 'border-t')}`}>
           <div className="flex items-center gap-2">
             <div className={`h-2 w-2 rounded-full ${roleConfig.color}`} />
-            <span className="text-sm text-slate-300">{roleConfig.name}</span>
+            <span className="text-sm text-slate-600 dark:text-slate-300">{roleConfig.name}</span>
           </div>
         </div>
       </aside>

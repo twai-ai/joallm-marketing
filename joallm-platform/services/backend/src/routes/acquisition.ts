@@ -33,6 +33,13 @@ import {
   updateCreativeProject,
   updateMarketingAsset,
 } from '../services/creative-project-service.js';
+import {
+  createPublishingJob,
+  deletePublishingJob,
+  listCampaignPublishingJobs,
+  listProgramPublishingJobs,
+  updatePublishingJobStatus,
+} from '../services/publishing-job-service.js';
 
 const MetaIngestSchema = z.object({
   payload: z.record(z.unknown()),
@@ -608,6 +615,134 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
     const ok = await deleteMarketingAsset(userId, campaignId, assetId);
     if (!ok) {
       return reply.status(404).send({ success: false, error: 'Asset not found' });
+    }
+    return reply.send({ success: true });
+  });
+
+  // ── Publishing Jobs (Sprint 4) — draft/queue only; outbound is Sprint 5 ──
+
+  const ChannelKindSchema = z.enum([
+    'meta_ads',
+    'facebook_organic',
+    'instagram_organic',
+    'linkedin_organic',
+    'linkedin_ads',
+    'youtube',
+    'whatsapp',
+    'email',
+    'website',
+    'x_organic',
+    'other',
+  ]);
+
+  const PublishAssetSchema = z.object({
+    channelKind: ChannelKindSchema,
+    status: z.enum(['draft', 'queued']).optional(),
+  });
+
+  fastify.post('/programs/:programId/campaigns/:campaignId/assets/:assetId/publish', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId, campaignId, assetId } = request.params as {
+        programId: string;
+        campaignId: string;
+        assetId: string;
+      };
+      const body = PublishAssetSchema.parse(request.body || {});
+      const job = await createPublishingJob({
+        ownerUserId: userId,
+        programId,
+        campaignId,
+        marketingAssetId: assetId,
+        channelKind: body.channelKind,
+        status: body.status || 'queued',
+      });
+      if (!job) {
+        return reply.status(404).send({ success: false, error: 'Asset or campaign not found' });
+      }
+      return reply.status(201).send({ success: true, data: job });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Create publishing job failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create publishing job',
+      });
+    }
+  });
+
+  fastify.get('/programs/:programId/campaigns/:campaignId/publishing-jobs', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { campaignId } = request.params as { campaignId: string };
+    const jobs = await listCampaignPublishingJobs(userId, campaignId);
+    return reply.send({ success: true, data: jobs });
+  });
+
+  fastify.get('/programs/:programId/publishing-jobs', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { programId } = request.params as { programId: string };
+    const jobs = await listProgramPublishingJobs(userId, programId);
+    return reply.send({ success: true, data: jobs });
+  });
+
+  fastify.patch('/programs/:programId/publishing-jobs/:jobId', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { jobId } = request.params as { jobId: string };
+      const body = z
+        .object({
+          status: z.enum([
+            'draft',
+            'queued',
+            'scheduled',
+            'publishing',
+            'published',
+            'failed',
+            'cancelled',
+          ]),
+          errorMessage: z.string().nullable().optional(),
+        })
+        .parse(request.body || {});
+      const job = await updatePublishingJobStatus({
+        ownerUserId: userId,
+        jobId,
+        status: body.status,
+        errorMessage: body.errorMessage,
+      });
+      if (!job) {
+        return reply.status(404).send({ success: false, error: 'Publishing job not found' });
+      }
+      return reply.send({ success: true, data: job });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Update publishing job failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update publishing job',
+      });
+    }
+  });
+
+  fastify.delete('/programs/:programId/publishing-jobs/:jobId', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { jobId } = request.params as { jobId: string };
+    const ok = await deletePublishingJob(userId, jobId);
+    if (!ok) {
+      return reply.status(404).send({ success: false, error: 'Publishing job not found' });
     }
     return reply.send({ success: true });
   });

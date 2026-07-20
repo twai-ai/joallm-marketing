@@ -180,7 +180,7 @@ Program: Amplify with AI
 | **2** | ~~Campaign CRUD~~ |
 | **2b** | ~~Intent catalog + Intent-scoped campaigns (Amplify dogfood)~~ |
 | **3** | ~~Creative Projects + Assets (upload / attach — Canva/Figma/manual OK)~~ |
-| **4** | Publishing Jobs |
+| **4** | ~~Publishing Jobs (queue to channel — live send Sprint 5)~~ |
 | **5** | One outbound connector (LinkedIn **or** Meta Ads) |
 | **6** | Timeline ingestion + attribution → Program Interest |
 | **7** | Program Interest API — Education pull |

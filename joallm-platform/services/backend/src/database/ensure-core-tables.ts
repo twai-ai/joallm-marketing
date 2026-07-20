@@ -595,6 +595,31 @@ export async function ensureCorePlatformTables(): Promise<void> {
   );
 
   await exec(
+    'publishing_jobs',
+    sql`
+      CREATE TABLE IF NOT EXISTS "publishing_jobs" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "initiative_id" uuid,
+        "campaign_id" uuid,
+        "marketing_asset_id" uuid NOT NULL,
+        "publishing_profile_id" uuid REFERENCES "publishing_profiles"("id") ON DELETE SET NULL,
+        "channel_id" uuid NOT NULL REFERENCES "studio_channels"("id") ON DELETE CASCADE,
+        "connector_id" uuid REFERENCES "platform_connectors"("id") ON DELETE SET NULL,
+        "status" text NOT NULL DEFAULT 'draft',
+        "scheduled_at" timestamp,
+        "published_at" timestamp,
+        "external_post_id" text,
+        "error_message" text,
+        "payload" jsonb DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
     'acquisition_source_connections.connector_id',
     sql`
       ALTER TABLE "acquisition_source_connections"

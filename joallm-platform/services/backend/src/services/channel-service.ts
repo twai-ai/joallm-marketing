@@ -228,5 +228,57 @@ export async function ensureDefaultWhatsAppPublishingProfile(options: {
   };
 }
 
+const CHANNEL_KIND_LABELS: Record<ChannelKind, string> = {
+  meta_ads: 'Meta Ads',
+  facebook_organic: 'Facebook Organic',
+  instagram_organic: 'Instagram Organic',
+  linkedin_organic: 'LinkedIn Organic',
+  linkedin_ads: 'LinkedIn Ads',
+  youtube: 'YouTube',
+  whatsapp: 'WhatsApp',
+  email: 'Email',
+  website: 'Website',
+  x_organic: 'X Organic',
+  other: 'Other',
+};
+
+/** Ensure a Studio Channel exists for a kind (no connector required — Sprint 4 jobs). */
+export async function ensureStudioChannelByKind(options: {
+  ownerUserId: string;
+  kind: ChannelKind;
+  name?: string;
+}) {
+  const { ownerUserId, kind } = options;
+  const [existing] = await db
+    .select()
+    .from(studioChannels)
+    .where(
+      and(
+        eq(studioChannels.ownerUserId, ownerUserId),
+        eq(studioChannels.kind, kind),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    return mapChannel(existing);
+  }
+
+  const [created] = await db
+    .insert(studioChannels)
+    .values({
+      ownerUserId,
+      kind,
+      name: options.name || CHANNEL_KIND_LABELS[kind] || kind,
+      status: 'active',
+      metadata: { provisional: true },
+    })
+    .returning();
+
+  return mapChannel(created);
+}
+
+export type { ChannelKind };
+
 /** Re-export for tests */
 export { mapConnector };

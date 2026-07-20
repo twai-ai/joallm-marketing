@@ -125,6 +125,16 @@ export const ONTOLOGY = {
     'Intelligence',
   ] as const,
 
+  /** Acquire loop dogfood (Phase 1) */
+  acquireLoop: [
+    'Program',
+    'Intent',
+    'Campaign',
+    'Creative Project',
+    'Asset',
+    'Publishing Job',
+  ] as const,
+
   terms: {
     institution: 'Operating context / buyer — owns many Programs.',
     program: 'Primary delivery aggregate — Core state + attached Capabilities.',

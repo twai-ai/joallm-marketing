@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { FolderPlus, Loader2, Plus, Trash2, Upload } from 'lucide-react';
+import { FolderPlus, Loader2, Plus, Send, Trash2, Upload } from 'lucide-react';
 import type {
   AcquisitionCampaign,
+  ChannelKind,
   CreativeProject,
   GrowthAssetKind,
   GrowthMarketingAsset,
@@ -9,6 +10,7 @@ import type {
 import { API_ENDPOINTS } from '../../config/api';
 import { apiClient } from '../../utils/api-client';
 import { showError, showSuccess } from '../../utils/toast';
+import { CHANNEL_OPTIONS } from './PublishingPanel';
 
 function kindFromFile(file: File): GrowthAssetKind {
   if (file.type.startsWith('image/')) return 'image';
@@ -24,6 +26,7 @@ export function AssetsPanel({
   preferredCampaignId,
   onCampaignsChanged,
   onGoToCampaigns,
+  onGoToPublishing,
 }: {
   programId: string;
   programName: string;
@@ -32,6 +35,7 @@ export function AssetsPanel({
   preferredCampaignId?: string | null;
   onCampaignsChanged: () => Promise<void> | void;
   onGoToCampaigns: () => void;
+  onGoToPublishing?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [campaignId, setCampaignId] = useState('');
@@ -44,6 +48,8 @@ export function AssetsPanel({
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [savingProject, setSavingProject] = useState(false);
+  const [publishingAssetId, setPublishingAssetId] = useState<string | null>(null);
+  const [publishChannel, setPublishChannel] = useState<ChannelKind>('linkedin_organic');
 
   useEffect(() => {
     if (preferredCampaignId && campaigns.some((c) => c.id === preferredCampaignId)) {
@@ -206,6 +212,23 @@ export function AssetsPanel({
       showError(error instanceof Error ? error.message : 'Failed to create project');
     } finally {
       setSavingProject(false);
+    }
+  };
+
+  const handlePublish = async (asset: GrowthMarketingAsset) => {
+    if (!campaignId) return;
+    setPublishingAssetId(asset.id);
+    try {
+      await apiClient.post(
+        `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${campaignId}/assets/${asset.id}/publish`,
+        { channelKind: publishChannel, status: 'queued' },
+      );
+      showSuccess(`Queued for ${publishChannel} — open Publishing to review`);
+      onGoToPublishing?.();
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Failed to queue publish');
+    } finally {
+      setPublishingAssetId(null);
     }
   };
 
@@ -475,7 +498,23 @@ export function AssetsPanel({
       )}
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-950">Uploaded assets</h3>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <h3 className="text-sm font-semibold text-slate-950">Uploaded assets</h3>
+          <label className="block text-xs sm:w-56">
+            <span className="font-medium text-slate-600">Publish channel</span>
+            <select
+              value={publishChannel}
+              onChange={(e) => setPublishChannel(e.target.value as ChannelKind)}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+            >
+              {CHANNEL_OPTIONS.map((option) => (
+                <option key={option.kind} value={option.kind}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         {loading ? (
           <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -490,6 +529,7 @@ export function AssetsPanel({
             {visibleAssets.map((asset) => {
               const project = projects.find((p) => p.id === asset.creativeProjectId);
               const fileId = asset.fileIds[0];
+              const busy = publishingAssetId === asset.id;
               return (
                 <div
                   key={asset.id}
@@ -518,6 +558,15 @@ export function AssetsPanel({
                         Open file
                       </a>
                     )}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handlePublish(asset)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-2 py-1 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-60"
+                    >
+                      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      Publish
+                    </button>
                     <button
                       type="button"
                       onClick={() => void handleDeleteAsset(asset)}

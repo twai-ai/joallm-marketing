@@ -18,6 +18,7 @@ import {
   Pencil,
   Plus,
   Radio,
+  Send,
   Target,
   Trash2,
   Upload,
@@ -31,6 +32,7 @@ import type {
   GrowthIntentId,
 } from '@joallm/shared';
 import { AssetsPanel } from '../components/acquisition/AssetsPanel';
+import { PublishingPanel } from '../components/acquisition/PublishingPanel';
 import { UseCaseHomeShell } from '../components/use-cases/UseCaseHomeShell';
 import { getUseCaseById } from '../constants/useCases';
 import { getProgramById, PRIMARY_GROWTH_PROGRAM } from '../constants/programs';
@@ -39,7 +41,14 @@ import { ONTOLOGY } from '../constants/ontology';
 import { apiClient } from '../utils/api-client';
 import { showError, showSuccess } from '../utils/toast';
 
-type WorkspaceTab = 'overview' | 'intents' | 'campaigns' | 'channels' | 'assets' | 'analytics';
+type WorkspaceTab =
+  | 'overview'
+  | 'intents'
+  | 'campaigns'
+  | 'channels'
+  | 'assets'
+  | 'publishing'
+  | 'analytics';
 
 const TABS: { id: WorkspaceTab; label: string; icon: typeof Megaphone }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -47,6 +56,7 @@ const TABS: { id: WorkspaceTab; label: string; icon: typeof Megaphone }[] = [
   { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
   { id: 'channels', label: 'Channels', icon: Radio },
   { id: 'assets', label: 'Assets', icon: ImageIcon },
+  { id: 'publishing', label: 'Publishing', icon: Send },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ];
 
@@ -775,7 +785,8 @@ export function AcquisitionWorkspacePage() {
               <li className="font-medium text-teal-800">✓ Sprint 2 — Campaign CRUD</li>
               <li className="font-medium text-teal-800">✓ Sprint 2b — Intent catalog</li>
               <li className="font-medium text-teal-800">✓ Sprint 3 — Creative Projects + Assets</li>
-              <li>Sprint 4 — Publishing Jobs</li>
+              <li className="font-medium text-teal-800">✓ Sprint 4 — Publishing Jobs</li>
+              <li>Sprint 5 — Outbound connector</li>
               <li>Sprint 7 — Program Interest API</li>
             </ul>
           </div>
@@ -823,7 +834,12 @@ export function AcquisitionWorkspacePage() {
           preferredCampaignId={assetsCampaignId}
           onCampaignsChanged={reload}
           onGoToCampaigns={() => setTab('campaigns')}
+          onGoToPublishing={() => setTab('publishing')}
         />
+      )}
+
+      {tab === 'publishing' && (
+        <PublishingPanel programId={program.id} campaigns={campaigns} />
       )}
 
       {tab === 'analytics' && (

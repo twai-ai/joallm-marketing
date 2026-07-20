@@ -396,27 +396,78 @@ export async function runMigrations(): Promise<void> {
     // Initialize pgvector extension first (non-blocking if it fails)
     await initializeExtensions();
 
-    // Ensure migration prerequisites exist before Drizzle processes later files.
-    await ensureSchemaCompatibility();
-    
     // Use path relative to the compiled file location
-    // In development: dist/database/migrate.js -> dist/database/migrations
-    // In production: dist/database/migrate.js -> dist/database/migrations
     const migrationsFolder = join(__dirname, 'migrations');
     logger.info(`Using migrations folder: ${migrationsFolder}`);
     
-    // Run migrations
+    // Run Drizzle migrations first so base tables exist.
+    // (Previously ensureSchemaCompatibility ran first and failed on empty DBs
+    //  because it FKs to "users" before migrations create that table.)
     await migrate(db, { migrationsFolder });
+
+    // Additive fixes for older / partial schemas (safe after migrate)
+    await ensureSchemaCompatibility();
+    await ensureUsersTable();
 
     logger.info('✅ Database migrations completed successfully');
   } catch (error) {
     logger.error('❌ Database migration failed:', error);
     logger.warn('⚠️ If pgvector is missing, please install it in Railway Dashboard');
-    logger.warn('⚠️ Backend will continue running but RAG features may not work');
-    await ensureSchemaCompatibility();
+    logger.warn('⚠️ Attempting auth-table bootstrap so login can still work…');
+    try {
+      await ensureUsersTable();
+      await ensureSchemaCompatibility();
+    } catch (bootstrapError) {
+      logger.error('❌ Auth bootstrap also failed:', bootstrapError);
+    }
     // Don't throw - allow server to start even if migrations fail
     // This is useful during initial deployment
   }
+}
+
+async function ensureUsersTable(): Promise<void> {
+  // Minimal users table matching runtime schema expectations (Google OAuth / password login).
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "users" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "email" text NOT NULL,
+      "password" text NOT NULL DEFAULT '',
+      "name" text NOT NULL,
+      "avatar" text,
+      "role" text DEFAULT 'casual',
+      "subscription_tier" text DEFAULT 'free',
+      "usage_stats" jsonb,
+      "api_keys" jsonb,
+      "created_at" timestamp DEFAULT NOW() NOT NULL,
+      "updated_at" timestamp DEFAULT NOW() NOT NULL,
+      CONSTRAINT "users_email_unique" UNIQUE ("email")
+    )
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password" text NOT NULL DEFAULT ''
+  `);
+  await db.execute(sql`
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "api_keys" jsonb
+  `);
+  await db.execute(sql`
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "avatar" text
+  `);
+  await db.execute(sql`
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'casual'
+  `);
+  await db.execute(sql`
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "subscription_tier" text DEFAULT 'free'
+  `);
+  await db.execute(sql`
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "usage_stats" jsonb
+  `);
+
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS "users_email_idx" ON "users" ("email")
+  `);
+
+  logger.info('✓ users table ensured');
 }
 
 // Run migrations if this file is executed directly

@@ -25,6 +25,22 @@ Their unit of work is always a **Program** (or Program-like object).
 
 ---
 
+## Canonical ATRISI Programs
+
+Public catalog: [atrisi.org/programs](https://atrisi.org/programs)
+
+Three buckets · one systems mindset:
+
+| Family | Programs |
+|---|---|
+| **Academic** | Resonance with AI (faculty) · Amplify with AI (students) |
+| **Institutional Career** | Campus-to-Career AI Transformation |
+| **Enterprise** | AI Native Systems Engineering · Resilient Systems |
+
+Program Growth workspaces seed from this catalog. First dogfood Program: **Amplify with AI**.
+
+---
+
 ## Primary object
 
 ```text

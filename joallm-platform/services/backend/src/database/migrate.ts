@@ -374,10 +374,25 @@ async function ensureSchemaCompatibility(): Promise<void> {
   }
 }
 
+export async function resetDatabase(): Promise<void> {
+  logger.warn('⚠️ RESET_DATABASE=true — dropping public schema and recreating from migrations');
+  await db.execute(sql`DROP SCHEMA IF EXISTS public CASCADE`);
+  await db.execute(sql`CREATE SCHEMA public`);
+  await db.execute(sql`GRANT ALL ON SCHEMA public TO public`);
+  await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+  logger.warn('⚠️ Public schema wiped. Running fresh migrations…');
+}
+
 export async function runMigrations(): Promise<void> {
   try {
     logger.info('Starting database migrations...');
     
+    // One-shot wipe for Marketing bootstrap / broken legacy schemas.
+    // Set RESET_DATABASE=true in Railway, redeploy once, then REMOVE the variable.
+    if (process.env.RESET_DATABASE === 'true') {
+      await resetDatabase();
+    }
+
     // Initialize pgvector extension first (non-blocking if it fails)
     await initializeExtensions();
 
@@ -405,14 +420,17 @@ export async function runMigrations(): Promise<void> {
 }
 
 // Run migrations if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runMigrations()
-    .then(() => {
-      logger.info('Migration script completed');
-      process.exit(0);
-    })
-    .catch((error) => {
-      logger.error('Migration script failed:', error);
-      process.exit(1);
-    });
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('migrate.ts') || process.argv[1]?.endsWith('migrate.js')) {
+  const shouldReset = process.env.RESET_DATABASE === 'true' || process.argv.includes('--reset');
+  (async () => {
+    if (shouldReset) {
+      process.env.RESET_DATABASE = 'true';
+    }
+    await runMigrations();
+    logger.info('Migration script completed');
+    process.exit(0);
+  })().catch((error) => {
+    logger.error('Migration script failed:', error);
+    process.exit(1);
+  });
 }

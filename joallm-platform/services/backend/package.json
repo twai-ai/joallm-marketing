@@ -18,6 +18,7 @@
     "test:integration:watch": "vitest watch tests/integration",
     "lint": "eslint src --ext .ts",
     "db:migrate": "drizzle-kit migrate",
+    "db:reset": "RESET_DATABASE=true tsx src/database/migrate.ts",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "seed": "tsx scripts/seed-database.ts",

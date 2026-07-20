@@ -133,8 +133,11 @@ async function start() {
     // Initialize database (gracefully handle if not available)
     await initializeDatabase();
 
-    // Run database migrations
+    // Run database migrations (set RESET_DATABASE=true once to wipe + recreate schema)
     logger.info('🔄 Running database migrations...');
+    if (process.env.RESET_DATABASE === 'true') {
+      logger.warn('💣 RESET_DATABASE=true is set — this will DELETE ALL TABLES on this database');
+    }
     await runMigrations();
 
     // Connect Redis cache (non-blocking — app works without it)

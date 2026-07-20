@@ -128,7 +128,7 @@ Program: Amplify with AI
 | Sprint | Deliverable |
 |---|---|
 | **1** | ~~Program → Acquisition Workspace (static UI)~~ |
-| **2** | Campaign CRUD |
+| **2** | ~~Campaign CRUD~~ |
 | **3** | Creative Projects + Assets (upload / attach — Canva/Figma/manual OK) |
 | **4** | Publishing Jobs |
 | **5** | One outbound connector (LinkedIn **or** Meta Ads) |

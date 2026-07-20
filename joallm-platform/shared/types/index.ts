@@ -98,3 +98,10 @@ export * from './program-aggregate';
  * @see ../../docs/04-architecture/INSTITUTION_ACQUISITION_PLATFORM.md
  */
 export * from './program-interest';
+
+/**
+ * Program-scoped Acquisition Campaigns (Sprint 2).
+ * @see ./acquisition-campaign.ts
+ * @see ../../docs/04-architecture/INSTITUTION_ACQUISITION_PLATFORM.md
+ */
+export * from './acquisition-campaign';

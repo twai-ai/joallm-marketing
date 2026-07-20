@@ -1122,6 +1122,8 @@ export const acquisitionInitiatives = pgTable('acquisition_initiatives', {
   id: uuid('id').primaryKey().defaultRandom(),
   ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  /** Targeting id aligned with atrisi.org programs catalog (Acquisition Platform) */
+  programId: text('program_id'),
   name: text('name').notNull(),
   description: text('description'),
   status: text('status', {
@@ -1133,6 +1135,7 @@ export const acquisitionInitiatives = pgTable('acquisition_initiatives', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
   ownerUserIdIdx: index('acquisition_initiatives_owner_user_id_idx').on(table.ownerUserId),
+  programIdIdx: index('acquisition_initiatives_program_id_idx').on(table.ownerUserId, table.programId),
 }));
 
 export const acquisitionCampaigns = pgTable('acquisition_campaigns', {
@@ -1140,6 +1143,8 @@ export const acquisitionCampaigns = pgTable('acquisition_campaigns', {
   ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
   initiativeId: uuid('initiative_id').notNull().references(() => acquisitionInitiatives.id, { onDelete: 'cascade' }),
+  /** Targeting id aligned with atrisi.org programs catalog */
+  programId: text('program_id'),
   name: text('name').notNull(),
   channel: text('channel'),
   status: text('status', {
@@ -1151,6 +1156,7 @@ export const acquisitionCampaigns = pgTable('acquisition_campaigns', {
 }, (table) => ({
   initiativeIdIdx: index('acquisition_campaigns_initiative_id_idx').on(table.initiativeId),
   ownerUserIdIdx: index('acquisition_campaigns_owner_user_id_idx').on(table.ownerUserId),
+  programIdIdx: index('acquisition_campaigns_program_id_idx').on(table.ownerUserId, table.programId),
 }));
 
 export const acquisitionSourceConnections = pgTable('acquisition_source_connections', {

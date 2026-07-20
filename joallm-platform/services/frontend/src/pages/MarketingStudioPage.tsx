@@ -129,7 +129,7 @@ export function MarketingStudioPage() {
           </div>
           <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
             <li className="font-medium text-teal-800">Sprint 1 — Program → Acquisition Workspace ✓</li>
-            <li>Sprint 2 — Campaign CRUD</li>
+            <li className="font-medium text-teal-800">Sprint 2 — Campaign CRUD ✓</li>
             <li>Sprint 3 — Creative Projects + Assets</li>
             <li>Sprint 4 — Publishing Jobs</li>
             <li>Sprint 5 — One outbound connector</li>

@@ -610,5 +610,59 @@ export async function ensureCorePlatformTables(): Promise<void> {
     `,
   );
 
+  await exec(
+    'acquisition_initiatives',
+    sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_initiatives" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "program_id" text,
+        "name" text NOT NULL,
+        "description" text,
+        "status" text NOT NULL DEFAULT 'active',
+        "starts_at" timestamp,
+        "ends_at" timestamp,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'acquisition_initiatives.program_id',
+    sql`
+      ALTER TABLE "acquisition_initiatives"
+      ADD COLUMN IF NOT EXISTS "program_id" text
+    `,
+  );
+
+  await exec(
+    'acquisition_campaigns',
+    sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_campaigns" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "initiative_id" uuid NOT NULL REFERENCES "acquisition_initiatives"("id") ON DELETE CASCADE,
+        "program_id" text,
+        "name" text NOT NULL,
+        "channel" text,
+        "status" text NOT NULL DEFAULT 'active',
+        "metadata" jsonb DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'acquisition_campaigns.program_id',
+    sql`
+      ALTER TABLE "acquisition_campaigns"
+      ADD COLUMN IF NOT EXISTS "program_id" text
+    `,
+  );
+
   logger.info('✓ Core platform tables ensured');
 }

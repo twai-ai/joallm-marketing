@@ -15,6 +15,12 @@ import { getPersonTimeline } from '../services/timeline-service.js';
 import { linkMediaFileToPerson } from '../services/knowledge-artifact-service.js';
 import { acquisitionIngestQueue } from '../services/queue.js';
 import { logger } from '../utils/logger.js';
+import {
+  createProgramCampaign,
+  deleteProgramCampaign,
+  listProgramCampaigns,
+  updateProgramCampaign,
+} from '../services/acquisition-campaign-service.js';
 
 const MetaIngestSchema = z.object({
   payload: z.record(z.unknown()),
@@ -170,6 +176,115 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
     const limit = Math.min(Number(query.limit) || 50, 200);
     const events = await listRecentEvents(userId, limit);
     return reply.send({ success: true, data: events });
+  });
+
+  // ── Program-scoped campaigns (Acquisition Platform Sprint 2) ──
+
+  const CampaignStatusSchema = z.enum(['draft', 'active', 'paused', 'completed', 'archived']);
+
+  const CreateCampaignSchema = z.object({
+    name: z.string().min(1).max(200),
+    programName: z.string().min(1).max(200).optional(),
+    channel: z.string().max(100).optional(),
+    status: CampaignStatusSchema.optional(),
+    intentTemplate: z.string().max(100).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  });
+
+  const UpdateCampaignSchema = z.object({
+    name: z.string().min(1).max(200).optional(),
+    channel: z.string().max(100).nullable().optional(),
+    status: CampaignStatusSchema.optional(),
+    intentTemplate: z.string().max(100).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  });
+
+  fastify.get('/programs/:programId/campaigns', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'List acquisition campaigns for a Program (targeting id)',
+      tags: ['acquisition'],
+    },
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { programId } = request.params as { programId: string };
+    const campaigns = await listProgramCampaigns(userId, programId);
+    return reply.send({ success: true, data: campaigns });
+  });
+
+  fastify.post('/programs/:programId/campaigns', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Create a campaign under a Program',
+      tags: ['acquisition'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId } = request.params as { programId: string };
+      const body = CreateCampaignSchema.parse(request.body || {});
+      const campaign = await createProgramCampaign({
+        ownerUserId: userId,
+        programId,
+        programName: body.programName || programId,
+        name: body.name,
+        channel: body.channel,
+        status: body.status,
+        intentTemplate: body.intentTemplate,
+        metadata: body.metadata,
+      });
+      return reply.status(201).send({ success: true, data: campaign });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Create program campaign failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create campaign',
+      });
+    }
+  });
+
+  fastify.patch('/programs/:programId/campaigns/:campaignId', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId, campaignId } = request.params as { programId: string; campaignId: string };
+      const body = UpdateCampaignSchema.parse(request.body || {});
+      const campaign = await updateProgramCampaign({
+        ownerUserId: userId,
+        programId,
+        campaignId,
+        ...body,
+      });
+      if (!campaign) {
+        return reply.status(404).send({ success: false, error: 'Campaign not found' });
+      }
+      return reply.send({ success: true, data: campaign });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ success: false, error: error.errors[0]?.message || 'Invalid request' });
+      }
+      logger.error('Update program campaign failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update campaign',
+      });
+    }
+  });
+
+  fastify.delete('/programs/:programId/campaigns/:campaignId', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { campaignId } = request.params as { campaignId: string };
+    const ok = await deleteProgramCampaign(userId, campaignId);
+    if (!ok) {
+      return reply.status(404).send({ success: false, error: 'Campaign not found' });
+    }
+    return reply.send({ success: true });
   });
 }
 

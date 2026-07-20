@@ -50,27 +50,29 @@ Automation
 ## Brain vs Execution (anti-HubSpot rule)
 
 Instance of the platform constitution: **Studio creates. Products operate. Platform remembers.**  
-Full rule: [PLATFORM_CONSTITUTION.md](./PLATFORM_CONSTITUTION.md).
+Publishing split: **Studio owns publishing intent. Platform owns execution capability.**  
+Full rule: [PLATFORM_CONSTITUTION.md](./PLATFORM_CONSTITUTION.md).  
+Studio detail: [MARKETING_STUDIO_DIRECTION.md](./MARKETING_STUDIO_DIRECTION.md).
 
 Do **not** become everything (CRM + CMS + email builder + social scheduler + SEO + ads + forms + analytics). That path made HubSpot, Marketo, and Salesforce Marketing Cloud mediocre at many jobs.
 
-Separate **Brain** from **Execution**:
+Separate **Brain** from **Studio intent** from **Platform execution**:
 
 ```text
-Studio                          ATRISI Marketing
-────────                        ────────────────
-Create                          Acquire
-Review                          Timeline
-Approve                         Knowledge
-Publish (via connectors)        Intelligence
-Creative collaboration          Analytics / outcomes
+Marketing Brain                 Marketing Studio              Integration Platform
+──────────────                  ────────────────              ────────────────────
+Strategy / Campaigns            Assets / Channels             Connectors / OAuth
+Intelligence / Timeline UI      Profiles / Publishing Jobs    Secrets / Webhooks
+Attribution / Recommendations   Approvals / Brand Kit         API clients
 ```
+
+Marketing never talks directly to Meta. Studio publishes to **Channels**; Channels bind to **Platform Connectors**.
 
 | Question | Wrong answer | Right answer |
 |---|---|---|
 | Should ATRISI Marketing create content? | Build an email/LP/social suite inside Marketing | Content lives in **Studio** |
-| Should we build a Facebook scheduler? | Yes, ship our own | No — **connector** to Meta / LinkedIn / X / Brevo / WordPress |
-| Where does a LinkedIn post live? | As a channel-specific blob | As a **Marketing Asset** with versions, approvals, targets, performance |
+| Should we build a Facebook scheduler? | Yes, ship our own | No — **Channel → Platform Connector** to Meta / LinkedIn / … |
+| Where does a LinkedIn post live? | As a channel-specific blob | As a **Marketing Asset** → Publishing Job → Channel |
 
 ### Studio = creative workspace
 
@@ -85,7 +87,7 @@ Studio
 │     ├── Content Library     (RAG-searchable)
 │     ├── Creative Assistant
 │     ├── Media Library
-│     ├── Publishing          (connectors only)
+│     ├── Publishing          (Channels · Profiles · Jobs)
 │     └── Analytics
 └── Research
 ```
@@ -102,7 +104,7 @@ Not: email builder, landing-page builder, workflow builder (out of Marketing v1 
 
 ```text
 Campaign → Marketing Asset → Versions → Approvals
-         → Publishing Targets → Performance → Knowledge
+         → Publishing Job → Channel → Connector → Performance → Knowledge
 ```
 
 One asset may fan out (via AI in Studio) to LinkedIn, X, Instagram, WhatsApp, blog, email, landing page — still one asset in memory.
@@ -110,7 +112,7 @@ One asset may fan out (via AI in Studio) to LinkedIn, X, Instagram, WhatsApp, bl
 ### Publishing joins the graph
 
 ```text
-Publish (Studio connector)
+Publish (Studio intent → Channel → Platform Connector)
   → Acquisition Event (source=linkedin, campaign=…, asset=…)
   → Person Timeline (asset.viewed / engaged)
   → later: “Which posts produced mentors?”
@@ -118,7 +120,9 @@ Publish (Studio connector)
 
 Content impact, not vanity engagement.
 
-**Build Marketing Studio later as a Studio capability** — after Timeline Service (Phase A) and KnowledgeArtifact (Phase B). Do not let Marketing Studio become a second CRM or replace ATRISI Marketing.
+**Build Marketing Studio after Timeline Service (Phase A) and KnowledgeArtifact (Phase B).**  
+Studio publishes through **Channels → Platform Connectors** so events feed ATRISI Marketing.  
+See [MARKETING_STUDIO_DIRECTION.md](./MARKETING_STUDIO_DIRECTION.md). Do not let Marketing Studio become a second CRM or replace ATRISI Marketing.
 
 ---
 
@@ -228,7 +232,7 @@ Media AI is one interpretation modality feeding the Timeline Service.
 ✗ Workflow builder as marketing core
 ```
 
-Those belong in **Studio → Marketing Studio** later, publishing through connectors so events feed ATRISI Marketing.
+Those belong in **Studio → Marketing Studio** later, publishing through **Channels** (Platform Connectors underneath) so events feed ATRISI Marketing.
 
 ---
 
@@ -274,9 +278,10 @@ Unknown → Observed → Identified → Engaged → Participating
 | Identity / raw / event / interaction tables | Live |
 | Shared contracts (incl. Timeline + KnowledgeArtifact types) | Live |
 | ATRISI Marketing branding + institutional Studio UI | Live |
-| Timeline Service (generic, multi-subject) | **Phase A — next** |
-| KnowledgeArtifact persistence + Media AI link | Phase B |
+| Timeline Service (Person + artifacts) | Phase A/B shipped — dogfood |
+| KnowledgeArtifact persistence + Media AI link | Phase B shipped — dogfood |
 | Initiative APIs / dashboard | Phase C |
+| Marketing Studio Channels / Profiles / Jobs | Studio-0 contracts live; implementation later |
 | Evidence / Intelligence | Phase D / E |
 | Dogfood on ATRISI ops | Gate before main |
 

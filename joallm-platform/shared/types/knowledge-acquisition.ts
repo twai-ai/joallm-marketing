@@ -371,7 +371,7 @@ export interface Attribution {
   createdAt: string;
 }
 
-// ─── Studio Marketing Asset (create/publish — not ATRISI Marketing core) ─────
+// ─── Studio Marketing Asset (create/publish intent — not ATRISI Marketing core) ─
 
 export type MarketingAssetKind =
   | 'linkedin_post'
@@ -396,8 +396,10 @@ export type MarketingAssetStatus =
   | 'archived';
 
 /**
- * Content as an institutional asset (lives in Studio / Marketing Studio).
- * Publishing via connectors emits AcquisitionEvents into ATRISI Marketing.
+ * Content as an institutional asset (lives in Marketing Studio).
+ * Publish via PublishingJob → Channel → Platform Connector.
+ * Prefer channelIds / publishingProfileIds over raw vendor targets.
+ * @see ./studio-publishing.ts
  */
 export interface MarketingAsset {
   id: string;
@@ -410,7 +412,10 @@ export interface MarketingAsset {
   status: MarketingAssetStatus;
   body?: string | null;
   versions?: Record<string, unknown>[];
+  /** @deprecated Prefer PublishingJob.channelId / PublishingProfile */
   publishingTargets?: string[];
+  channelIds?: string[];
+  publishingProfileIds?: string[];
   knowledgeDocumentId?: string | null;
   createdAt: string;
   updatedAt: string;

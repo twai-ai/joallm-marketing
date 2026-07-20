@@ -62,3 +62,17 @@ export interface LLMModel {
  * @see ../../docs/04-architecture/KNOWLEDGE_ACQUISITION_DIRECTION.md
  */
 export * from './knowledge-acquisition';
+
+/**
+ * Integration Platform — Connectors (Platform-owned execution).
+ * @see ./integration-platform.ts
+ * @see ../../docs/04-architecture/PLATFORM_CONSTITUTION.md
+ */
+export * from './integration-platform';
+
+/**
+ * Marketing Studio — Channels, Profiles, Publishing Jobs (Studio-owned intent).
+ * @see ./studio-publishing.ts
+ * @see ../../docs/04-architecture/MARKETING_STUDIO_DIRECTION.md
+ */
+export * from './studio-publishing';

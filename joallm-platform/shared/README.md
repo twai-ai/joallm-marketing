@@ -38,10 +38,13 @@ import { User, ChatMessage } from '../../shared/types';
 Common TypeScript interfaces and types used across services:
 - `User` - User data structure
 - `ApiResponse<T>` - Standardized API response format
-- Knowledge Acquisition contracts (`Person`, `PersonIdentity`, `AcquisitionEvent`, `Interaction`, `KnowledgeArtifact`, …) — see `types/knowledge-acquisition.ts` and [Knowledge Acquisition Direction](../docs/04-architecture/KNOWLEDGE_ACQUISITION_DIRECTION.md)
-
-Frontend resolves `@joallm/shared` → `shared/types` via Vite/tsconfig path alias.- `ChatMessage` - Chat message structure
+- `ChatMessage` - Chat message structure
 - `Document` - Document metadata
 - `LLMModel` - LLM model configuration
+- Knowledge Acquisition / Brain contracts — `types/knowledge-acquisition.ts` · [Knowledge Acquisition Direction](../../docs/04-architecture/KNOWLEDGE_ACQUISITION_DIRECTION.md)
+- Integration Platform (Connectors) — `types/integration-platform.ts` · [Platform Constitution](../../docs/04-architecture/PLATFORM_CONSTITUTION.md)
+- Marketing Studio (Channels, Profiles, Jobs) — `types/studio-publishing.ts` · [Marketing Studio Direction](../../docs/04-architecture/MARKETING_STUDIO_DIRECTION.md)
+
+Frontend resolves `@joallm/shared` → `shared/types` via Vite/tsconfig path alias.
 
 

@@ -190,7 +190,6 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
     'events',
     'success-stories',
     'partnerships',
-    'hiring',
   ]);
 
   const CreateCampaignSchema = z.object({

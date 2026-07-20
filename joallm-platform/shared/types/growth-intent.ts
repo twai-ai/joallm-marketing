@@ -12,8 +12,7 @@ export type GrowthIntentId =
   | 'community'
   | 'events'
   | 'success-stories'
-  | 'partnerships'
-  | 'hiring';
+  | 'partnerships';
 
 export type GrowthIntent = {
   id: GrowthIntentId;

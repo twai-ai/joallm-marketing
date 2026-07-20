@@ -77,7 +77,7 @@ Publishing
 Acquisition / Program Interest
 ```
 
-Every program repeatedly needs Awareness, Registration, Events, Community, Success Stories, Partnerships — with program-specific additions (e.g. Amplify: Builder Challenge, Cohort Conversion, Hiring).
+Every program repeatedly needs Awareness, Registration, Events, Community, Success Stories, Partnerships — with program-specific additions (e.g. Amplify: Builder Challenge, Cohort Conversion). Hiring stays in HRMS, not this Growth Intent catalog.
 
 Intents also carry reusable **asset template** catalogs (Poster, Countdown, FAQ, …) for later Studio scaffolding.
 
@@ -95,7 +95,8 @@ Intents also carry reusable **asset template** catalogs (Poster, Countdown, FAQ,
 | Events | Promote webinars and workshops | Reserve Seat |
 | Success Stories | Build trust | Read Story |
 | Partnerships | Acquire institutions | Partner |
-| Hiring | Grow the ATRISI team | Apply |
+
+Hiring is owned by the existing HRMS — not a Growth Intent here.
 
 Catalog lives in code: `shared/types/growth-intent.ts` + `services/frontend/src/constants/growthIntents.ts`. Other programs inherit a base intent set until specialized.
 

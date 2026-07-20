@@ -107,7 +107,7 @@ export const BASE_GROWTH_INTENTS: GrowthIntent[] = [
   },
 ];
 
-/** Amplify with AI dogfood — full nine intents */
+/** Amplify with AI dogfood (Hiring stays in HRMS) */
 export const AMPLIFY_GROWTH_INTENTS: GrowthIntent[] = [
   {
     id: 'awareness',
@@ -230,15 +230,6 @@ export const AMPLIFY_GROWTH_INTENTS: GrowthIntent[] = [
     outputChannels: ['LinkedIn', 'Email', 'Website'],
     assetTemplates: ['One-pager', 'Deck slide', 'Email', 'LinkedIn'],
   },
-  {
-    id: 'hiring',
-    name: 'Hiring',
-    purpose: 'Grow the ATRISI team.',
-    examples: ['Growth Marketing Intern', 'AI Mentor', 'Community Lead'],
-    cta: 'Apply',
-    outputChannels: ['LinkedIn', 'Website', 'Email'],
-    assetTemplates: ['Job post', 'Role card', 'LinkedIn', 'Apply CTA'],
-  },
 ];
 
 export function getIntentsForProgram(programId: string): GrowthIntent[] {
@@ -264,7 +255,6 @@ export function isGrowthIntentId(value: string): value is GrowthIntentId {
     value === 'community' ||
     value === 'events' ||
     value === 'success-stories' ||
-    value === 'partnerships' ||
-    value === 'hiring'
+    value === 'partnerships'
   );
 }

@@ -185,6 +185,8 @@ export const files = pgTable('files', {
     metadataExtractedAt?: string;
     audioStorageKey?: string; // extracted audio track key in storage
     mediaKnowledgeSyncedAt?: string;
+    /** When set, Media AI insights are bridged onto this Person Timeline */
+    acquisitionPersonId?: string;
   }>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -1048,6 +1050,19 @@ export const acquisitionPersons = pgTable('acquisition_persons', {
   status: text('status', {
     enum: ['anonymous', 'identified', 'verified', 'merged', 'archived'],
   }).default('identified').notNull(),
+  relationshipMaturity: text('relationship_maturity', {
+    enum: [
+      'unknown',
+      'observed',
+      'identified',
+      'engaged',
+      'participating',
+      'contributing',
+      'leading',
+      'mentoring',
+      'partnering',
+    ],
+  }).default('unknown').notNull(),
   metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -1056,6 +1071,10 @@ export const acquisitionPersons = pgTable('acquisition_persons', {
   organizationIdIdx: index('acquisition_persons_organization_id_idx').on(table.organizationId),
   primaryPhoneIdx: index('acquisition_persons_primary_phone_idx').on(table.ownerUserId, table.primaryPhone),
   primaryEmailIdx: index('acquisition_persons_primary_email_idx').on(table.ownerUserId, table.primaryEmail),
+  relationshipMaturityIdx: index('acquisition_persons_relationship_maturity_idx').on(
+    table.ownerUserId,
+    table.relationshipMaturity,
+  ),
 }));
 
 export const acquisitionPersonIdentities = pgTable('acquisition_person_identities', {
@@ -1235,4 +1254,41 @@ export const acquisitionInteractions = pgTable('acquisition_interactions', {
   ownerUserIdIdx: index('acquisition_interactions_owner_user_id_idx').on(table.ownerUserId),
   occurredAtIdx: index('acquisition_interactions_occurred_at_idx').on(table.personId, table.occurredAt),
   sourceEventIdIdx: index('acquisition_interactions_source_event_id_idx').on(table.sourceEventId),
+}));
+
+/** Layer 2 — Knowledge Interpretation output linked onto Timeline subjects */
+export const knowledgeArtifacts = pgTable('knowledge_artifacts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  personId: uuid('person_id').references(() => acquisitionPersons.id, { onDelete: 'set null' }),
+  initiativeId: uuid('initiative_id').references(() => acquisitionInitiatives.id, { onDelete: 'set null' }),
+  acquisitionEventId: uuid('acquisition_event_id').references(() => acquisitionEvents.id, { onDelete: 'set null' }),
+  interactionId: uuid('interaction_id').references(() => acquisitionInteractions.id, { onDelete: 'set null' }),
+  artifactType: text('artifact_type', {
+    enum: [
+      'email',
+      'message',
+      'audio',
+      'video',
+      'transcript',
+      'document',
+      'form_response',
+      'note',
+      'application_essay',
+      'voice_note',
+    ],
+  }).notNull(),
+  title: text('title'),
+  interpretation: jsonb('interpretation').$type<Record<string, unknown>>().default({}),
+  signals: jsonb('signals').$type<Record<string, unknown>>().default({}),
+  sourceFileId: uuid('source_file_id').references(() => files.id, { onDelete: 'set null' }),
+  knowledgeDocumentId: uuid('knowledge_document_id'),
+  mediaAssetId: uuid('media_asset_id'),
+  occurredAt: timestamp('occurred_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('knowledge_artifacts_owner_user_id_idx').on(table.ownerUserId),
+  personIdIdx: index('knowledge_artifacts_person_id_idx').on(table.personId),
+  sourceFileIdIdx: index('knowledge_artifacts_source_file_id_idx').on(table.sourceFileId),
 }));

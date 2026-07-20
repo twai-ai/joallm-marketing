@@ -43,9 +43,16 @@ function sourceStatusClass(status: string) {
 }
 
 function entryKindClass(kind: TimelineEntry['kind']) {
-  if (kind === 'interaction') return 'border-l-teal-500';
+  if (kind === 'interaction' || kind === 'communication') return 'border-l-teal-500';
+  if (kind === 'artifact') return 'border-l-amber-500';
+  if (kind === 'decision' || kind === 'learning') return 'border-l-violet-500';
   if (kind === 'event') return 'border-l-sky-500';
   return 'border-l-slate-400';
+}
+
+function formatMaturity(value?: string | null) {
+  if (!value || value === 'unknown') return null;
+  return value.replace(/_/g, ' ');
 }
 
 export function AcquisitionIntelligencePage() {
@@ -292,7 +299,10 @@ export function AcquisitionIntelligencePage() {
                         {person.displayName || person.primaryPhone || 'Unknown person'}
                       </div>
                       <div className={`mt-1 text-xs ${selected ? 'text-teal-200' : 'text-slate-500'}`}>
-                        {person.primaryPhone || person.primaryEmail || person.status}
+                        {formatMaturity(person.relationshipMaturity) ||
+                          person.primaryPhone ||
+                          person.primaryEmail ||
+                          person.status}
                       </div>
                     </button>
                   );
@@ -314,8 +324,14 @@ export function AcquisitionIntelligencePage() {
                         {selectedPerson?.displayName || selectedPerson?.primaryPhone || 'Person'}
                       </h3>
                       <p className="mt-1 text-xs text-slate-500">
-                        Timeline Service · events + interactions
+                        Timeline Service · events, interactions
+                        {timelineEntries.some((e) => e.kind === 'artifact') ? ', artifacts' : ''}
                       </p>
+                      {formatMaturity(selectedPerson?.relationshipMaturity) && (
+                        <div className="mt-2 inline-flex rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium capitalize text-teal-800 ring-1 ring-teal-200/80">
+                          {formatMaturity(selectedPerson?.relationshipMaturity)}
+                        </div>
+                      )}
                     </div>
                     <MessageSquare className="h-5 w-5 text-teal-600" />
                   </div>

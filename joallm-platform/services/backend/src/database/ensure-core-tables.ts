@@ -401,10 +401,19 @@ export async function ensureCorePlatformTables(): Promise<void> {
         "primary_email" text,
         "primary_phone" text,
         "status" text NOT NULL DEFAULT 'identified',
+        "relationship_maturity" text NOT NULL DEFAULT 'unknown',
         "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
         "created_at" timestamp DEFAULT NOW() NOT NULL,
         "updated_at" timestamp DEFAULT NOW() NOT NULL
       )
+    `,
+  );
+
+  await exec(
+    'acquisition_persons.relationship_maturity',
+    sql`
+      ALTER TABLE "acquisition_persons"
+      ADD COLUMN IF NOT EXISTS "relationship_maturity" text NOT NULL DEFAULT 'unknown'
     `,
   );
 
@@ -493,6 +502,30 @@ export async function ensureCorePlatformTables(): Promise<void> {
         "direction" text,
         "summary" text,
         "occurred_at" timestamp NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'knowledge_artifacts',
+    sql`
+      CREATE TABLE IF NOT EXISTS "knowledge_artifacts" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "person_id" uuid REFERENCES "acquisition_persons"("id") ON DELETE SET NULL,
+        "initiative_id" uuid,
+        "acquisition_event_id" uuid,
+        "interaction_id" uuid,
+        "artifact_type" text NOT NULL,
+        "title" text,
+        "interpretation" jsonb DEFAULT '{}'::jsonb,
+        "signals" jsonb DEFAULT '{}'::jsonb,
+        "source_file_id" uuid REFERENCES "files"("id") ON DELETE SET NULL,
+        "knowledge_document_id" uuid,
+        "media_asset_id" uuid,
+        "occurred_at" timestamp,
         "created_at" timestamp DEFAULT NOW() NOT NULL
       )
     `,

@@ -17,6 +17,7 @@ import { enrichTranscriptSpeakers } from './speaker-intelligence-service.js';
 import { generateMediaInsights, type MediaIntelligenceMode } from './media-insight-service.js';
 import { analyseVideoFrames, frameIntervalForDuration } from './vision-analysis-service.js';
 import { transcriptSegments, mediaInsights, frameAnalyses } from '../database/schema.js';
+import { bridgeMediaInsightsToAcquisitionTimeline } from './knowledge-artifact-service.js';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import crypto from 'crypto';
@@ -1038,6 +1039,19 @@ function createMediaProcessingWorker(): Worker<MediaProcessingJob> | null {
             if (documentIndexingQueue && knowledgeChunks.length > 0) {
               await documentIndexingQueue.add('index-document' as any, { fileId });
               logger.info(`Queued media knowledge indexing for ${fileId} (${knowledgeChunks.length} chunk(s))`);
+            }
+
+            // Phase B: Media AI → KnowledgeArtifact → Person Timeline
+            const linkedPersonId =
+              (currentMeta.acquisitionPersonId as string | undefined) ||
+              (fileMeta.acquisitionPersonId as string | undefined) ||
+              null;
+            if (linkedPersonId && (file.userId || userId)) {
+              await bridgeMediaInsightsToAcquisitionTimeline({
+                ownerUserId: file.userId || userId,
+                fileId,
+                acquisitionPersonId: linkedPersonId,
+              });
             }
 
             logger.info(`✓ Insight generation complete for ${fileId}: ${result.insights.length} insights (${visionResults.length} frames analysed)`);

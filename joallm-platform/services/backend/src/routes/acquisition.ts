@@ -12,6 +12,7 @@ import {
   maybeSendWhatsAppAutoReply,
 } from '../services/acquisition-ingest-service.js';
 import { getPersonTimeline } from '../services/timeline-service.js';
+import { linkMediaFileToPerson } from '../services/knowledge-artifact-service.js';
 import { acquisitionIngestQueue } from '../services/queue.js';
 import { logger } from '../utils/logger.js';
 
@@ -135,6 +136,30 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
       return reply.status(404).send({ success: false, error: 'Person not found' });
     }
     return reply.send({ success: true, data: timeline });
+  });
+
+  fastify.post('/people/:personId/link-media', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Link a Media AI file to a Person Timeline (creates KnowledgeArtifact)',
+      tags: ['acquisition'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { personId } = request.params as { personId: string };
+      const body = z.object({ fileId: z.string().uuid() }).parse(request.body);
+      const result = await linkMediaFileToPerson({
+        ownerUserId: userId,
+        personId,
+        fileId: body.fileId,
+      });
+      return reply.status(201).send({ success: true, data: result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to link media';
+      const status = message.includes('not found') ? 404 : 500;
+      return reply.status(status).send({ success: false, error: message });
+    }
   });
 
   fastify.get('/events', {

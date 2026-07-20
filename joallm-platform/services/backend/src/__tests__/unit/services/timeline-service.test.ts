@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import {
+  maxMaturity,
+  maturityFromInteractionCount,
+  maturityFromObservedContact,
+} from '../../../services/relationship-maturity.js';
 import { mergeTimelineEntriesForTest } from '../../../services/timeline-service.js';
 
 type AcquisitionEvent = {
@@ -77,14 +82,26 @@ const baseInteraction = (overrides: Partial<Interaction>): Interaction => ({
   ...overrides,
 });
 
+describe('relationship maturity', () => {
+  it('upgrades by interaction count and never downgrades via maxMaturity', () => {
+    expect(maturityFromInteractionCount(0)).toBe('identified');
+    expect(maturityFromInteractionCount(1)).toBe('engaged');
+    expect(maturityFromInteractionCount(5)).toBe('participating');
+    expect(maturityFromObservedContact()).toBe('observed');
+    expect(maxMaturity('engaged', 'observed')).toBe('engaged');
+    expect(maxMaturity('identified', 'participating')).toBe('participating');
+  });
+});
+
 describe('timeline-service merge', () => {
   it('dedupes events that already have interactions and sorts newest first', () => {
     const events = [
       baseEvent({ id: 'evt-1', eventType: 'message.received', occurredAt: '2026-07-20T10:00:00.000Z' }),
       baseEvent({
         id: 'evt-2',
-        eventType: 'message.status',
+        eventType: 'message.delivered',
         occurredAt: '2026-07-20T11:00:00.000Z',
+        attributes: { status: 'delivered' },
       }),
     ];
     const interactions = [
@@ -98,9 +115,37 @@ describe('timeline-service merge', () => {
 
     const entries = mergeTimelineEntriesForTest(events, interactions);
     expect(entries).toHaveLength(2);
-    expect(entries[0].kind).toBe('event');
+    expect(entries[0].kind).toBe('communication');
     expect(entries[0].refId).toBe('evt-2');
-    expect(entries[1].kind).toBe('interaction');
+    expect(entries[0].summary).toBe('WhatsApp message delivered');
+    expect(entries[1].kind).toBe('communication');
     expect(entries[1].refId).toBe('int-1');
+  });
+
+  it('includes KnowledgeArtifacts as artifact entries', () => {
+    const entries = mergeTimelineEntriesForTest([], [], [
+      {
+        id: 'art-1',
+        ownerUserId: 'user-1',
+        organizationId: null,
+        personId: 'person-1',
+        initiativeId: null,
+        acquisitionEventId: null,
+        interactionId: null,
+        artifactType: 'video',
+        title: 'Mentor call summary',
+        interpretation: {},
+        signals: {},
+        sourceFileId: 'file-1',
+        knowledgeDocumentId: null,
+        mediaAssetId: 'file-1',
+        occurredAt: '2026-07-20T12:00:00.000Z',
+        createdAt: '2026-07-20T12:00:00.000Z',
+      },
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe('artifact');
+    expect(entries[0].summary).toBe('Mentor call summary');
   });
 });

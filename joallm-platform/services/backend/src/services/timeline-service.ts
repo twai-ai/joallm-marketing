@@ -1,11 +1,24 @@
 /**
- * Timeline Service — Phase A
+ * Timeline Service — Phase A (+ Phase B artifacts)
  *
- * Assembles a Person-centric Timeline from acquisition events + interactions.
- * Shared contract: @joallm/shared Timeline / TimelineEntry
+ * Assembles a Person-centric Timeline from acquisition events, interactions,
+ * and KnowledgeArtifacts (Media AI / Interpretation).
  */
 
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { db } from '../database/connection.js';
+import {
+  acquisitionEvents,
+  acquisitionInteractions,
+  acquisitionPersons,
+  knowledgeArtifacts,
+} from '../database/schema.js';
+import { listPersonArtifacts, mapKnowledgeArtifact } from './knowledge-artifact-service.js';
+import {
+  isRelationshipMaturity,
+  type RelationshipMaturity,
+} from './relationship-maturity.js';
+
 /** Local mirrors of shared Timeline contracts (backend has no @joallm/shared package). */
 type Person = {
   id: string;
@@ -57,9 +70,21 @@ type Interaction = {
   createdAt: string;
 };
 
+type KnowledgeArtifact = ReturnType<typeof mapKnowledgeArtifact>;
+
+type TimelineEntryKind =
+  | 'event'
+  | 'interaction'
+  | 'artifact'
+  | 'decision'
+  | 'learning'
+  | 'communication'
+  | 'evidence'
+  | 'outcome';
+
 type TimelineEntry = {
   id: string;
-  kind: 'event' | 'interaction' | 'artifact' | 'decision' | 'learning' | 'communication' | 'evidence' | 'outcome';
+  kind: TimelineEntryKind;
   occurredAt: string;
   summary?: string | null;
   refId: string;
@@ -75,16 +100,10 @@ type Timeline = {
   maturity?: string | null;
   events?: AcquisitionEvent[];
   interactions?: Interaction[];
-  artifacts?: unknown[];
+  artifacts?: KnowledgeArtifact[];
   evidence?: unknown[];
   entries: TimelineEntry[];
 };
-import { db } from '../database/connection.js';
-import {
-  acquisitionEvents,
-  acquisitionInteractions,
-  acquisitionPersons,
-} from '../database/schema.js';
 
 function toIso(value: Date | string | null | undefined): string {
   if (!value) return new Date(0).toISOString();
@@ -93,6 +112,9 @@ function toIso(value: Date | string | null | undefined): string {
 }
 
 function mapPerson(row: typeof acquisitionPersons.$inferSelect): Person {
+  const maturity = isRelationshipMaturity(row.relationshipMaturity)
+    ? row.relationshipMaturity
+    : 'unknown';
   return {
     id: row.id,
     ownerUserId: row.ownerUserId,
@@ -101,7 +123,7 @@ function mapPerson(row: typeof acquisitionPersons.$inferSelect): Person {
     primaryEmail: row.primaryEmail ?? null,
     primaryPhone: row.primaryPhone ?? null,
     status: (row.status as Person['status']) || 'identified',
-    relationshipMaturity: null,
+    relationshipMaturity: maturity,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
   };
@@ -148,9 +170,37 @@ function mapInteraction(row: typeof acquisitionInteractions.$inferSelect): Inter
   };
 }
 
+function classifyEventKind(eventType: string): TimelineEntryKind {
+  if (
+    eventType.startsWith('message.') &&
+    eventType !== 'message.received' &&
+    eventType !== 'message.sent'
+  ) {
+    return 'communication';
+  }
+  if (eventType.includes('decision')) return 'decision';
+  return 'event';
+}
+
+function classifyInteractionKind(kind: string): TimelineEntryKind {
+  if (kind === 'decision') return 'decision';
+  if (kind === 'learning_activity') return 'learning';
+  if (kind === 'message' || kind === 'call' || kind === 'meeting') return 'communication';
+  return 'interaction';
+}
+
+function summarizeEvent(event: AcquisitionEvent): string {
+  const status = event.attributes?.status;
+  if (typeof status === 'string' && event.eventType.startsWith('message.')) {
+    return `WhatsApp message ${status}`;
+  }
+  return event.eventType;
+}
+
 function buildEntries(
   events: AcquisitionEvent[],
   interactions: Interaction[],
+  artifacts: KnowledgeArtifact[] = [],
 ): TimelineEntry[] {
   const interactionEventIds = new Set(
     interactions.map((item) => item.sourceEventId).filter(Boolean),
@@ -158,7 +208,7 @@ function buildEntries(
 
   const interactionEntries: TimelineEntry[] = interactions.map((item) => ({
     id: `interaction:${item.id}`,
-    kind: 'interaction',
+    kind: classifyInteractionKind(item.kind),
     occurredAt: item.occurredAt,
     summary: item.summary || `${item.kind}${item.direction ? ` · ${item.direction}` : ''}`,
     refId: item.id,
@@ -167,28 +217,45 @@ function buildEntries(
       kind: item.kind,
       direction: item.direction,
       sourceEventId: item.sourceEventId,
+      entrySource: 'interaction',
     },
   }));
 
-  // Include person-linked events that did not become interactions (e.g. delivery status)
   const eventEntries: TimelineEntry[] = events
     .filter((event) => !interactionEventIds.has(event.id))
     .map((event) => ({
       id: `event:${event.id}`,
-      kind: 'event',
+      kind: classifyEventKind(event.eventType),
       occurredAt: event.occurredAt,
-      summary: event.eventType,
+      summary: summarizeEvent(event),
       refId: event.id,
       initiativeId: event.initiativeId ?? null,
       attributes: {
         source: event.source,
         channel: event.channel,
         eventType: event.eventType,
+        entrySource: 'event',
         ...event.attributes,
       },
     }));
 
-  return [...interactionEntries, ...eventEntries].sort(
+  const artifactEntries: TimelineEntry[] = artifacts.map((artifact) => ({
+    id: `artifact:${artifact.id}`,
+    kind: 'artifact',
+    occurredAt: artifact.occurredAt || artifact.createdAt,
+    summary: artifact.title || `${artifact.artifactType} interpretation`,
+    refId: artifact.id,
+    initiativeId: artifact.initiativeId ?? null,
+    attributes: {
+      artifactType: artifact.artifactType,
+      sourceFileId: artifact.sourceFileId,
+      mediaAssetId: artifact.mediaAssetId,
+      entrySource: 'artifact',
+      signals: artifact.signals,
+    },
+  }));
+
+  return [...interactionEntries, ...eventEntries, ...artifactEntries].sort(
     (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
   );
 }
@@ -201,7 +268,7 @@ export type PersonTimelineResult = {
 };
 
 /**
- * Person Timeline (Phase A primary subject).
+ * Person Timeline (Phase A primary subject + Phase B artifacts).
  */
 export async function getPersonTimeline(
   ownerUserId: string,
@@ -223,7 +290,7 @@ export async function getPersonTimeline(
 
   const capped = Math.min(Math.max(limit, 1), 500);
 
-  const [interactionRows, eventRows] = await Promise.all([
+  const [interactionRows, eventRows, artifacts] = await Promise.all([
     db
       .select()
       .from(acquisitionInteractions)
@@ -247,22 +314,26 @@ export async function getPersonTimeline(
       )
       .orderBy(desc(acquisitionEvents.occurredAt))
       .limit(capped),
+    listPersonArtifacts(ownerUserId, personId, capped).catch(() => {
+      // Table may not exist yet on partially migrated envs
+      return [] as ReturnType<typeof mapKnowledgeArtifact>[];
+    }),
   ]);
 
   const person = mapPerson(personRow);
   const interactions = interactionRows.map(mapInteraction);
   const events = eventRows.map(mapEvent);
-  const entries = buildEntries(events, interactions).slice(0, capped);
+  const entries = buildEntries(events, interactions, artifacts).slice(0, capped);
 
   const timeline: Timeline = {
     subjectType: 'person',
     subjectId: person.id,
     ownerUserId: person.ownerUserId,
     organizationId: person.organizationId ?? null,
-    maturity: person.relationshipMaturity ?? null,
+    maturity: (person.relationshipMaturity as RelationshipMaturity) ?? null,
     events,
     interactions,
-    artifacts: [],
+    artifacts,
     evidence: [],
     entries,
   };
@@ -278,6 +349,15 @@ export async function getPersonTimeline(
 export function mergeTimelineEntriesForTest(
   events: AcquisitionEvent[],
   interactions: Interaction[],
+  artifacts: KnowledgeArtifact[] = [],
 ): TimelineEntry[] {
-  return buildEntries(events, interactions);
+  return buildEntries(events, interactions, artifacts);
+}
+
+/** Ensure relationship_maturity column exists (bootstrap). */
+export async function ensureRelationshipMaturityColumn(): Promise<void> {
+  await db.execute(sql`
+    ALTER TABLE "acquisition_persons"
+    ADD COLUMN IF NOT EXISTS "relationship_maturity" text NOT NULL DEFAULT 'unknown'
+  `);
 }

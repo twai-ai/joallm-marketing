@@ -12,6 +12,13 @@ import {
 } from '../database/schema.js';
 import { logger } from '../utils/logger.js';
 import { config } from '../config/config.js';
+import {
+  maxMaturity,
+  maturityFromInteractionCount,
+  maturityFromObservedContact,
+  isRelationshipMaturity,
+  type RelationshipMaturity,
+} from './relationship-maturity.js';
 
 const META_PROVIDER = 'meta_whatsapp';
 
@@ -181,6 +188,7 @@ async function resolveOrCreatePersonByWhatsApp(options: {
       displayName: displayName || waId,
       primaryPhone: waId,
       status: 'identified',
+      relationshipMaturity: 'identified',
       metadata: { source: 'meta_whatsapp' },
     })
     .returning();
@@ -209,6 +217,38 @@ async function resolveOrCreatePersonByWhatsApp(options: {
   }
 
   return person;
+}
+
+async function refreshPersonMaturity(
+  personId: string,
+  floor: RelationshipMaturity = 'unknown',
+): Promise<void> {
+  const [person] = await db
+    .select({
+      id: acquisitionPersons.id,
+      relationshipMaturity: acquisitionPersons.relationshipMaturity,
+    })
+    .from(acquisitionPersons)
+    .where(eq(acquisitionPersons.id, personId))
+    .limit(1);
+  if (!person) return;
+
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(acquisitionInteractions)
+    .where(eq(acquisitionInteractions.personId, personId));
+
+  const fromCount = maturityFromInteractionCount(countRow?.count || 0);
+  const current = isRelationshipMaturity(person.relationshipMaturity)
+    ? person.relationshipMaturity
+    : 'unknown';
+  const next = maxMaturity(maxMaturity(current, fromCount), floor);
+  if (next === current) return;
+
+  await db
+    .update(acquisitionPersons)
+    .set({ relationshipMaturity: next, updatedAt: new Date() })
+    .where(eq(acquisitionPersons.id, personId));
 }
 
 export async function ingestMetaWhatsAppWebhook(options: {
@@ -322,11 +362,26 @@ export async function ingestMetaWhatsAppWebhook(options: {
             .returning();
 
           createdInteractions.push({ id: interaction.id, personId: person.id });
+
+          await refreshPersonMaturity(person.id, 'engaged');
         }
 
         for (const status of value.statuses || []) {
           if (!status.id) continue;
           const occurredAt = toDateFromUnixSeconds(status.timestamp);
+
+          let personId: string | null = null;
+          if (status.recipient_id) {
+            const person = await resolveOrCreatePersonByWhatsApp({
+              ownerUserId: sourceConnection.ownerUserId,
+              waId: status.recipient_id,
+            });
+            personId = person?.id ?? null;
+            if (personId) {
+              await refreshPersonMaturity(personId, maturityFromObservedContact());
+            }
+          }
+
           const [event] = await db
             .insert(acquisitionEvents)
             .values({
@@ -337,6 +392,7 @@ export async function ingestMetaWhatsAppWebhook(options: {
               externalEventId: status.id,
               eventType: `message.${status.status || 'status'}`,
               occurredAt,
+              personId,
               channel: 'whatsapp',
               objectType: 'message_status',
               objectId: status.id,

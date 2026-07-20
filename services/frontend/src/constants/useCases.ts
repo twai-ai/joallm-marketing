@@ -1,6 +1,11 @@
 export type UseCaseStatus = 'active' | 'placeholder';
 export type UseCaseAssetKind = 'media';
-export type UseCaseId = 'media' | 'docs-ai' | 'data-intelligence' | 'acquisition';
+export type UseCaseId =
+  | 'media'
+  | 'docs-ai'
+  | 'data-intelligence'
+  | 'acquisition'
+  | 'marketing-studio';
 
 export interface UseCaseDefinition {
   id: UseCaseId;
@@ -65,6 +70,20 @@ export const USE_CASES: UseCaseDefinition[] = [
     helper: 'Reserved for a guided data-first workflow family once the shared Studio patterns mature further.',
     audience: 'Operators, analysts, and teams working with structured data',
     supportsAssetDetail: false,
+  },
+  {
+    id: 'marketing-studio',
+    label: 'Marketing Studio',
+    shortLabel: 'Marketing',
+    homeRoute: '/studio/marketing',
+    assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
+    status: 'placeholder',
+    description:
+      'Create, review, and publish Marketing Assets (campaigns, creatives, copy) via connectors — not a second CRM.',
+    helper:
+      'Studio = create & publish. ATRISI Marketing = acquire, timeline, knowledge, intelligence. Do not become HubSpot.',
+    audience: 'Growth, communications, and institutional marketing teams',
+    supportsAssetDetail: true,
   },
 ];
 

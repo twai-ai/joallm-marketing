@@ -21,7 +21,7 @@ Media AI is now treated as:
 - focused on `Overview`, `Runs`, `Results`, and `Settings`
 - optimized for ingesting media, generating timeline-aware insights, and turning results into usable outputs
 
-**Architectural convergence:** Media AI is a **Layer 2 Knowledge Interpretation** modality. Call/Zoom/Meet/WhatsApp voice/webinar outputs become interpreted `KnowledgeArtifact`s (topics, questions, commitments, signals) on the Relationship Timeline — not a separate product island. See [Knowledge Acquisition Direction](./KNOWLEDGE_ACQUISITION_DIRECTION.md).
+**Architectural convergence:** Media AI feeds the **Timeline Service** via Knowledge Interpretation (`KnowledgeArtifact`). Call/Zoom/Meet/WhatsApp voice/webinar outputs enrich Person (and later Initiative) timelines — not a separate product island. Build order: Timeline Service (Phase A) → KnowledgeArtifact linkage (Phase B). See [Knowledge Acquisition Direction](./KNOWLEDGE_ACQUISITION_DIRECTION.md).
 
 The current surface intentionally avoids:
 - graph-first workflow composition

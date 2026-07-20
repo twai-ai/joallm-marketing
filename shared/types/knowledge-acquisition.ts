@@ -1,11 +1,11 @@
 /**
  * Institutional Knowledge OS — canonical platform contracts.
  *
- * Constitutional layers:
- *   Knowledge Acquisition → Knowledge Interpretation → Institutional Memory → Institutional Intelligence
+ * Stack: Acquisition → Timeline Service → Interpretation → Memory → Evidence → Intelligence
  *
- * Studio surface today: Acquisition Intelligence
- * KnowledgeArtifact is an interpreted representation (Layer 2), not a raw storage blob.
+ * Studio / product: ATRISI Marketing (Acquisition Intelligence surface)
+ * KnowledgeArtifact = Layer Interpretation output (not a raw storage blob).
+ * Timeline Service is generic (Person, Initiative, Campaign, Organization, …).
  *
  * Phase 1 tenancy uses ownerUserId (+ optional organizationId).
  * Target uniqueness: organizationId + provider + externalId.
@@ -300,23 +300,18 @@ export interface KnowledgeArtifact {
 }
 
 /**
- * First-class Relationship Timeline — canonical view of a Person.
- * Studio and all verticals query this service; do not fork per-product timelines.
+ * Timeline Service — generic chronological view for any institutional subject.
+ * Prefer Timeline over RelationshipTimeline; timelines are not Person-only.
  */
-export interface RelationshipTimeline {
-  personId: string;
-  ownerUserId: string;
-  organizationId?: string | null;
-  maturity?: RelationshipMaturity | null;
-  events: AcquisitionEvent[];
-  interactions: Interaction[];
-  artifacts: KnowledgeArtifact[];
-  evidence?: Evidence[];
-  /** Reserved for decisions, learning activities, communications, outcomes as they land */
-  entries?: RelationshipTimelineEntry[];
-}
+export type TimelineSubjectType =
+  | 'person'
+  | 'initiative'
+  | 'campaign'
+  | 'organization'
+  | 'institution'
+  | 'program';
 
-export type RelationshipTimelineEntryKind =
+export type TimelineEntryKind =
   | 'event'
   | 'interaction'
   | 'artifact'
@@ -326,15 +321,40 @@ export type RelationshipTimelineEntryKind =
   | 'evidence'
   | 'outcome';
 
-export interface RelationshipTimelineEntry {
+export interface TimelineEntry {
   id: string;
-  kind: RelationshipTimelineEntryKind;
+  kind: TimelineEntryKind;
   occurredAt: string;
   summary?: string | null;
   refId: string;
   initiativeId?: string | null;
   attributes?: Record<string, unknown>;
 }
+
+export interface Timeline {
+  subjectType: TimelineSubjectType;
+  subjectId: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  /** Present when subjectType === 'person' */
+  maturity?: RelationshipMaturity | null;
+  events?: AcquisitionEvent[];
+  interactions?: Interaction[];
+  artifacts?: KnowledgeArtifact[];
+  evidence?: Evidence[];
+  entries: TimelineEntry[];
+}
+
+/** @deprecated Prefer Timeline — kept for compatibility during Phase A */
+export type RelationshipTimeline = Timeline & {
+  personId: string;
+};
+
+/** @deprecated Prefer TimelineEntryKind */
+export type RelationshipTimelineEntryKind = TimelineEntryKind;
+
+/** @deprecated Prefer TimelineEntry */
+export type RelationshipTimelineEntry = TimelineEntry;
 
 /** Attribution of an event/interaction to an initiative (and optional campaign). */
 export interface Attribution {
@@ -349,6 +369,51 @@ export interface Attribution {
   confidence: number;
   method: 'explicit' | 'inferred' | 'manual' | 'rule';
   createdAt: string;
+}
+
+// ─── Studio Marketing Asset (create/publish — not ATRISI Marketing core) ─────
+
+export type MarketingAssetKind =
+  | 'linkedin_post'
+  | 'x_thread'
+  | 'instagram_caption'
+  | 'meta_ad'
+  | 'whatsapp_broadcast'
+  | 'email'
+  | 'blog'
+  | 'landing_page'
+  | 'video'
+  | 'image'
+  | 'brochure'
+  | 'other';
+
+export type MarketingAssetStatus =
+  | 'draft'
+  | 'in_review'
+  | 'approved'
+  | 'scheduled'
+  | 'published'
+  | 'archived';
+
+/**
+ * Content as an institutional asset (lives in Studio / Marketing Studio).
+ * Publishing via connectors emits AcquisitionEvents into ATRISI Marketing.
+ */
+export interface MarketingAsset {
+  id: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  initiativeId?: string | null;
+  campaignId?: string | null;
+  kind: MarketingAssetKind;
+  title: string;
+  status: MarketingAssetStatus;
+  body?: string | null;
+  versions?: Record<string, unknown>[];
+  publishingTargets?: string[];
+  knowledgeDocumentId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ─── Phase 2+ contracts (types only until ingestion is reliable) ──────────────

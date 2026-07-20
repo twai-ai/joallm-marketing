@@ -3,6 +3,10 @@ export const PLATFORM_NAME = 'ATRISI Marketing';
 export const PLATFORM_SHORT_NAME = 'ATRISI';
 export const PLATFORM_TAGLINE = 'Institutional knowledge and relationship intelligence';
 
+/** Constitutional: Studio creates. Products operate. Platform remembers. */
+export const PLATFORM_CONSTITUTION =
+  'Studio creates. Products operate. Platform remembers.';
+
 export const PRODUCT_LABELS = {
   media: 'Media AI',
   chat: 'Chat',

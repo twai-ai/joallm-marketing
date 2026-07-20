@@ -2,22 +2,29 @@
 
 Status: **constitutional platform direction**  
 Last updated: 2026-07-20  
-Studio surface today: **Acquisition Intelligence** (do not rename until deliberate)
+Studio surface today: **Acquisition Intelligence** → product brand **ATRISI Marketing**  
+Platform constitution: [PLATFORM_CONSTITUTION.md](./PLATFORM_CONSTITUTION.md) — *Studio creates. Products operate. Platform remembers.*
 
 ## Principle
 
-**Do not pivot.** The current Acquisition Intelligence implementation is the Layer 1 foundation.
+**Do not pivot.** Acquisition Intelligence remains the Layer 1 foundation.
 
-Long-term destination is not Marketing Automation or even “Relationship Intelligence” alone — it is an **Institutional Knowledge Operating System** that every vertical reuses (Education, Research, Healthcare, Manufacturing, Media).
+**Constitutional rule (entire JoaLLM / ATRISI platform):**
+
+> **Studio creates. Products operate. Platform remembers.**
+
+Destination: an **Institutional Knowledge Operating System** — not marketing automation, and not a HubSpot clone.
 
 ```text
 Knowledge Acquisition
         ↓
+Timeline Service
+        ↓
 Knowledge Interpretation
         ↓
-Relationship Timeline
-        ↓
 Institutional Memory
+        ↓
+Evidence
         ↓
 Institutional Intelligence
         ↓
@@ -26,254 +33,256 @@ Journey Intelligence
 Automation
 ```
 
-Roles in that stack:
-
 | Actor | Role |
 |---|---|
 | Meta / WhatsApp / Website / … | Contribute knowledge (execute externally) |
-| Media AI / interpreters | Interpret knowledge |
-| Relationship Timeline | Organize knowledge |
-| Institutional Memory | Preserve knowledge |
+| **Timeline Service** | Organize knowledge (before and after interpretation) |
+| Media AI / interpreters | Interpret knowledge into KnowledgeArtifacts |
+| Institutional Memory | Preserve the graph |
+| Evidence | Derive claims from timelines |
 | AI | Reason over knowledge |
 | Automation | Execute decisions through external systems |
 
-Studio surface remains **Acquisition Intelligence** until product rename is deliberate. Internal module rename `acquisition/` → `knowledge-acquisition/` is gradual and non-breaking.
+**Why Timeline sits before Interpretation:** raw events already need a home. Interpretation enriches the same timeline; it does not create it.
 
 ---
 
-## Four constitutional layers
+## Brain vs Execution (anti-HubSpot rule)
+
+Instance of the platform constitution: **Studio creates. Products operate. Platform remembers.**  
+Full rule: [PLATFORM_CONSTITUTION.md](./PLATFORM_CONSTITUTION.md).
+
+Do **not** become everything (CRM + CMS + email builder + social scheduler + SEO + ads + forms + analytics). That path made HubSpot, Marketo, and Salesforce Marketing Cloud mediocre at many jobs.
+
+Separate **Brain** from **Execution**:
 
 ```text
-Knowledge Acquisition
-        │
-        ▼
-Knowledge Interpretation
-        │
-        ▼
-Institutional Memory
-        │
-        ▼
-Institutional Intelligence
+Studio                          ATRISI Marketing
+────────                        ────────────────
+Create                          Acquire
+Review                          Timeline
+Approve                         Knowledge
+Publish (via connectors)        Intelligence
+Creative collaboration          Analytics / outcomes
 ```
 
-### Layer 1 — Knowledge Acquisition (current work)
+| Question | Wrong answer | Right answer |
+|---|---|---|
+| Should ATRISI Marketing create content? | Build an email/LP/social suite inside Marketing | Content lives in **Studio** |
+| Should we build a Facebook scheduler? | Yes, ship our own | No — **connector** to Meta / LinkedIn / X / Brevo / WordPress |
+| Where does a LinkedIn post live? | As a channel-specific blob | As a **Marketing Asset** with versions, approvals, targets, performance |
 
-Acquire **everything**: Meta, website, WhatsApp, email, meetings, media, Builder Challenge, education platform, documents, research, operational events.
-
-Output (immutable pipeline):
+### Studio = creative workspace
 
 ```text
-Raw Acquisition → Canonical Event → Identity → Timeline spine
+Studio
+├── Chat
+├── Knowledge
+├── Media Intelligence
+├── Documents
+├── Marketing Studio          ← create / review / publish
+│     ├── Campaigns
+│     ├── Content Library     (RAG-searchable)
+│     ├── Creative Assistant
+│     ├── Media Library
+│     ├── Publishing          (connectors only)
+│     └── Analytics
+└── Research
 ```
 
-Connectors normalize only. No business-specific logic inside connectors. Raw records stay immutable.
-
-### Layer 2 — Knowledge Interpretation
-
-**KnowledgeArtifact belongs here** — it is an *interpreted representation*, not a storage blob.
+### ATRISI Marketing = operational brain
 
 ```text
-Zoom Recording
-  → Transcript → Speakers → Topics → Questions → Commitments
-  → Sentiment → Capability Signals
-  → KnowledgeArtifact
+Acquire → Remember → Understand → Measure → Optimize
 ```
+
+Not: email builder, landing-page builder, workflow builder (out of Marketing v1 and not a Marketing product island).
+
+### Marketing Asset (content as institutional asset)
 
 ```text
-Email
-  → Thread → Intent → Action Items
-  → KnowledgeArtifact
+Campaign → Marketing Asset → Versions → Approvals
+         → Publishing Targets → Performance → Knowledge
 ```
 
-Media AI is one interpretation modality of Layer 2, not a separate product island.
+One asset may fan out (via AI in Studio) to LinkedIn, X, Instagram, WhatsApp, blog, email, landing page — still one asset in memory.
 
-Raw content may still live in files / RAG / pgvector. The artifact is the structured interpretation that Institutional Memory can cite.
-
-### Layer 3 — Institutional Memory
-
-Where the graph forms:
+### Publishing joins the graph
 
 ```text
-Person → Interactions → KnowledgeArtifacts → Evidence → Timeline → Initiative
+Publish (Studio connector)
+  → Acquisition Event (source=linkedin, campaign=…, asset=…)
+  → Person Timeline (asset.viewed / engaged)
+  → later: “Which posts produced mentors?”
 ```
 
-Postgres holds operational truth (identity, chronology, attribution, consent, decisions).  
-pgvector / RAG holds semantic content referenced by artifacts.
+Content impact, not vanity engagement.
 
-### Layer 4 — Institutional Intelligence
-
-Only here should AI produce **intelligence products** (recommendations), not stored facts:
-
-```text
-Ready for Interview · Needs Faculty Follow-up · High Builder Potential
-Scholarship Candidate · Likely Mentor · Research Interest
-```
-
-These are derived from Evidence over Institutional Memory — never CRM lead temperatures.
+**Build Marketing Studio later as a Studio capability** — after Timeline Service (Phase A) and KnowledgeArtifact (Phase B). Do not let Marketing Studio become a second CRM or replace ATRISI Marketing.
 
 ---
 
-## Mindset shift (non-negotiable)
+## Timeline Service (not “Relationship Timeline”)
 
-Marketo asks: *How do I convert a lead?*  
-JoaLLM asks: *How does a person evolve over time?*
-
-Most marketing platforms optimize for acquisition:
+Name it **Timeline Service** — timelines are not Person-only.
 
 ```text
-Ads → Lead → Email → Sale
+Person Timeline
+Initiative Timeline
+Campaign Timeline
+Organization Timeline
+Institution Timeline
+Program Timeline
 ```
 
-ATRISI / JoaLLM optimize for human development and institutional outcomes:
-
-```text
-Ads → Person → Engagement → Learning → Capability → Outcome → Institutional Memory
-```
-
-**Do not replace** what Meta is good at (ads, CPC, CTR, conversion optimization). **Ingest, interpret, and remember** what Meta cannot see after the click.
-
----
-
-## Relationship Maturity (evolves the capability funnel)
-
-Prefer maturity stages over lead → apply → enroll funnels:
-
-```text
-Unknown → Observed → Identified → Engaged → Participating
-→ Contributing → Leading → Mentoring → Partnering
-```
-
-Strategic query example:
-
-```text
-Source = Meta AND Relationship Stage = Mentoring
-```
-
-That is institutional intelligence — not a conversion report.
-
-Activity funnels (WhatsApp → webinar → challenge → cohort → intern → founder) remain useful **metrics** on top of maturity; maturity is the constitutional person state.
-
----
-
-## Relationship Timeline (first-class platform service)
-
-After KnowledgeArtifact, introduce **Relationship Timeline** as its own service — not merely “person events.”
+Canonical Person view (Phase A):
 
 ```text
 Person
   └── Timeline
         ├── Events
         ├── Knowledge Artifacts
-        ├── Decisions
-        ├── Learning
         ├── Communications
+        ├── Decisions
         ├── Evidence
+        ├── Learning
         └── Outcomes
 ```
 
-The timeline is the **canonical view of a person**. Studio, AI, admissions, marketing, and partnerships all query that timeline.
-
-Today’s Studio person timeline is a Phase 1 projection of this service (interactions only). Do not fork per-vertical timelines.
+Every future module consumes this service. Studio’s current interaction list is a Phase-1 projection only.
 
 ---
 
-## North-star scenario: Amplify with AI — July 2026
+## Build priority (reordered checkpoint)
 
-| Day | Layer | What happens |
-|---|---|---|
-| 1 | Acquisition | Meta lead → Raw → `form.submitted` → Person + Campaign + UTM/device |
-| 2 | Acquisition | Website `page.viewed` / `program.viewed` / `cta.clicked` |
-| 3 | Acquisition | WhatsApp join → `message.received` |
-| 4 | Interpretation | Webinar → Media AI → KnowledgeArtifact (topics, pricing Q, Python, Bangalore, startup) |
-| 5 | Memory | Builder Challenge started/completed + score on timeline |
-| 6 | Memory | Application; identity already resolved — graph connects |
+Do **not** rush Initiative Intelligence.
 
-Advisor view (maturity + timeline, not “Warm”):
+### Phase A — Finish the Person Timeline *(next)*
+
+Core of ATRISI Marketing. The object every module will consume.
+
+### Phase B — KnowledgeArtifact + Media AI linkage
 
 ```text
-Aman Sharma · First seen: Meta · July 14
-Maturity: Participating → ready for Contributing
-✔ Meta form · ✔ AI Builder page · ✔ WhatsApp · ✔ Webinar
-✔ Asked pricing · ✔ Builder Challenge 81%
-Intelligence: Ready for Interview
+Call → Transcript → KnowledgeArtifact → Timeline
 ```
 
-Capability / outcome roll-up for ₹100,000 → “300 Meta leads” eventually expands through maturity and outcomes (WhatsApp → webinar → challenge → apply → cohort → intern → founder). Chat over memory (Layer 4) only after Evidence is trustworthy.
+“Meeting attended” becomes meeting → transcript → questions → action items → commitments.
 
-| Narrative | Object / layer |
-|---|---|
-| Amplify with AI | `Initiative` (Memory) |
-| July Meta creative | `Campaign` under Initiative |
-| Aman Sharma | `Person` + `PersonIdentity` |
-| Day activity | Raw → Event → Interaction (Acquisition) |
-| Webinar insights | Knowledge Interpretation → `KnowledgeArtifact` |
-| Mentoring years later | Relationship Maturity + Timeline Outcomes |
-| Ready for Interview | Institutional Intelligence product |
-
----
-
-## What exists today (keep)
-
-| Layer | Status |
-|---|---|
-| L1 Meta WhatsApp → BullMQ ingest | Live |
-| L1 Person / identity / raw / event / interaction | Live |
-| L1 Studio timeline projection | Live (interactions only) |
-| Initiative / Campaign schema | Present; APIs/UI next |
-| L2 KnowledgeArtifact | Contracts only — implement next |
-| L3 Evidence / Maturity | Deferred |
-| L4 Intelligence products | Deferred |
-| `ownerUserId` tenancy | Phase 1 acceptable |
-
-See also: [Acquisition Intelligence Phase 1](../02-features/ACQUISITION_INTELLIGENCE_PHASE1.md)
-
----
-
-## Milestone order
-
-**Not** more connectors first.
-
-1. **Shared contracts** — done / ongoing (`shared/types/knowledge-acquisition.ts`)
-2. **Knowledge Interpretation: KnowledgeArtifact** — interpreted outputs from Media AI + messages + docs
-3. **Relationship Timeline service** — first-class Person timeline API (events, artifacts, decisions, learning, evidence, outcomes)
-4. **Initiative Intelligence** — attribution roll-up to Initiative
-5. **Relationship Maturity** — constitutional stage on Person (Evidence-backed transitions)
-6. **Institutional Memory: Evidence** — precedes scoring
-7. **Institutional Intelligence** — recommendations as derived products
-8. **Identity constitutionalization** + org tenancy (`organizationId + provider + externalId`)
-9. **Module rename** — `acquisition/` → `knowledge-acquisition/`
-10. **Journey Intelligence → Automation** — last layers only
-
-### Explicitly deferred
-
-Lead Score as a primary object. Evidence precedes scoring. Automation is last.
-
----
-
-## Shared contracts (target)
+### Phase C — Initiative Intelligence
 
 ```text
-Person · PersonIdentity · SourceConnection · RawAcquisitionRecord
-AcquisitionEvent · Interaction · KnowledgeArtifact · Initiative · Campaign
-Attribution · RelationshipMaturity · RelationshipTimeline (view/service)
-Journey · Evidence · Signal
+Initiative → Campaign → Touchpoints → Timeline → Capability Funnel
 ```
 
-Legacy aliases `AcquisitionPerson*` remain for compatibility.
+Initiatives aggregate timelines; they are not built first.
+
+### Phase D — Evidence
+
+Derived from timelines (e.g. visited 4× + challenge complete + asked pricing → Builder Intent).
+
+### Phase E — Institutional Intelligence
+
+AI answers: who completes, who to call, which campaigns produce builders/mentors.
+
+---
+
+## Immutable acquisition spine
+
+```text
+Webhook → Raw → Canonical Event → Identity → Timeline Service
+```
+
+Connectors normalize only. No business logic in connectors. Raw records immutable.
+
+---
+
+## Knowledge Interpretation (Phase B)
+
+KnowledgeArtifact = *interpreted representation*, not a storage blob.
+
+Media AI is one interpretation modality feeding the Timeline Service.
+
+---
+
+## ATRISI Marketing v1 — what ships
+
+```text
+✓ Source Connectors
+✓ Identity Resolution
+✓ Unified Timeline          ← Phase A
+✓ Knowledge Artifacts       ← Phase B
+✓ Campaign Attribution      ← Phase C
+✓ Initiative Dashboard      ← Phase C
+✓ Capability Funnel         ← Phase C/D
+✓ AI Search                 ← Phase E
+```
+
+**Explicitly out of Marketing v1 / never as Marketing-owned builders:**
+
+```text
+✗ Email builder
+✗ Landing page builder
+✗ Social scheduler (own)
+✗ CMS / blog engine
+✗ Workflow builder as marketing core
+```
+
+Those belong in **Studio → Marketing Studio** later, publishing through connectors so events feed ATRISI Marketing.
+
+---
+
+## First “wow” moment
+
+Open a Person. See everything — Meta lead → website → WhatsApp → webinar (with interpreted transcript) → Builder Challenge 81% → interview → enrolled.
+
+Then: *Show me everyone like Aman* / *Compare Aman to people who became mentors.*
+
+That is when users stop seeing “marketing software” and see an **AI-native relationship intelligence platform**.
+
+---
+
+## Practical gate before `main`
+
+**Dogfood ATRISI Marketing on ATRISI itself:** connect real Meta campaigns, atrisi.org, WhatsApp, webinars, Builder Challenge, and Education Platform. If the team can answer Amplify with AI funnel questions without spreadsheets, architecture and product direction are validated.
+
+Merge / Railway follow dogfood readiness — do not expand features to compensate for an unproven timeline.
+
+---
+
+## Mindset
+
+Marketo: *How do I convert a lead?*  
+ATRISI Marketing: *How does a person evolve over time?*
+
+Optimize for human development and institutional outcomes — not CPC/CTR alone.
+
+Relationship Maturity (constitutional person state):
+
+```text
+Unknown → Observed → Identified → Engaged → Participating
+→ Contributing → Leading → Mentoring → Partnering
+```
+
+---
+
+## What exists today
+
+| Capability | Status |
+|---|---|
+| Meta WhatsApp → BullMQ → Person timeline (interactions) | Live |
+| Identity / raw / event / interaction tables | Live |
+| Shared contracts (incl. Timeline + KnowledgeArtifact types) | Live |
+| ATRISI Marketing branding + institutional Studio UI | Live |
+| Timeline Service (generic, multi-subject) | **Phase A — next** |
+| KnowledgeArtifact persistence + Media AI link | Phase B |
+| Initiative APIs / dashboard | Phase C |
+| Evidence / Intelligence | Phase D / E |
+| Dogfood on ATRISI ops | Gate before main |
 
 ---
 
 ## Tenancy
 
 Phase 1: `ownerUserId` (+ optional `organizationId`).  
-Target: `Organization → Workspace → Owner → Users` with identity uniqueness `organizationId + provider + externalId`, backward compatible.
-
----
-
-## Immutable L1 pipeline
-
-```text
-Webhook → Raw Acquisition → Canonical Event → Identity Resolution → Timeline spine
-```
-
-Interpretation, maturity, intelligence, and automation attach **above** this spine. They must not rewrite raw history.
+Target: org-scoped uniqueness `organizationId + provider + externalId`.

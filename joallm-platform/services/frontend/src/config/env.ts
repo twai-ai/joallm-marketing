@@ -1,14 +1,36 @@
 // Environment configuration with validation
 import { z } from 'zod';
 
+/** Must match Dockerfile build placeholder. Do not put this literal in other checks —
+ *  entrypoint.sh sed-replaces every occurrence in the JS bundle at runtime. */
+const API_URL_BUILD_PLACEHOLDER = '__API_URL_PLACEHOLDER__';
+const API_BASE_URL_BUILD_PLACEHOLDER = '__API_BASE_URL_PLACEHOLDER__';
+
 function normalizeApiUrl(raw: unknown, fallback: string): string {
   const value = String(raw ?? '').trim().replace(/\/$/, '');
-  if (!value || value.includes('__API_URL_PLACEHOLDER__') || value.includes('__API_BASE_URL_PLACEHOLDER__')) {
+  if (
+    !value ||
+    value.includes(API_URL_BUILD_PLACEHOLDER) ||
+    value.includes(API_BASE_URL_BUILD_PLACEHOLDER)
+  ) {
     return fallback;
   }
   if (/^https?:\/\//i.test(value)) return value;
   if (value.includes('localhost') || value.startsWith('127.')) return `http://${value}`;
   return `https://${value}`;
+}
+
+function isUnusableApiUrl(api: string): boolean {
+  const value = api.trim().toLowerCase();
+  return (
+    !value ||
+    value.includes('localhost') ||
+    value.includes('127.0.0.1') ||
+    value.includes('railway.internal') ||
+    // leftover build tokens (split so runtime sed cannot rewrite this check)
+    value.includes('__api_url_') ||
+    value.includes('__api_base_url_')
+  );
 }
 
 const envSchema = z.object({
@@ -63,12 +85,7 @@ export function resolveApiBaseUrl(): string {
 
 export function isApiUrlMisconfigured(): boolean {
   if (env.VITE_APP_ENV !== 'production') return false;
-  const api = resolveApiBaseUrl();
-  return (
-    api.includes('localhost') ||
-    api.includes('127.0.0.1') ||
-    api.includes('__API_URL_PLACEHOLDER__')
-  );
+  return isUnusableApiUrl(resolveApiBaseUrl());
 }
 
 // Log configuration in development

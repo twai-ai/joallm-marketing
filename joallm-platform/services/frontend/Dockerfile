@@ -3,13 +3,11 @@ FROM node:18-alpine as builder
 
 WORKDIR /app
 
-# Use placeholders so the built bundle can have URLs swapped at runtime
-ARG VITE_API_URL=__API_URL_PLACEHOLDER__
-ARG VITE_API_BASE_URL=__API_BASE_URL_PLACEHOLDER__
+# Force placeholders at build time even if Railway injects VITE_* as build env.
+# Runtime entrypoint.sh substitutes the real public HTTPS API URL into the bundle.
 ARG VITE_APP_ENV=production
-
-ENV VITE_API_URL=${VITE_API_URL}
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_API_URL=__API_URL_PLACEHOLDER__
+ENV VITE_API_BASE_URL=__API_BASE_URL_PLACEHOLDER__
 ENV VITE_APP_ENV=${VITE_APP_ENV}
 
 # Copy package files
@@ -52,4 +50,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-5174}/ || exit 1
 
 # Substitute runtime env vars into the bundle, then start serve
-CMD ["./railway-start.sh"]
+CMD ["./entrypoint.sh"]

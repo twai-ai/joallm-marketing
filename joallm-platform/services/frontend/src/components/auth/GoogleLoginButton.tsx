@@ -8,14 +8,15 @@ interface GoogleLoginButtonProps {
 
 export function GoogleLoginButton({ className = '', children }: GoogleLoginButtonProps) {
   const handleGoogleLogin = () => {
+    const apiUrl = resolveApiBaseUrl();
     if (isApiUrlMisconfigured()) {
       showError(
         'API URL not configured',
-        'Set frontend VITE_API_URL to your live backend HTTPS URL, then redeploy.',
+        `Frontend resolved API as "${apiUrl}". Set VITE_API_URL=https://joallm-marketing-backend-production.up.railway.app and redeploy.`,
       );
       return;
     }
-    window.location.href = `${resolveApiBaseUrl()}/api/auth/google`;
+    window.location.href = `${apiUrl}/api/auth/google`;
   };
 
   return (

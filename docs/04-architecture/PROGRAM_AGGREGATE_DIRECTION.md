@@ -61,6 +61,7 @@ education.atrisi.org
 - **atrisi.org** and **education.atrisi.org** are stable systems of record on the server — do not re-implement them here.
 - This product is **marketing and advertisement only**: attract students/prospects from the market.
 - Program names/ids here are **ad targeting context**, not a competing program registry.
+- **When atrisi.org adds programs, this platform updates its targeting catalog** (reference list for campaigns/ads) — Education continues to take full program/job defs from atrisi.org.
 - Own: creatives, campaigns, publish, channel ingest, acquisition intelligence.
 - Education may later **pull** acquisition outcomes; it already owns programs/jobs via atrisi.org.
 

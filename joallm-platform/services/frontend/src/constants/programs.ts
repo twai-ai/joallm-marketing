@@ -118,5 +118,14 @@ export function getProgramById(id: string): ProgramDefinition | undefined {
   return ATRISI_PROGRAMS.find((program) => program.id === id);
 }
 
-/** Dogfood Program for first Program Marketing Workspace */
+/** Dogfood Program for first Growth campaigns */
 export const PRIMARY_GROWTH_PROGRAM = getProgramById('amplify-with-ai')!;
+
+/**
+ * When atrisi.org adds programs, update ATRISI_PROGRAMS here (or a future
+ * catalog sync). This list is campaign/ad targeting context only — not SoR.
+ * Education continues to load full program/job defs from atrisi.org.
+ */
+export const PROGRAM_CATALOG_NOTE =
+  'Targeting catalog mirrors atrisi.org/programs; grows as new Programs are published.';
+

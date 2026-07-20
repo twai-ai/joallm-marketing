@@ -49,23 +49,18 @@ export function MarketingStudioPage() {
           </button>
         </>
       }
-      secondaryPanelTitle="Program Workspace (coming)"
-      secondaryPanelBody={`Tabs: ${ONTOLOGY.programCapabilities.join(' · ')}. Selecting Growth opens campaigns, creatives, channels, and applications for that Program.`}
+      secondaryPanelTitle="Core vs Capability"
+      secondaryPanelBody="Program Core defines what the Program is. Growth (and Admissions, Learning, …) are attached capabilities — not fields on Core."
       secondaryPanelContent={
-        <div className="space-y-2 text-sm text-slate-200">
-          {ONTOLOGY.programCapabilities.map((tab) => (
-            <div
-              key={tab}
-              className={`rounded-lg border px-3 py-2 font-medium ${
-                tab === 'Growth'
-                  ? 'border-teal-400/40 bg-teal-500/15 text-teal-100'
-                  : 'border-white/10 bg-white/5 text-slate-200'
-              }`}
-            >
-              {tab}
-              {tab === 'Growth' ? ' ← this Studio' : ''}
-            </div>
-          ))}
+        <div className="space-y-3 text-sm">
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-xs uppercase tracking-wide text-teal-200/80">Program.Core</div>
+            <div className="mt-1 text-slate-200">{ONTOLOGY.programCore.join(' · ')}</div>
+          </div>
+          <div className="rounded-lg border border-teal-400/40 bg-teal-500/15 px-3 py-2">
+            <div className="text-xs uppercase tracking-wide text-teal-200">Capabilities</div>
+            <div className="mt-1 text-teal-50">{ONTOLOGY.programCapabilities.join(' · ')}</div>
+          </div>
         </div>
       }
     >
@@ -136,12 +131,13 @@ export function MarketingStudioPage() {
             <h2 className="text-lg font-semibold text-slate-950">Growth workspace (under Program)</h2>
           </div>
           <p className="mt-2 text-sm text-slate-600">
-            When a Program opens, Growth exposes: {ONTOLOGY.growthWorkspace.join(' · ')}.
+            Workspace tabs: {ONTOLOGY.programWorkspaceTabs.join(' · ')}. Growth owns:{' '}
+            {ONTOLOGY.growthAggregate.join(' · ')}.
           </p>
           <ul className="mt-4 space-y-2 text-sm text-slate-600">
-            <li>· Dogfood first: {PRIMARY_GROWTH_PROGRAM.name}</li>
-            <li>· North star: {ONTOLOGY.analyticsNorthStar.join(' · ')}</li>
-            <li>· Brain stays cross-program; Workspace stays program-specific</li>
+            <li>· Pattern: Capability = Strategy · Operations · Timeline · Intelligence · Analytics</li>
+            <li>· Dogfood: {PRIMARY_GROWTH_PROGRAM.name}</li>
+            <li>· Next: Program + ProgramCore types/schema — then Growth objects</li>
           </ul>
           <p className="mt-4 text-xs text-slate-500">{PLATFORM_CONSTITUTION}</p>
         </section>

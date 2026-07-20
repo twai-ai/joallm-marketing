@@ -25,6 +25,19 @@ Their unit of work is always a **Program** (or Program-like object).
 
 ---
 
+## Relationship to Capability Pattern
+
+Program Growth is the first **instantiation** of [INSTITUTION_CAPABILITY_PATTERN.md](./INSTITUTION_CAPABILITY_PATTERN.md).
+
+Growth is attached to Program — it is **not** Program Core data.
+
+```text
+Program.Core     → what the Program is
+Program.Growth   → how we attract participants
+```
+
+---
+
 ## Relationship to Program Aggregate
 
 Program Growth is a **capability**, not the root product.

@@ -11,27 +11,20 @@ Last updated: 2026-07-21
 
 > **Studio owns creative intent. Platform owns generative capability.**
 
-> **Program is the primary growth object. Campaigns live under Programs.**
+> **Institution Capability is the philosophy. Program is the aggregate. Capabilities attach — they are not Core fields.**
 
-> **Institution Capability is the philosophy. Program is the aggregate. Growth is one capability.**
+> **Every Capability follows Strategy · Operations · Timeline · Intelligence · Analytics.**
 
-These apply to the entire JoaLLM platform and every ATRISI product — not only ATRISI Marketing (cross-program Brain).
+These apply to the entire JoaLLM platform and every ATRISI product.
 
 ```text
-Institution
-        │
-        ▼
-Program   ← durable business object
-        │
-        ├── Growth / Admissions / Learning / Assessment / Placement / Alumni
-        │
-        ▼
-Studio (capability workspaces) → Platform (Connectors · Creative AI · Timeline)
+Institution → Program.Core + Capabilities → Workspace → Platform
 ```
 
-Canonical framing:
-- [PROGRAM_AGGREGATE_DIRECTION.md](./PROGRAM_AGGREGATE_DIRECTION.md) — Program OS model  
-- [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md) — Growth capability  
+Foundational docs:
+- [INSTITUTION_CAPABILITY_PATTERN.md](./INSTITUTION_CAPABILITY_PATTERN.md) — reusable capability shape  
+- [PROGRAM_AGGREGATE_DIRECTION.md](./PROGRAM_AGGREGATE_DIRECTION.md) — Core vs Capability  
+- [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md) — Growth instantiation  
 
 ---
 
@@ -44,15 +37,12 @@ Canonical framing:
 | **Platform** | Shared constitutional services + Integration + **Creative AI** | Identity, Timeline, Knowledge, Connectors, Generative media |
 | **External** | Delivery, vendor AI models, optimization | Ads, email, LMS, image/video APIs |
 
-### ATRISI Marketing = cross-program Brain; Growth = Program capability
+### ATRISI = Institution Capability on Programs
 
-The durable object is **Program**. Marketing / Program Growth is one **capability** under Program (peer to Admissions, Learning, Assessment).
+Durable aggregates: Institution · Program · Person.  
+**Program.Core** defines what a Program is. **Capabilities** (Growth, Admissions, Learning, …) attach — they are not Core fields.
 
-```text
-Institution → Program → Growth | Admissions | Learning | …
-```
-
-See [PROGRAM_AGGREGATE_DIRECTION.md](./PROGRAM_AGGREGATE_DIRECTION.md) and [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md). Do not become a generic marketing suite. Do not invent a root object per module.
+See [INSTITUTION_CAPABILITY_PATTERN.md](./INSTITUTION_CAPABILITY_PATTERN.md). Do not invent a root object per module. Do not become a generic marketing suite.
 
 ### Studio must not become another product
 

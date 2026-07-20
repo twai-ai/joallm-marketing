@@ -1,57 +1,83 @@
 /**
- * ATRISI product ontology — user-facing vocabulary.
+ * Stabilized ontology for ATRISI Institution Operating System.
  *
- * Philosophy: Institution Capability.
- * Aggregate: Program (not Campaign, not Marketing).
- * Growth / Marketing is one capability under Program.
+ * Philosophy: Institution Capability
+ * Aggregates: Institution · Program · Person
+ * Pattern: Core (owned state) vs Capability (attached workspace)
  *
- * See docs/04-architecture/PROGRAM_AGGREGATE_DIRECTION.md
+ * docs/04-architecture/INSTITUTION_CAPABILITY_PATTERN.md
+ * docs/04-architecture/PROGRAM_AGGREGATE_DIRECTION.md
  */
 
 export const ONTOLOGY = {
   constitution: 'Studio creates. Products operate. Platform remembers.',
-  philosophy: 'Institution Capability — Programs are how institutions deliver outcomes.',
+  philosophy: 'Institution Capability — capabilities plug into durable aggregates.',
   product: {
     name: 'ATRISI Marketing',
     shortName: 'ATRISI',
     role: 'Brain',
-    capability: 'Program Growth',
-    tagline: 'Programs first — Growth to Learning',
+    capability: 'Growth',
+    tagline: 'Programs first — capabilities plug in',
     meaning:
-      'Cross-program Brain for Growth intelligence. Day-to-day work happens in Program Workspaces (Growth, Admissions, Learning, …).',
+      'Cross-program Growth Brain. Operations live in Program Capability Workspaces (Growth, Admissions, Learning, …).',
   },
   studio: {
     name: 'Studio',
     role: 'Create',
     meaning:
-      'Entry to Program catalog and capability workspaces. Growth starts from a Program — never a blank campaign canvas.',
+      'Capability Workspaces on Programs. Marketing Studio is the transitional entry to Program → Growth.',
   },
   platform: {
     name: 'Platform',
     role: 'Remember & execute',
     meaning:
-      'Shared Identity, Timeline, Knowledge, Integration (Connectors), and Creative AI.',
+      'Timeline, Knowledge, Identity, Connectors, Creative AI — consumed by every Capability Workspace.',
   },
-  terms: {
-    institution: 'Operating context / buyer — owns many Programs.',
-    program:
-      'Primary aggregate — course, bootcamp, workshop, event, or initiative (see atrisi.org/programs).',
-    capability:
-      'Workspace under a Program: Growth, Admissions, Learning, Assessment, Placement, Alumni.',
-    growth: 'Program capability for campaigns, creatives, channels, applications (Program Growth).',
-    campaign: 'Growth intent under a Program (Launch, Deadline, Scholarship, …).',
-    creativeProject: 'Work unit under a Campaign that produces Marketing Assets.',
-    marketingAsset: 'Creative content ready to publish via Channels for a Program Campaign.',
-    channel: 'Business destination for publish/acquire (e.g. WhatsApp, LinkedIn Organic).',
-    connector: 'Technical integration owned by Platform (OAuth, secrets, API client).',
-    publishingProfile: 'Studio defaults for publishing to a Channel.',
-    generationProfile: 'Studio creative intent (style + quality); Platform routes providers.',
-    person: 'Institutional relationship entity with a Timeline (prospect → applicant → learner).',
-    timeline: 'Chronological spine — attributable to Program / Campaign / capability.',
-    knowledgeArtifact: 'Interpreted knowledge derived from media, documents, or acquisition.',
-    application: 'Handoff from Growth toward Admissions → Enrollment → Learning.',
-  },
+
+  /** Durable roots — capabilities never invent a new root */
+  aggregates: ['Institution', 'Program', 'Person'] as const,
+
+  /** Program.Core — what the Program *is* (not Growth data) */
+  programCore: [
+    'Identity',
+    'Positioning',
+    'Audience',
+    'Pricing',
+    'Schedule',
+    'Cohorts',
+    'Outcomes Definition',
+  ] as const,
+
+  /** Attached capabilities — how the Program *runs* */
   programCapabilities: [
+    'Growth',
+    'Admissions',
+    'Learning',
+    'Assessment',
+    'Credentialing',
+    'Placement',
+    'Alumni',
+    'Intelligence',
+  ] as const,
+
+  /** Internal shape of every capability */
+  capabilityShape: ['Strategy', 'Operations', 'Timeline', 'Intelligence', 'Analytics'] as const,
+
+  /** Growth capability aggregate */
+  growthAggregate: [
+    'Strategy',
+    'Campaigns',
+    'Creative Projects',
+    'Assets',
+    'Publishing',
+    'Engagement',
+    'Applications',
+    'Attribution',
+    'Intelligence',
+  ] as const,
+
+  /** Program Workspace shell tabs (UI) */
+  programWorkspaceTabs: [
     'Overview',
     'Growth',
     'Admissions',
@@ -60,6 +86,8 @@ export const ONTOLOGY = {
     'Analytics',
     'Settings',
   ] as const,
+
+  /** Growth Workspace IA */
   growthWorkspace: [
     'Overview',
     'Campaigns',
@@ -71,11 +99,32 @@ export const ONTOLOGY = {
     'Analytics',
     'Intelligence',
   ] as const,
+
+  terms: {
+    institution: 'Operating context / buyer — owns many Programs.',
+    program: 'Primary delivery aggregate — Core state + attached Capabilities.',
+    programCore: 'Definitional state of a Program (identity, pricing, cohorts, …).',
+    capability:
+      'Attached operating system under Program (Growth, Admissions, Learning, …) — not Core fields.',
+    growth: 'Capability: attract participants via campaigns, creatives, channels, applications.',
+    admissions: 'Capability: who gets in — applications, evaluations, offers, enrollment.',
+    learning: 'Capability: how participants learn — curriculum, evidence, progress.',
+    campaign: 'Growth operations object under a Program — never a root aggregate.',
+    creativeProject: 'Growth work unit under a Campaign producing Assets.',
+    marketingAsset: 'Publishable creative under Growth.',
+    channel: 'Business destination (WhatsApp, LinkedIn Organic, …).',
+    connector: 'Platform technical integration.',
+    person: 'Relationship aggregate with Timeline (prospect → learner → alumnus).',
+    timeline: 'Platform spine — events attributed to Program · Person · Capability.',
+    application: 'Handoff port Growth → Admissions.',
+  },
+
   layers: {
     operate: 'Brain',
     create: 'Studio',
     tooling: 'Platform',
   },
+
   analyticsNorthStar: [
     'Program Awareness',
     'Applications',
@@ -85,7 +134,6 @@ export const ONTOLOGY = {
   ] as const,
 } as const;
 
-/** Short section labels for app chrome */
 export const CHROME_SECTIONS = {
   brain: 'Brain',
   brainHint: 'Operate',

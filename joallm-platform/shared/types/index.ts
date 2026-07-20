@@ -83,3 +83,11 @@ export * from './studio-publishing';
  * @see ../../docs/04-architecture/CREATIVE_AI_DIRECTION.md
  */
 export * from './creative-ai';
+
+/**
+ * Program aggregate — Core vs attached Capabilities (Institution OS).
+ * @see ./program-aggregate.ts
+ * @see ../../docs/04-architecture/PROGRAM_AGGREGATE_DIRECTION.md
+ * @see ../../docs/04-architecture/INSTITUTION_CAPABILITY_PATTERN.md
+ */
+export * from './program-aggregate';

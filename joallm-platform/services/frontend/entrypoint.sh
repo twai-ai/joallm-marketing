@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-# Write browser-readable runtime config. Do NOT sed-replace placeholders inside
-# the Vite JS bundle — that rewrites detector strings and breaks production.
+# Overwrite dist/runtime-config.js with Railway public API URL.
+# index.html already loads /runtime-config.js before the app module.
 
 normalize_url() {
   raw="$1"
@@ -57,9 +57,9 @@ window.__ATRISI_ENV__ = {
 };
 EOF
 
-# Ensure index.html loads runtime-config.js before the app bundle
-if [ -f /app/dist/index.html ] && ! grep -q 'runtime-config.js' /app/dist/index.html; then
-  sed -i 's|<head>|<head>\n    <script src="/runtime-config.js"></script>|' /app/dist/index.html
+if ! grep -q 'src="/runtime-config.js"' /app/dist/index.html; then
+  echo "entrypoint: ERROR index.html is missing runtime-config.js script tag"
+  exit 1
 fi
 
 echo "entrypoint: runtime API URL = ${API_URL}"

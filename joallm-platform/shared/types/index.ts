@@ -55,3 +55,50 @@ export interface LLMModel {
   maxTokens: number;
   contextWindow: number;
 }
+
+/** Acquisition Intelligence — canonical event / person contracts */
+export type AcquisitionPersonStatus =
+  | 'anonymous'
+  | 'identified'
+  | 'verified'
+  | 'merged'
+  | 'archived';
+
+export type AcquisitionIdentityProvider =
+  | 'email'
+  | 'phone'
+  | 'linkedin'
+  | 'meta'
+  | 'google'
+  | 'whatsapp'
+  | 'education_platform'
+  | 'builder_challenge'
+  | 'anonymous_cookie'
+  | 'custom';
+
+export interface AcquisitionPerson {
+  id: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  displayName?: string | null;
+  primaryEmail?: string | null;
+  primaryPhone?: string | null;
+  status: AcquisitionPersonStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AcquisitionEvent {
+  id: string;
+  ownerUserId: string;
+  sourceConnectionId: string;
+  rawRecordId: string;
+  source: string;
+  eventType: string;
+  occurredAt: string;
+  receivedAt: string;
+  personId?: string | null;
+  channel?: string | null;
+  attributes: Record<string, unknown>;
+  schemaVersion: number;
+}

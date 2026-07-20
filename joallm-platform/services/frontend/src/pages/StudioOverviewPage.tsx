@@ -37,6 +37,15 @@ export function StudioOverviewPage() {
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <div className="flex items-center gap-2 text-sm font-medium text-white">
+                    <Sparkles className="h-4 w-4 text-amber-300" />
+                    Acquisition Intelligence
+                  </div>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Ingest WhatsApp/Meta activity into a unified Person timeline on the Railway backend.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-white">
                     <Sparkles className="h-4 w-4 text-sky-300" />
                     Document AI
                   </div>

@@ -59,11 +59,18 @@ export interface MediaProcessingJob {
   resumeNodeId?: string;
 }
 
+export interface AcquisitionIngestJob {
+  payload: Record<string, unknown>;
+  headers?: Record<string, unknown>;
+  ownerUserId?: string;
+}
+
 export interface QueueWorkers {
   documentProcessingWorker: Worker<ProcessDocumentJob> | null;
   documentIndexingWorker: Worker<IndexDocumentJob> | null;
   workflowExecutionWorker: Worker<WorkflowExecutionJob> | null;
   mediaProcessingWorker: Worker<MediaProcessingJob> | null;
+  acquisitionIngestWorker: Worker<AcquisitionIngestJob> | null;
 }
 
 function pickMediaKnowledgeWindow(durationSec: number): number {
@@ -304,10 +311,24 @@ export const mediaProcessingQueue = redisInstance ? new Queue<MediaProcessingJob
   },
 }) : null;
 
+export const acquisitionIngestQueue = redisInstance ? new Queue<AcquisitionIngestJob>('acquisition-ingest', {
+  connection: redisInstance as any,
+  defaultJobOptions: {
+    removeOnComplete: 50,
+    removeOnFail: 25,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,
+    },
+  },
+}) : null;
+
 export let documentProcessingWorker: Worker<ProcessDocumentJob> | null = null;
 export let documentIndexingWorker: Worker<IndexDocumentJob> | null = null;
 export let workflowExecutionWorker: Worker<WorkflowExecutionJob> | null = null;
 export let mediaProcessingWorker: Worker<MediaProcessingJob> | null = null;
+export let acquisitionIngestWorker: Worker<AcquisitionIngestJob> | null = null;
 let queueWorkersInitialized = false;
 
 function createDocumentProcessingWorker(): Worker<ProcessDocumentJob> | null {
@@ -1063,6 +1084,42 @@ function createMediaProcessingWorker(): Worker<MediaProcessingJob> | null {
   );
 }
 
+function createAcquisitionIngestWorker(): Worker<AcquisitionIngestJob> | null {
+  if (!redisInstance) {
+    return null;
+  }
+
+  return new Worker<AcquisitionIngestJob>(
+    'acquisition-ingest' as any,
+    async (job: Job<AcquisitionIngestJob>) => {
+      const startedAt = Date.now();
+      try {
+        const { ingestMetaWhatsAppWebhook } = await import('./acquisition-ingest-service.js');
+        const result = await ingestMetaWhatsAppWebhook({
+          payload: job.data.payload as any,
+          headers: job.data.headers,
+          ownerUserId: job.data.ownerUserId,
+        });
+        queueProcessingTime.observe(
+          { queue_name: 'acquisition-ingest', status: 'success' },
+          (Date.now() - startedAt) / 1000,
+        );
+        return result;
+      } catch (error) {
+        queueProcessingTime.observe(
+          { queue_name: 'acquisition-ingest', status: 'error' },
+          (Date.now() - startedAt) / 1000,
+        );
+        throw error;
+      }
+    },
+    {
+      connection: redisInstance as any,
+      concurrency: 5,
+    },
+  );
+}
+
 function registerWorkerListeners() {
   if (documentProcessingWorker) {
     documentProcessingWorker.on('error', (error) => {
@@ -1163,6 +1220,16 @@ function registerWorkerListeners() {
       logger.error(`Media processing job [${job?.data.jobType}] failed for ${fileId}:`, error);
     });
   }
+
+  if (acquisitionIngestWorker) {
+    acquisitionIngestWorker.on('error', (error) => {
+      logger.error('Acquisition ingest worker error:', error);
+    });
+
+    acquisitionIngestWorker.on('failed', (job, error) => {
+      logger.error(`Acquisition ingest job failed (${job?.id}):`, error);
+    });
+  }
 }
 
 export function initializeQueueWorkers(): QueueWorkers {
@@ -1171,6 +1238,7 @@ export function initializeQueueWorkers(): QueueWorkers {
     documentIndexingWorker = createDocumentIndexingWorker();
     workflowExecutionWorker = createWorkflowExecutionWorker();
     mediaProcessingWorker = createMediaProcessingWorker();
+    acquisitionIngestWorker = createAcquisitionIngestWorker();
     registerWorkerListeners();
     startQueueMetricsPolling();
     queueWorkersInitialized = true;
@@ -1181,6 +1249,7 @@ export function initializeQueueWorkers(): QueueWorkers {
     documentIndexingWorker,
     workflowExecutionWorker,
     mediaProcessingWorker,
+    acquisitionIngestWorker,
   };
 }
 
@@ -1201,10 +1270,12 @@ export async function closeQueues(): Promise<void> {
     if (documentIndexingQueue) await documentIndexingQueue.close();
     if (workflowExecutionQueue) await workflowExecutionQueue.close();
     if (mediaProcessingQueue) await mediaProcessingQueue.close();
+    if (acquisitionIngestQueue) await acquisitionIngestQueue.close();
     if (documentProcessingWorker) await documentProcessingWorker.close();
     if (documentIndexingWorker) await documentIndexingWorker.close();
     if (workflowExecutionWorker) await workflowExecutionWorker.close();
     if (mediaProcessingWorker) await mediaProcessingWorker.close();
+    if (acquisitionIngestWorker) await acquisitionIngestWorker.close();
     if (redis) await redis.quit();
     logger.info('Queues and workers closed');
   } catch (error) {
@@ -1254,6 +1325,7 @@ async function refreshQueueMetrics(): Promise<void> {
     ['document-indexing', documentIndexingQueue],
     ['workflow-execution', workflowExecutionQueue],
     ['media-processing', mediaProcessingQueue],
+    ['acquisition-ingest', acquisitionIngestQueue],
   ];
 
   for (const [queueName, queue] of queueEntries) {

@@ -1035,3 +1035,204 @@ export const messageRagSourcesRelations = relations(messageRagSources, ({ one })
 export const trainingConsentRelations = relations(trainingConsent, ({ one }) => ({
   user: one(users, { fields: [trainingConsent.userId], references: [users.id] }),
 }));
+
+// ─── Acquisition Intelligence ─────────────────────────────────────────────────
+
+export const acquisitionPersons = pgTable('acquisition_persons', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  displayName: text('display_name'),
+  primaryEmail: text('primary_email'),
+  primaryPhone: text('primary_phone'),
+  status: text('status', {
+    enum: ['anonymous', 'identified', 'verified', 'merged', 'archived'],
+  }).default('identified').notNull(),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('acquisition_persons_owner_user_id_idx').on(table.ownerUserId),
+  organizationIdIdx: index('acquisition_persons_organization_id_idx').on(table.organizationId),
+  primaryPhoneIdx: index('acquisition_persons_primary_phone_idx').on(table.ownerUserId, table.primaryPhone),
+  primaryEmailIdx: index('acquisition_persons_primary_email_idx').on(table.ownerUserId, table.primaryEmail),
+}));
+
+export const acquisitionPersonIdentities = pgTable('acquisition_person_identities', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  personId: uuid('person_id').notNull().references(() => acquisitionPersons.id, { onDelete: 'cascade' }),
+  provider: text('provider', {
+    enum: [
+      'email',
+      'phone',
+      'linkedin',
+      'meta',
+      'google',
+      'whatsapp',
+      'education_platform',
+      'builder_challenge',
+      'anonymous_cookie',
+      'custom',
+    ],
+  }).notNull(),
+  externalId: text('external_id').notNull(),
+  confidence: real('confidence').default(1).notNull(),
+  isVerified: boolean('is_verified').default(false).notNull(),
+  verifiedAt: timestamp('verified_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  personIdIdx: index('acquisition_person_identities_person_id_idx').on(table.personId),
+  ownerProviderExternalUnique: unique('acquisition_person_identities_owner_provider_external_unique').on(
+    table.ownerUserId,
+    table.provider,
+    table.externalId,
+  ),
+}));
+
+export const acquisitionInitiatives = pgTable('acquisition_initiatives', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  status: text('status', {
+    enum: ['draft', 'active', 'paused', 'completed', 'archived'],
+  }).default('active').notNull(),
+  startsAt: timestamp('starts_at'),
+  endsAt: timestamp('ends_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('acquisition_initiatives_owner_user_id_idx').on(table.ownerUserId),
+}));
+
+export const acquisitionCampaigns = pgTable('acquisition_campaigns', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  initiativeId: uuid('initiative_id').notNull().references(() => acquisitionInitiatives.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  channel: text('channel'),
+  status: text('status', {
+    enum: ['draft', 'active', 'paused', 'completed', 'archived'],
+  }).default('active').notNull(),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  initiativeIdIdx: index('acquisition_campaigns_initiative_id_idx').on(table.initiativeId),
+  ownerUserIdIdx: index('acquisition_campaigns_owner_user_id_idx').on(table.ownerUserId),
+}));
+
+export const acquisitionSourceConnections = pgTable('acquisition_source_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  provider: text('provider').notNull(), // meta_whatsapp, brevo, ...
+  name: text('name').notNull(),
+  status: text('status', {
+    enum: ['active', 'paused', 'error', 'disconnected'],
+  }).default('active').notNull(),
+  externalAccountId: text('external_account_id'), // e.g. WhatsApp phone_number_id
+  config: jsonb('config').$type<Record<string, unknown>>().default({}),
+  lastSuccessAt: timestamp('last_success_at'),
+  lastErrorAt: timestamp('last_error_at'),
+  lastErrorMessage: text('last_error_message'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('acquisition_source_connections_owner_user_id_idx').on(table.ownerUserId),
+  providerIdx: index('acquisition_source_connections_provider_idx').on(table.provider),
+  externalAccountIdx: index('acquisition_source_connections_external_account_idx').on(
+    table.provider,
+    table.externalAccountId,
+  ),
+}));
+
+export const acquisitionRawRecords = pgTable('acquisition_raw_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  sourceConnectionId: uuid('source_connection_id').notNull().references(() => acquisitionSourceConnections.id, { onDelete: 'cascade' }),
+  externalEventId: text('external_event_id'),
+  eventName: text('event_name'),
+  receivedAt: timestamp('received_at').defaultNow().notNull(),
+  occurredAt: timestamp('occurred_at'),
+  headers: jsonb('headers').$type<Record<string, unknown>>(),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+  payloadHash: text('payload_hash').notNull(),
+  processingStatus: text('processing_status', {
+    enum: ['received', 'queued', 'processed', 'failed', 'ignored'],
+  }).default('received').notNull(),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  sourceConnectionIdIdx: index('acquisition_raw_records_source_connection_id_idx').on(table.sourceConnectionId),
+  ownerUserIdIdx: index('acquisition_raw_records_owner_user_id_idx').on(table.ownerUserId),
+  payloadHashIdx: index('acquisition_raw_records_payload_hash_idx').on(table.ownerUserId, table.payloadHash),
+  processingStatusIdx: index('acquisition_raw_records_processing_status_idx').on(table.processingStatus),
+}));
+
+export const acquisitionEvents = pgTable('acquisition_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  sourceConnectionId: uuid('source_connection_id').notNull().references(() => acquisitionSourceConnections.id, { onDelete: 'cascade' }),
+  rawRecordId: uuid('raw_record_id').notNull().references(() => acquisitionRawRecords.id, { onDelete: 'cascade' }),
+  source: text('source').notNull(),
+  externalEventId: text('external_event_id'),
+  eventType: text('event_type').notNull(),
+  occurredAt: timestamp('occurred_at').notNull(),
+  receivedAt: timestamp('received_at').defaultNow().notNull(),
+  personId: uuid('person_id').references(() => acquisitionPersons.id, { onDelete: 'set null' }),
+  initiativeId: uuid('initiative_id').references(() => acquisitionInitiatives.id, { onDelete: 'set null' }),
+  campaignId: uuid('campaign_id').references(() => acquisitionCampaigns.id, { onDelete: 'set null' }),
+  channel: text('channel'),
+  objectType: text('object_type'),
+  objectId: text('object_id'),
+  attributes: jsonb('attributes').$type<Record<string, unknown>>().default({}),
+  schemaVersion: integer('schema_version').default(1).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('acquisition_events_owner_user_id_idx').on(table.ownerUserId),
+  personIdIdx: index('acquisition_events_person_id_idx').on(table.personId),
+  eventTypeIdx: index('acquisition_events_event_type_idx').on(table.eventType),
+  occurredAtIdx: index('acquisition_events_occurred_at_idx').on(table.ownerUserId, table.occurredAt),
+  rawRecordIdIdx: index('acquisition_events_raw_record_id_idx').on(table.rawRecordId),
+}));
+
+export const acquisitionInteractions = pgTable('acquisition_interactions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  personId: uuid('person_id').notNull().references(() => acquisitionPersons.id, { onDelete: 'cascade' }),
+  initiativeId: uuid('initiative_id').references(() => acquisitionInitiatives.id, { onDelete: 'set null' }),
+  campaignId: uuid('campaign_id').references(() => acquisitionCampaigns.id, { onDelete: 'set null' }),
+  sourceEventId: uuid('source_event_id').notNull().references(() => acquisitionEvents.id, { onDelete: 'cascade' }),
+  kind: text('kind', {
+    enum: [
+      'visit',
+      'submission',
+      'message',
+      'call',
+      'meeting',
+      'webinar',
+      'learning_activity',
+      'application',
+      'enrollment',
+      'decision',
+      'other',
+    ],
+  }).notNull(),
+  direction: text('direction', { enum: ['inbound', 'outbound', 'internal'] }),
+  summary: text('summary'),
+  occurredAt: timestamp('occurred_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  personIdIdx: index('acquisition_interactions_person_id_idx').on(table.personId),
+  ownerUserIdIdx: index('acquisition_interactions_owner_user_id_idx').on(table.ownerUserId),
+  occurredAtIdx: index('acquisition_interactions_occurred_at_idx').on(table.personId, table.occurredAt),
+  sourceEventIdIdx: index('acquisition_interactions_source_event_id_idx').on(table.sourceEventId),
+}));

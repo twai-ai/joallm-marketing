@@ -1,6 +1,6 @@
 export type UseCaseStatus = 'active' | 'placeholder';
 export type UseCaseAssetKind = 'media';
-export type UseCaseId = 'media' | 'docs-ai' | 'data-intelligence';
+export type UseCaseId = 'media' | 'docs-ai' | 'data-intelligence' | 'acquisition';
 
 export interface UseCaseDefinition {
   id: UseCaseId;
@@ -29,6 +29,18 @@ export const USE_CASES: UseCaseDefinition[] = [
     audience: 'Creators, operators, and teams analyzing recordings',
     supportsAssetDetail: true,
     assetKind: 'media',
+  },
+  {
+    id: 'acquisition',
+    label: 'Acquisition Intelligence',
+    shortLabel: 'Acquisition',
+    homeRoute: '/studio/acquisition',
+    assetRoute: (assetId: string) => `/studio/acquisition/${assetId}`,
+    status: 'active',
+    description: 'Connect acquisition surfaces into one trustworthy Person timeline across WhatsApp, Meta, and more.',
+    helper: 'External systems execute. JoaLLM acquires, normalizes, attributes, and remembers.',
+    audience: 'Growth, admissions, partnerships, and institutional relationship teams',
+    supportsAssetDetail: true,
   },
   {
     id: 'docs-ai',

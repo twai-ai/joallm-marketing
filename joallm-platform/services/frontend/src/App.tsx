@@ -12,6 +12,7 @@ import { BookmarksPanel } from './components/bookmarks/BookmarksPanel';
 const WelcomePage = lazy(() => import('./pages/WelcomePage').then(module => ({ default: module.WelcomePage })));
 const StudioOverviewPage = lazy(() => import('./pages/StudioOverviewPage').then(module => ({ default: module.StudioOverviewPage })));
 const MediaAIPage = lazy(() => import('./pages/MediaAIPage').then(module => ({ default: module.MediaAIPage })));
+const AcquisitionIntelligencePage = lazy(() => import('./pages/AcquisitionIntelligencePage').then(module => ({ default: module.AcquisitionIntelligencePage })));
 const DocumentAIPage = lazy(() => import('./pages/DocumentAIPage').then(module => ({ default: module.DocumentAIPage })));
 const MediaAssetPage = lazy(() => import('./pages/MediaAssetPage').then(module => ({ default: module.MediaAssetPage })));
 const WorkflowFamilyPlaceholderPage = lazy(() => import('./pages/WorkflowFamilyPlaceholderPage').then(module => ({ default: module.WorkflowFamilyPlaceholderPage })));
@@ -255,6 +256,16 @@ function AppLayout() {
               <Route path="/studio/media-ai/:fileId" element={
                 <ProtectedRoute>
                   <MediaAssetPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/acquisition" element={
+                <ProtectedRoute>
+                  <AcquisitionIntelligencePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/acquisition/:personId" element={
+                <ProtectedRoute>
+                  <AcquisitionIntelligencePage />
                 </ProtectedRoute>
               } />
               <Route path="/document-ai" element={

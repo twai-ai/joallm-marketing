@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   Trash2,
+  Users,
   Workflow,
   Wrench,
   X,
@@ -231,8 +232,8 @@ export function Sidebar({
       case 'workflow':
         return {
           title: PRODUCT_LABELS.workflows,
-          description: 'Studio is the umbrella workspace for guided workflow families, with Media AI and Document AI available today.',
-          helper: 'Open Media AI for recordings and multimodal analysis, or Document AI for ingestion readiness and grounded document workflows.',
+          description: 'Studio is the umbrella workspace for guided workflow families, with Media AI, Acquisition Intelligence, and Document AI available today.',
+          helper: 'Open Media AI for recordings, Acquisition Intelligence for WhatsApp/Meta timelines, or Document AI for grounded document workflows.',
           actions: [
             {
               label: 'Open Media in Studio',
@@ -242,6 +243,15 @@ export function Sidebar({
                 onToggle();
               },
               variant: 'primary',
+            },
+            {
+              label: 'Open Acquisition Intelligence',
+              icon: Users,
+              action: () => {
+                window.location.assign('/studio/acquisition');
+                onToggle();
+              },
+              variant: 'secondary',
             },
             {
               label: 'Open Document AI',

@@ -58,6 +58,17 @@ const configSchema = z.object({
   
   // Logging
   logLevel: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+
+  // Meta / WhatsApp (Acquisition Intelligence) — optional on Railway backend
+  metaVerifyToken: z.string().default('atrisi_meta_webhook_verify'),
+  metaAccessToken: z.string().optional(),
+  metaPhoneNumberId: z.string().optional(),
+  metaAppSecret: z.string().optional(),
+  metaEnableAutoReply: z.boolean().default(true),
+  acquisitionDefaultOwnerUserId: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
+    z.string().uuid().optional(),
+  ),
 });
 
 // Map environment variables to schema keys
@@ -96,6 +107,12 @@ const envVars = {
   apiKey: process.env.API_KEY,
   encryptionKey: process.env.ENCRYPTION_KEY,
   logLevel: process.env.LOG_LEVEL,
+  metaVerifyToken: process.env.META_VERIFY_TOKEN,
+  metaAccessToken: process.env.META_ACCESS_TOKEN,
+  metaPhoneNumberId: process.env.META_PHONE_NUMBER_ID,
+  metaAppSecret: process.env.META_APP_SECRET,
+  metaEnableAutoReply: process.env.META_ENABLE_AUTO_REPLY !== 'false',
+  acquisitionDefaultOwnerUserId: process.env.ACQUISITION_DEFAULT_OWNER_USER_ID,
 };
 
 // Validate environment variables

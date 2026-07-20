@@ -14,6 +14,7 @@ import { registerBookmarksDomain } from './bookmarks/index.js';
 import { registerPreferencesDomain } from './preferences/index.js';
 import { registerSecurityDomain } from './security/index.js';
 import { registerNotebooksDomain } from './notebooks/index.js';
+import { registerAcquisitionDomain } from './acquisition/index.js';
 import { adminRoutes } from '../routes/admin.js';
 import { subscriptionRoutes } from '../routes/subscriptions.js';
 import { meRoutes } from '../routes/me.js';
@@ -36,6 +37,7 @@ export async function registerDomains(fastify: FastifyInstance) {
   await registerPreferencesDomain(fastify);
   await registerSecurityDomain(fastify);
   await registerNotebooksDomain(fastify);
+  await registerAcquisitionDomain(fastify);
   
   // Admin routes (database maintenance, etc.)
   fastify.register(adminRoutes, { prefix: '/api/admin' });

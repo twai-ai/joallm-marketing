@@ -211,6 +211,163 @@ async function ensureSchemaCompatibility(): Promise<void> {
       ON "render_outputs" ("file_id")
     `);
 
+    // Acquisition Intelligence tables — additive bootstrap for environments
+    // that may not have picked up migration 0028 yet.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_persons" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "display_name" text,
+        "primary_email" text,
+        "primary_phone" text,
+        "status" text DEFAULT 'identified' NOT NULL,
+        "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "acquisition_persons_owner_user_id_idx"
+      ON "acquisition_persons" ("owner_user_id")
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_person_identities" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "person_id" uuid NOT NULL REFERENCES "acquisition_persons"("id") ON DELETE CASCADE,
+        "provider" text NOT NULL,
+        "external_id" text NOT NULL,
+        "confidence" real DEFAULT 1 NOT NULL,
+        "is_verified" boolean DEFAULT FALSE NOT NULL,
+        "verified_at" timestamp,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        CONSTRAINT "acquisition_person_identities_owner_provider_external_unique"
+          UNIQUE ("owner_user_id", "provider", "external_id")
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_initiatives" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "name" text NOT NULL,
+        "description" text,
+        "status" text DEFAULT 'active' NOT NULL,
+        "starts_at" timestamp,
+        "ends_at" timestamp,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_campaigns" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "initiative_id" uuid NOT NULL REFERENCES "acquisition_initiatives"("id") ON DELETE CASCADE,
+        "name" text NOT NULL,
+        "channel" text,
+        "status" text DEFAULT 'active' NOT NULL,
+        "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_source_connections" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "provider" text NOT NULL,
+        "name" text NOT NULL,
+        "status" text DEFAULT 'active' NOT NULL,
+        "external_account_id" text,
+        "config" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "last_success_at" timestamp,
+        "last_error_at" timestamp,
+        "last_error_message" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "acquisition_source_connections_external_account_idx"
+      ON "acquisition_source_connections" ("provider", "external_account_id")
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_raw_records" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "source_connection_id" uuid NOT NULL REFERENCES "acquisition_source_connections"("id") ON DELETE CASCADE,
+        "external_event_id" text,
+        "event_name" text,
+        "received_at" timestamp DEFAULT NOW() NOT NULL,
+        "occurred_at" timestamp,
+        "headers" jsonb,
+        "payload" jsonb NOT NULL,
+        "payload_hash" text NOT NULL,
+        "processing_status" text DEFAULT 'received' NOT NULL,
+        "error_message" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_events" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "source_connection_id" uuid NOT NULL REFERENCES "acquisition_source_connections"("id") ON DELETE CASCADE,
+        "raw_record_id" uuid NOT NULL REFERENCES "acquisition_raw_records"("id") ON DELETE CASCADE,
+        "source" text NOT NULL,
+        "external_event_id" text,
+        "event_type" text NOT NULL,
+        "occurred_at" timestamp NOT NULL,
+        "received_at" timestamp DEFAULT NOW() NOT NULL,
+        "person_id" uuid REFERENCES "acquisition_persons"("id") ON DELETE SET NULL,
+        "initiative_id" uuid REFERENCES "acquisition_initiatives"("id") ON DELETE SET NULL,
+        "campaign_id" uuid REFERENCES "acquisition_campaigns"("id") ON DELETE SET NULL,
+        "channel" text,
+        "object_type" text,
+        "object_id" text,
+        "attributes" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "schema_version" integer DEFAULT 1 NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_interactions" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "person_id" uuid NOT NULL REFERENCES "acquisition_persons"("id") ON DELETE CASCADE,
+        "initiative_id" uuid REFERENCES "acquisition_initiatives"("id") ON DELETE SET NULL,
+        "campaign_id" uuid REFERENCES "acquisition_campaigns"("id") ON DELETE SET NULL,
+        "source_event_id" uuid NOT NULL REFERENCES "acquisition_events"("id") ON DELETE CASCADE,
+        "kind" text NOT NULL,
+        "direction" text,
+        "summary" text,
+        "occurred_at" timestamp NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "acquisition_interactions_person_occurred_idx"
+      ON "acquisition_interactions" ("person_id", "occurred_at")
+    `);
+
     logger.info('✅ Critical schema compatibility checks completed');
   } catch (error) {
     logger.error('❌ Critical schema compatibility check failed:', error);

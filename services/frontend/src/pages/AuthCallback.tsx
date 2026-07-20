@@ -31,7 +31,8 @@ export function AuthCallback() {
 
         // If we got a one-time code, exchange it for tokens
         if (oauthCode && !token) {
-          const apiUrl = env.VITE_API_URL || env.VITE_API_BASE_URL;
+          const raw = (env.VITE_API_URL || env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+          const apiUrl = /^https?:\/\//i.test(raw) ? raw : `https://${raw || 'localhost:3001'}`;
           const resp = await fetch(`${apiUrl}/api/auth/exchange?code=${oauthCode}`);
           if (!resp.ok) {
             setStatus('error');

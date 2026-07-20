@@ -14,6 +14,7 @@ const StudioOverviewPage = lazy(() => import('./pages/StudioOverviewPage').then(
 const MediaAIPage = lazy(() => import('./pages/MediaAIPage').then(module => ({ default: module.MediaAIPage })));
 const AcquisitionIntelligencePage = lazy(() => import('./pages/AcquisitionIntelligencePage').then(module => ({ default: module.AcquisitionIntelligencePage })));
 const MarketingStudioPage = lazy(() => import('./pages/MarketingStudioPage').then(module => ({ default: module.MarketingStudioPage })));
+const AcquisitionWorkspacePage = lazy(() => import('./pages/AcquisitionWorkspacePage').then(module => ({ default: module.AcquisitionWorkspacePage })));
 const DocumentAIPage = lazy(() => import('./pages/DocumentAIPage').then(module => ({ default: module.DocumentAIPage })));
 const MediaAssetPage = lazy(() => import('./pages/MediaAssetPage').then(module => ({ default: module.MediaAssetPage })));
 const WorkflowFamilyPlaceholderPage = lazy(() => import('./pages/WorkflowFamilyPlaceholderPage').then(module => ({ default: module.WorkflowFamilyPlaceholderPage })));
@@ -284,9 +285,9 @@ function AppLayout() {
                   <MarketingStudioPage />
                 </ProtectedRoute>
               } />
-              <Route path="/studio/marketing/:assetId" element={
+              <Route path="/studio/marketing/:programId" element={
                 <ProtectedRoute>
-                  <MarketingStudioPage />
+                  <AcquisitionWorkspacePage />
                 </ProtectedRoute>
               } />
               <Route path="/document-ai" element={

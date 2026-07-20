@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import type { ViewMode } from '../../App';
 import { PRODUCT_LABELS, PLATFORM_SHORT_NAME } from '../../constants/product';
 import { USE_CASES } from '../../constants/useCases';
+import { getProgramById } from '../../constants/programs';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -41,6 +42,12 @@ export function Header({ onToggleSidebar, onOpenSettings, currentView }: HeaderP
 
   const getViewTitle = () => {
     const path = location.pathname;
+    if (path.startsWith('/studio/marketing/')) {
+      const programId = path.split('/')[3];
+      const match = programId ? getProgramById(programId) : undefined;
+      if (match) return `${match.name} · Acquisition`;
+      return 'Acquisition Workspace';
+    }
     const studioMatch = USE_CASES.find(
       (workspace) => path === workspace.homeRoute || path.startsWith(`${workspace.homeRoute}/`),
     );

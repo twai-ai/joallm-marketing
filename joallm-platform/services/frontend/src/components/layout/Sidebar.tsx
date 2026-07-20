@@ -148,8 +148,7 @@ export function Sidebar({
   };
 
   const handleStudioNav = (workspace: UseCaseDefinition) => {
-    // Live + Marketing Studio preview (Creative AI discoverability) are navigable
-    if (workspace.status !== 'active' && workspace.id !== 'marketing-studio') return;
+    if (workspace.status !== 'active') return;
     navigate(workspace.homeRoute);
     closeIfMobile();
   };
@@ -345,14 +344,13 @@ export function Sidebar({
               </span>
             </div>
             <p className={sectionCopy}>
-              Live workspaces are ready. Marketing Studio opens as a Creative AI preview; Data Intelligence stays Soon.
+              Live workspaces are ready. Data Intelligence stays Soon.
             </p>
             <div className="mt-3 space-y-2">
               {studioWorkspaces.map((workspace) => {
                 const Icon = STUDIO_ICONS[workspace.id] || Workflow;
                 const isLive = workspace.status === 'active';
-                const isPreview = workspace.id === 'marketing-studio';
-                const isClickable = isLive || isPreview;
+                const isClickable = isLive;
                 const isActive =
                   isClickable && location.pathname.startsWith(workspace.homeRoute);
 

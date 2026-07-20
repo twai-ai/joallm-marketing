@@ -2,6 +2,7 @@ import { ArrowRight, LayoutDashboard, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { USE_CASES } from '../constants/useCases';
 import { PLATFORM_CONSTITUTION, PLATFORM_TAGLINE } from '../constants/product';
+import { PRIMARY_GROWTH_PROGRAM } from '../constants/programs';
 
 export function StudioOverviewPage() {
   return (
@@ -92,12 +93,16 @@ export function StudioOverviewPage() {
                   </div>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">{workspace.description}</p>
-                {workspace.status === 'active' || workspace.id === 'marketing-studio' ? (
+                {workspace.status === 'active' ? (
                   <Link
-                    to={workspace.homeRoute}
+                    to={
+                      workspace.id === 'marketing-studio'
+                        ? `/studio/marketing/${PRIMARY_GROWTH_PROGRAM.id}`
+                        : workspace.homeRoute
+                    }
                     className="btn-atrisi-primary mt-4 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
                   >
-                    {workspace.id === 'marketing-studio' ? 'Open Creative AI preview' : 'Open workspace'}
+                    {workspace.id === 'marketing-studio' ? 'Open Acquisition Workspace' : 'Open workspace'}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 ) : (

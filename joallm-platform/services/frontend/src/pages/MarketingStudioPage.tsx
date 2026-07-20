@@ -22,25 +22,22 @@ export function MarketingStudioPage() {
           Acquisition Platform · Phase 1
         </div>
       }
-      title="Acquire Program Interest — Education converts"
-      description="This is an Institution Acquisition Platform. Pick a Program, run Acquisition (campaigns, channels, assets). Output is interest for education.atrisi.org to pull — not enrollment. Marketing/ads are one strategy among many."
+      title="Select a Program to acquire interest"
+      description="Open an Acquisition Workspace. Campaigns and channels produce Program Interest for Education to pull — not enrollment. Marketing/ads are one acquisition strategy."
       primaryAction={
         <>
-          <a
-            href="https://atrisi.org/programs"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50/40"
-          >
-            Program catalog
-            <ExternalLink className="h-4 w-4" />
-          </a>
           <Link
-            to="/studio/acquisition"
+            to={`/studio/marketing/${PRIMARY_GROWTH_PROGRAM.id}`}
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm"
           >
-            Live WhatsApp acquisition
+            Open {PRIMARY_GROWTH_PROGRAM.name}
             <ArrowRight className="h-4 w-4" />
+          </Link>
+          <Link
+            to="/studio/acquisition"
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50/40"
+          >
+            Live WhatsApp acquisition
           </Link>
         </>
       }
@@ -68,7 +65,7 @@ export function MarketingStudioPage() {
           <div>
             <h2 className="text-xl font-semibold text-slate-950">ATRISI Programs</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Seeded from{' '}
+              Targeting catalog from{' '}
               <a
                 href="https://atrisi.org/programs"
                 target="_blank"
@@ -77,7 +74,7 @@ export function MarketingStudioPage() {
               >
                 atrisi.org/programs
               </a>
-              . Targeting catalog for acquisition — updates when atrisi.org adds programs. Select a Program to open its Acquisition Workspace (Sprint 1).
+              . Click a Program to open its Acquisition Workspace.
             </p>
           </div>
           <div className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-teal-800">
@@ -89,12 +86,13 @@ export function MarketingStudioPage() {
           {ATRISI_PROGRAMS.map((program) => {
             const isPrimary = program.id === PRIMARY_GROWTH_PROGRAM.id;
             return (
-              <div
+              <Link
                 key={program.id}
-                className={`rounded-2xl border p-5 ${
+                to={`/studio/marketing/${program.id}`}
+                className={`rounded-2xl border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
                   isPrimary
                     ? 'border-teal-300 bg-teal-50/60 ring-1 ring-teal-200'
-                    : 'border-slate-200 bg-slate-50'
+                    : 'border-slate-200 bg-slate-50 hover:border-teal-200'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -113,11 +111,11 @@ export function MarketingStudioPage() {
                 {program.tracks && (
                   <p className="mt-3 text-xs text-slate-500">{program.tracks.join(' · ')}</p>
                 )}
-                <div className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-slate-400">
-                  Acquisition Workspace soon
+                <div className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal-800">
+                  Open Acquisition Workspace
                   <ArrowRight className="h-3.5 w-3.5" />
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
@@ -127,38 +125,47 @@ export function MarketingStudioPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-2 text-teal-700">
             <GraduationCap className="h-5 w-5" />
-            <h2 className="text-lg font-semibold text-slate-950">Roadmap (architecture first)</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Roadmap</h2>
           </div>
           <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
-            <li>Program → Acquisition Workspace (static)</li>
-            <li>Campaign CRUD</li>
-            <li>Creative Projects + Assets (upload / Canva OK)</li>
-            <li>Publishing Jobs</li>
-            <li>One outbound connector (LinkedIn or Meta Ads)</li>
-            <li>Timeline → Program Interest</li>
-            <li>Program Interest API for Education pull</li>
+            <li className="font-medium text-teal-800">Sprint 1 — Program → Acquisition Workspace ✓</li>
+            <li>Sprint 2 — Campaign CRUD</li>
+            <li>Sprint 3 — Creative Projects + Assets</li>
+            <li>Sprint 4 — Publishing Jobs</li>
+            <li>Sprint 5 — One outbound connector</li>
+            <li>Sprint 6 — Timeline → Program Interest</li>
+            <li>Sprint 7 — Program Interest API</li>
           </ol>
           <p className="mt-4 text-xs text-slate-500">{PLATFORM_CONSTITUTION}</p>
         </section>
         <section className="rounded-3xl border border-dashed border-teal-200 bg-teal-50/40 p-6">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-teal-700" />
-            <h2 className="text-lg font-semibold text-slate-950">Postpone: AI image generation</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Live today: inbound WhatsApp</h2>
           </div>
           <p className="mt-2 text-sm text-slate-600">
-            Manual / Canva / Figma uploads still validate Campaigns → Assets → Publish → Timeline → Program
-            Interest. Creative AI is a later Platform enhancement.
+            Acquisition Intelligence already ingests WhatsApp into Person Timelines. Next sprints attach
+            that engagement to Program Campaigns and Program Interest.
           </p>
           <Link
             to="/studio/acquisition"
             className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-800 hover:text-teal-950"
           >
-            Live inbound acquisition (WhatsApp)
+            Open Acquisition Intelligence
             <ArrowRight className="h-4 w-4" />
           </Link>
           <p className="mt-4 text-xs text-slate-500">
-            {ONTOLOGY.product.tagline} · Outcome: {ONTOLOGY.outcome.name} · {PLATFORM_NAME}
+            {ONTOLOGY.product.tagline} · {PLATFORM_NAME}
           </p>
+          <a
+            href="https://atrisi.org/programs"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-teal-800"
+          >
+            atrisi.org/programs
+            <ExternalLink className="h-3 w-3" />
+          </a>
         </section>
       </div>
     </UseCaseHomeShell>

@@ -87,7 +87,7 @@ export const USE_CASES: UseCaseDefinition[] = [
     shortLabel: 'Acquire',
     homeRoute: '/studio/marketing',
     assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
-    status: 'placeholder',
+    status: 'active',
     description:
       'Acquisition Workspace: Programs → Campaigns → Channels → Interest. Marketing/ads are one acquisition strategy — not the whole product.',
     helper:

@@ -6,13 +6,79 @@
  */
 
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
-import type {
-  AcquisitionEvent,
-  Interaction,
-  Person,
-  Timeline,
-  TimelineEntry,
-} from '@joallm/shared';
+/** Local mirrors of shared Timeline contracts (backend has no @joallm/shared package). */
+type Person = {
+  id: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  displayName?: string | null;
+  primaryEmail?: string | null;
+  primaryPhone?: string | null;
+  status: string;
+  relationshipMaturity?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AcquisitionEvent = {
+  id: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  sourceConnectionId: string;
+  rawRecordId: string;
+  source: string;
+  externalEventId?: string | null;
+  eventType: string;
+  occurredAt: string;
+  receivedAt: string;
+  personId?: string | null;
+  initiativeId?: string | null;
+  campaignId?: string | null;
+  channel?: string | null;
+  objectType?: string | null;
+  objectId?: string | null;
+  attributes: Record<string, unknown>;
+  schemaVersion: number;
+  createdAt?: string;
+};
+
+type Interaction = {
+  id: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  personId: string;
+  initiativeId?: string | null;
+  campaignId?: string | null;
+  sourceEventId: string;
+  kind: string;
+  direction?: string | null;
+  summary?: string | null;
+  occurredAt: string;
+  createdAt: string;
+};
+
+type TimelineEntry = {
+  id: string;
+  kind: 'event' | 'interaction' | 'artifact' | 'decision' | 'learning' | 'communication' | 'evidence' | 'outcome';
+  occurredAt: string;
+  summary?: string | null;
+  refId: string;
+  initiativeId?: string | null;
+  attributes?: Record<string, unknown>;
+};
+
+type Timeline = {
+  subjectType: 'person' | 'initiative' | 'campaign' | 'organization' | 'institution' | 'program';
+  subjectId: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  maturity?: string | null;
+  events?: AcquisitionEvent[];
+  interactions?: Interaction[];
+  artifacts?: unknown[];
+  evidence?: unknown[];
+  entries: TimelineEntry[];
+};
 import { db } from '../database/connection.js';
 import {
   acquisitionEvents,

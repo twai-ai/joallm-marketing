@@ -4,6 +4,7 @@ import { db, initializeExtensions } from './connection.js';
 import { logger } from '../utils/logger.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { ensureCorePlatformTables } from './ensure-core-tables.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -409,18 +410,20 @@ export async function runMigrations(): Promise<void> {
     await ensureSchemaCompatibility();
     await ensureUsersTable();
     await ensureApiUsageTable();
+    await ensureCorePlatformTables();
 
     logger.info('✅ Database migrations completed successfully');
   } catch (error) {
     logger.error('❌ Database migration failed:', error);
     logger.warn('⚠️ If pgvector is missing, please install it in Railway Dashboard');
-    logger.warn('⚠️ Attempting auth-table bootstrap so login can still work…');
+    logger.warn('⚠️ Attempting core-table bootstrap so chat/auth can still work…');
     try {
       await ensureUsersTable();
       await ensureApiUsageTable();
+      await ensureCorePlatformTables();
       await ensureSchemaCompatibility();
     } catch (bootstrapError) {
-      logger.error('❌ Auth bootstrap also failed:', bootstrapError);
+      logger.error('❌ Auth/core bootstrap also failed:', bootstrapError);
     }
     // Don't throw - allow server to start even if migrations fail
     // This is useful during initial deployment

@@ -1,0 +1,502 @@
+/**
+ * Idempotent bootstrap for core JoaLLM / ATRISI Marketing tables.
+ * Used when Drizzle migrate fails partway (or journal is behind schema).
+ */
+import { sql } from 'drizzle-orm';
+import { db } from './connection.js';
+import { logger } from '../utils/logger.js';
+
+async function exec(label: string, statement: ReturnType<typeof sql>): Promise<void> {
+  try {
+    await db.execute(statement);
+  } catch (error) {
+    logger.warn(`ensureCorePlatformTables: ${label} skipped`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+export async function ensureCorePlatformTables(): Promise<void> {
+  logger.info('Ensuring core platform tables (chat, files, workflows, …)…');
+
+  await exec(
+    'users',
+    sql`
+      CREATE TABLE IF NOT EXISTS "users" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "email" text NOT NULL,
+        "password" text NOT NULL DEFAULT '',
+        "name" text NOT NULL,
+        "avatar" text,
+        "role" text DEFAULT 'casual',
+        "subscription_tier" text DEFAULT 'free',
+        "usage_stats" jsonb,
+        "api_keys" jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL,
+        CONSTRAINT "users_email_unique" UNIQUE ("email")
+      )
+    `,
+  );
+
+  await exec('users.password', sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password" text NOT NULL DEFAULT ''`);
+  await exec('users.api_keys', sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "api_keys" jsonb`);
+
+  await exec(
+    'chat_sessions',
+    sql`
+      CREATE TABLE IF NOT EXISTS "chat_sessions" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE CASCADE,
+        "short_id" text NOT NULL,
+        "slug" text,
+        "title" text,
+        "model" text NOT NULL,
+        "parameters" jsonb,
+        "auto_title" boolean DEFAULT false NOT NULL,
+        "is_active" boolean DEFAULT true,
+        "completion_status" text,
+        "turn_count" integer DEFAULT 0,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL,
+        CONSTRAINT "chat_sessions_short_id_unique" UNIQUE ("short_id")
+      )
+    `,
+  );
+  await exec('chat_sessions.completion_status', sql`ALTER TABLE "chat_sessions" ADD COLUMN IF NOT EXISTS "completion_status" text`);
+  await exec('chat_sessions.turn_count', sql`ALTER TABLE "chat_sessions" ADD COLUMN IF NOT EXISTS "turn_count" integer DEFAULT 0`);
+  await exec('chat_sessions.short_id_idx', sql`CREATE INDEX IF NOT EXISTS "chat_sessions_short_id_idx" ON "chat_sessions" ("short_id")`);
+  await exec('chat_sessions.user_id_idx', sql`CREATE INDEX IF NOT EXISTS "chat_sessions_user_id_idx" ON "chat_sessions" ("user_id")`);
+
+  await exec(
+    'messages',
+    sql`
+      CREATE TABLE IF NOT EXISTS "messages" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "session_id" uuid REFERENCES "chat_sessions"("id") ON DELETE CASCADE,
+        "role" text NOT NULL,
+        "content" text NOT NULL,
+        "model" text,
+        "rag_mode" text,
+        "attachments" jsonb,
+        "usage" jsonb,
+        "metadata" jsonb,
+        "was_regenerated" boolean DEFAULT false,
+        "was_copied" boolean DEFAULT false,
+        "quality_score" real,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+  await exec('messages.rag_mode', sql`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "rag_mode" text`);
+  await exec('messages.was_regenerated', sql`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "was_regenerated" boolean DEFAULT false`);
+  await exec('messages.was_copied', sql`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "was_copied" boolean DEFAULT false`);
+  await exec('messages.quality_score', sql`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "quality_score" real`);
+  await exec('messages.session_id_idx', sql`CREATE INDEX IF NOT EXISTS "messages_session_id_idx" ON "messages" ("session_id")`);
+
+  await exec(
+    'files',
+    sql`
+      CREATE TABLE IF NOT EXISTS "files" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE CASCADE,
+        "filename" text NOT NULL,
+        "original_name" text NOT NULL,
+        "mimetype" text NOT NULL,
+        "size" integer NOT NULL,
+        "storage_provider" text DEFAULT 'volume',
+        "storage_url" text,
+        "storage_key" text,
+        "status" text DEFAULT 'uploaded',
+        "processing_error" text,
+        "metadata" jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+  await exec('files.user_id_idx', sql`CREATE INDEX IF NOT EXISTS "files_user_id_idx" ON "files" ("user_id")`);
+  await exec('files.status_idx', sql`CREATE INDEX IF NOT EXISTS "files_status_idx" ON "files" ("status")`);
+
+  await exec(
+    'document_chunks',
+    sql`
+      CREATE TABLE IF NOT EXISTS "document_chunks" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "file_id" uuid REFERENCES "files"("id") ON DELETE CASCADE,
+        "content" text NOT NULL,
+        "chunk_index" integer NOT NULL,
+        "metadata" jsonb,
+        "embedding" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'workflows',
+    sql`
+      CREATE TABLE IF NOT EXISTS "workflows" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE CASCADE,
+        "workspace_id" uuid,
+        "name" text NOT NULL,
+        "description" text,
+        "nodes" jsonb NOT NULL,
+        "edges" jsonb NOT NULL,
+        "is_public" boolean DEFAULT false,
+        "is_template" boolean DEFAULT false,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+  await exec('workflows.workspace_id', sql`ALTER TABLE "workflows" ADD COLUMN IF NOT EXISTS "workspace_id" uuid`);
+
+  await exec(
+    'workflow_executions',
+    sql`
+      CREATE TABLE IF NOT EXISTS "workflow_executions" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "workflow_id" uuid REFERENCES "workflows"("id") ON DELETE CASCADE,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE CASCADE,
+        "status" text DEFAULT 'running',
+        "input" jsonb,
+        "output" jsonb,
+        "error" text,
+        "execution_log" jsonb,
+        "checkpoint" jsonb,
+        "resume_trigger" jsonb,
+        "started_at" timestamp DEFAULT NOW() NOT NULL,
+        "completed_at" timestamp
+      )
+    `,
+  );
+  await exec('workflow_executions.checkpoint', sql`ALTER TABLE "workflow_executions" ADD COLUMN IF NOT EXISTS "checkpoint" jsonb`);
+  await exec('workflow_executions.resume_trigger', sql`ALTER TABLE "workflow_executions" ADD COLUMN IF NOT EXISTS "resume_trigger" jsonb`);
+
+  await exec(
+    'models',
+    sql`
+      CREATE TABLE IF NOT EXISTS "models" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "model_id" text NOT NULL,
+        "name" text NOT NULL,
+        "provider" text NOT NULL,
+        "description" text NOT NULL,
+        "capabilities" jsonb DEFAULT '[]'::jsonb NOT NULL,
+        "max_tokens" integer NOT NULL,
+        "cost" text NOT NULL,
+        "speed" text NOT NULL,
+        "quality" text NOT NULL,
+        "is_available" boolean DEFAULT true,
+        "is_featured" boolean DEFAULT false,
+        "sort_order" integer DEFAULT 0,
+        "metadata" jsonb DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL,
+        CONSTRAINT "models_model_id_unique" UNIQUE ("model_id")
+      )
+    `,
+  );
+
+  await exec(
+    'user_preferences',
+    sql`
+      CREATE TABLE IF NOT EXISTS "user_preferences" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE UNIQUE,
+        "theme" text DEFAULT 'light',
+        "font_size" text DEFAULT 'medium',
+        "compact_mode" boolean DEFAULT false,
+        "email_notifications" boolean DEFAULT true,
+        "push_notifications" boolean DEFAULT false,
+        "notification_frequency" text DEFAULT 'immediate',
+        "analytics_enabled" boolean DEFAULT true,
+        "error_reporting" boolean DEFAULT true,
+        "auto_save" boolean DEFAULT true,
+        "streaming_enabled" boolean DEFAULT true,
+        "keyboard_shortcuts_enabled" boolean DEFAULT true,
+        "custom_shortcuts" jsonb DEFAULT '{}'::jsonb,
+        "default_model" text,
+        "default_temperature" real DEFAULT 0.7,
+        "default_max_tokens" integer DEFAULT 2048,
+        "workspace_mode" text,
+        "multimodal_settings" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+  await exec(
+    'user_preferences.multimodal',
+    sql`ALTER TABLE "user_preferences" ADD COLUMN IF NOT EXISTS "multimodal_settings" jsonb NOT NULL DEFAULT '{}'::jsonb`,
+  );
+  await exec(
+    'user_preferences.workspace_mode',
+    sql`ALTER TABLE "user_preferences" ADD COLUMN IF NOT EXISTS "workspace_mode" text`,
+  );
+
+  await exec(
+    'user_security',
+    sql`
+      CREATE TABLE IF NOT EXISTS "user_security" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE UNIQUE,
+        "two_factor_enabled" boolean DEFAULT false,
+        "two_factor_secret" text,
+        "two_factor_backup_codes" jsonb DEFAULT '[]'::jsonb,
+        "two_factor_verified_at" timestamp,
+        "password_changed_at" timestamp,
+        "password_reset_token" text,
+        "password_reset_expires" timestamp,
+        "failed_login_attempts" integer DEFAULT 0,
+        "locked_until" timestamp,
+        "active_sessions" jsonb DEFAULT '[]'::jsonb,
+        "last_login_at" timestamp,
+        "last_login_ip" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'bookmarks',
+    sql`
+      CREATE TABLE IF NOT EXISTS "bookmarks" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "item_type" text NOT NULL,
+        "item_id" uuid NOT NULL,
+        "title" text,
+        "notes" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'notebooks',
+    sql`
+      CREATE TABLE IF NOT EXISTS "notebooks" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "title" text NOT NULL,
+        "description" text,
+        "is_public" boolean DEFAULT false,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'notebook_cells',
+    sql`
+      CREATE TABLE IF NOT EXISTS "notebook_cells" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "notebook_id" uuid NOT NULL REFERENCES "notebooks"("id") ON DELETE CASCADE,
+        "cell_type" text NOT NULL,
+        "content" text NOT NULL DEFAULT '',
+        "output" text,
+        "execution_count" integer DEFAULT 0,
+        "position" integer NOT NULL DEFAULT 0,
+        "metadata" jsonb DEFAULT '{}'::jsonb,
+        "attached_documents" jsonb DEFAULT '[]'::jsonb,
+        "rag_config" jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'api_usage',
+    sql`
+      CREATE TABLE IF NOT EXISTS "api_usage" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE CASCADE,
+        "endpoint" text NOT NULL,
+        "method" text NOT NULL,
+        "model" text,
+        "tokens_used" integer,
+        "cost" integer,
+        "response_time" integer,
+        "status_code" integer NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'rag_search_sessions',
+    sql`
+      CREATE TABLE IF NOT EXISTS "rag_search_sessions" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE CASCADE,
+        "short_id" text NOT NULL,
+        "title" text,
+        "query" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL,
+        CONSTRAINT "rag_search_sessions_short_id_unique" UNIQUE ("short_id")
+      )
+    `,
+  );
+
+  await exec(
+    'revoked_tokens',
+    sql`
+      CREATE TABLE IF NOT EXISTS "revoked_tokens" (
+        "token_hash" text PRIMARY KEY,
+        "expires_at" timestamp NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'organizations',
+    sql`
+      CREATE TABLE IF NOT EXISTS "organizations" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "name" text NOT NULL,
+        "slug" text NOT NULL,
+        "domain" text,
+        "plan" text DEFAULT 'starter',
+        "settings" jsonb DEFAULT '{}'::jsonb,
+        "created_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL,
+        CONSTRAINT "organizations_slug_unique" UNIQUE ("slug")
+      )
+    `,
+  );
+
+  await exec(
+    'workspaces',
+    sql`
+      CREATE TABLE IF NOT EXISTS "workspaces" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE CASCADE,
+        "name" text NOT NULL,
+        "slug" text NOT NULL,
+        "settings" jsonb DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  // Acquisition Intelligence tables (journal may lag behind)
+  await exec(
+    'acquisition_persons',
+    sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_persons" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "display_name" text,
+        "primary_email" text,
+        "primary_phone" text,
+        "status" text NOT NULL DEFAULT 'identified',
+        "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'acquisition_source_connections',
+    sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_source_connections" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "provider" text NOT NULL,
+        "name" text NOT NULL,
+        "status" text NOT NULL DEFAULT 'active',
+        "external_account_id" text,
+        "config" jsonb DEFAULT '{}'::jsonb,
+        "last_success_at" timestamp,
+        "last_error_at" timestamp,
+        "last_error_message" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'acquisition_raw_records',
+    sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_raw_records" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "source_connection_id" uuid NOT NULL REFERENCES "acquisition_source_connections"("id") ON DELETE CASCADE,
+        "external_event_id" text,
+        "event_name" text,
+        "received_at" timestamp DEFAULT NOW() NOT NULL,
+        "occurred_at" timestamp,
+        "headers" jsonb,
+        "payload" jsonb NOT NULL,
+        "payload_hash" text NOT NULL,
+        "processing_status" text NOT NULL DEFAULT 'received',
+        "error_message" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'acquisition_events',
+    sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_events" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "source_connection_id" uuid NOT NULL REFERENCES "acquisition_source_connections"("id") ON DELETE CASCADE,
+        "raw_record_id" uuid NOT NULL REFERENCES "acquisition_raw_records"("id") ON DELETE CASCADE,
+        "source" text NOT NULL,
+        "external_event_id" text,
+        "event_type" text NOT NULL,
+        "occurred_at" timestamp NOT NULL,
+        "received_at" timestamp DEFAULT NOW() NOT NULL,
+        "person_id" uuid REFERENCES "acquisition_persons"("id") ON DELETE SET NULL,
+        "initiative_id" uuid,
+        "campaign_id" uuid,
+        "channel" text,
+        "object_type" text,
+        "object_id" text,
+        "attributes" jsonb DEFAULT '{}'::jsonb,
+        "schema_version" integer DEFAULT 1 NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'acquisition_interactions',
+    sql`
+      CREATE TABLE IF NOT EXISTS "acquisition_interactions" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "person_id" uuid NOT NULL REFERENCES "acquisition_persons"("id") ON DELETE CASCADE,
+        "initiative_id" uuid,
+        "campaign_id" uuid,
+        "source_event_id" uuid NOT NULL REFERENCES "acquisition_events"("id") ON DELETE CASCADE,
+        "kind" text NOT NULL,
+        "direction" text,
+        "summary" text,
+        "occurred_at" timestamp NOT NULL,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  logger.info('✓ Core platform tables ensured');
+}

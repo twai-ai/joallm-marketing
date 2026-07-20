@@ -162,6 +162,48 @@
       "when": 1774828800000,
       "tag": "0022_add_rag_mode_to_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1774915200000,
+      "tag": "0023_add_multimodal_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1775001600000,
+      "tag": "0024_add_media_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1775088000000,
+      "tag": "0025_add_workflow_suspension",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1775174400000,
+      "tag": "0026_add_user_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1775260800000,
+      "tag": "0027_add_frame_analyses",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1775347200000,
+      "tag": "0028_add_acquisition_intelligence",
+      "breakpoints": true
     }
   ]
 }

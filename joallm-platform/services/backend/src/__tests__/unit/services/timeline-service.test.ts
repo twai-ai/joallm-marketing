@@ -1,6 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import type { AcquisitionEvent, Interaction } from '@joallm/shared';
 import { mergeTimelineEntriesForTest } from '../../../services/timeline-service.js';
+
+type AcquisitionEvent = {
+  id: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  sourceConnectionId: string;
+  rawRecordId: string;
+  source: string;
+  externalEventId?: string | null;
+  eventType: string;
+  occurredAt: string;
+  receivedAt: string;
+  personId?: string | null;
+  initiativeId?: string | null;
+  campaignId?: string | null;
+  channel?: string | null;
+  objectType?: string | null;
+  objectId?: string | null;
+  attributes: Record<string, unknown>;
+  schemaVersion: number;
+  createdAt?: string;
+};
+
+type Interaction = {
+  id: string;
+  ownerUserId: string;
+  organizationId?: string | null;
+  personId: string;
+  initiativeId?: string | null;
+  campaignId?: string | null;
+  sourceEventId: string;
+  kind: string;
+  direction?: string | null;
+  summary?: string | null;
+  occurredAt: string;
+  createdAt: string;
+};
 
 const baseEvent = (overrides: Partial<AcquisitionEvent>): AcquisitionEvent => ({
   id: 'evt-1',

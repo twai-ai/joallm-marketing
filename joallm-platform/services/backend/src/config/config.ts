@@ -127,6 +127,19 @@ if (!parseResult.success) {
 
 export const config = parseResult.data;
 
+// Railway often injects host-only values; Google requires an absolute redirect URI.
+{
+  const raw = (config.googleRedirectUri || '').trim();
+  if (raw && !/^https?:\/\//i.test(raw)) {
+    const withScheme = raw.includes('localhost') || raw.startsWith('127.')
+      ? `http://${raw}`
+      : `https://${raw}`;
+    (config as { googleRedirectUri: string }).googleRedirectUri = withScheme.replace(/\/$/, '');
+  } else if (raw) {
+    (config as { googleRedirectUri: string }).googleRedirectUri = raw.replace(/\/$/, '');
+  }
+}
+
 // Production validation - ensure critical secrets are set
 if (config.nodeEnv === 'production') {
   const requiredSecrets = [

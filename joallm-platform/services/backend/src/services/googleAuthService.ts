@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
 import { config } from '../config/config.js';
 import { logger } from '../utils/logger.js';
+import { normalizePublicUrl } from '../utils/public-url.js';
 
 export interface GoogleUserInfo {
   id: string;
@@ -11,38 +12,52 @@ export interface GoogleUserInfo {
 }
 
 export class GoogleAuthService {
-  private client: OAuth2Client;
+  private clientId: string;
+  private clientSecret: string;
+  private defaultRedirectUri: string;
 
   constructor() {
-    this.client = new OAuth2Client(
-      config.googleClientId,
-      config.googleClientSecret,
-      config.googleRedirectUri
+    this.clientId = config.googleClientId;
+    this.clientSecret = config.googleClientSecret;
+    this.defaultRedirectUri = normalizePublicUrl(
+      config.googleRedirectUri,
+      'http://localhost:3001/api/auth/google/callback',
     );
+  }
+
+  private createClient(redirectUri: string): OAuth2Client {
+    return new OAuth2Client(this.clientId, this.clientSecret, redirectUri);
+  }
+
+  resolveRedirectUri(override?: string | null): string {
+    return normalizePublicUrl(override || this.defaultRedirectUri, this.defaultRedirectUri);
   }
 
   /**
    * Generate Google OAuth URL for user to authorize
    */
-  generateAuthUrl(): string {
+  generateAuthUrl(redirectUri?: string): string {
     try {
+      const resolvedRedirect = this.resolveRedirectUri(redirectUri);
+      const client = this.createClient(resolvedRedirect);
       const scopes = [
         'openid',
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/userinfo.profile',
       ];
 
-      const authUrl = this.client.generateAuthUrl({
+      const authUrl = client.generateAuthUrl({
         access_type: 'offline',
         scope: scopes,
         include_granted_scopes: true,
         prompt: 'select_account',
+        redirect_uri: resolvedRedirect,
       });
 
-      logger.info('Generated Google OAuth URL', { 
-        clientId: config.googleClientId,
-        redirectUri: config.googleRedirectUri,
-        hasSecret: !!config.googleClientSecret && config.googleClientSecret !== 'PLACEHOLDER-GOOGLE-CLIENT-SECRET'
+      logger.info('Generated Google OAuth URL', {
+        clientId: this.clientId,
+        redirectUri: resolvedRedirect,
+        hasSecret: !!this.clientSecret && this.clientSecret !== 'PLACEHOLDER-GOOGLE-CLIENT-SECRET',
       });
 
       return authUrl;
@@ -55,19 +70,27 @@ export class GoogleAuthService {
   /**
    * Exchange authorization code for tokens and get user info
    */
-  async getTokenAndUserInfo(code: string): Promise<{
+  async getTokenAndUserInfo(
+    code: string,
+    redirectUri?: string,
+  ): Promise<{
     tokens: any;
     userInfo: GoogleUserInfo;
   }> {
     try {
-      const { tokens } = await this.client.getToken(code);
-      this.client.setCredentials(tokens);
+      const resolvedRedirect = this.resolveRedirectUri(redirectUri);
+      const client = this.createClient(resolvedRedirect);
+      const { tokens } = await client.getToken({
+        code,
+        redirect_uri: resolvedRedirect,
+      });
+      client.setCredentials(tokens);
 
       // Prefer id_token (requires openid scope); fall back to userinfo endpoint
       if (tokens.id_token) {
-        const ticket = await this.client.verifyIdToken({
+        const ticket = await client.verifyIdToken({
           idToken: tokens.id_token,
-          audience: config.googleClientId,
+          audience: this.clientId,
         });
 
         const payload = ticket.getPayload();
@@ -117,7 +140,8 @@ export class GoogleAuthService {
       };
     } catch (error) {
       logger.error('Google OAuth error:', error);
-      throw new Error('Failed to authenticate with Google');
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to authenticate with Google: ${detail}`);
     }
   }
 
@@ -126,9 +150,10 @@ export class GoogleAuthService {
    */
   async verifyIdToken(idToken: string): Promise<GoogleUserInfo> {
     try {
-      const ticket = await this.client.verifyIdToken({
+      const client = this.createClient(this.defaultRedirectUri);
+      const ticket = await client.verifyIdToken({
         idToken,
-        audience: config.googleClientId,
+        audience: this.clientId,
       });
 
       const payload = ticket.getPayload();

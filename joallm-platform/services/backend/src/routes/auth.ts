@@ -12,6 +12,7 @@ import { logger } from '../utils/logger.js';
 import { googleAuthService } from '../services/googleAuthService.js';
 import { auditLog } from '../utils/audit.js';
 import { applyInternalAccessOverrides } from '../services/access-control.js';
+import { normalizePublicUrl, resolveRequestOrigin } from '../utils/public-url.js';
 
 // Validation schemas
 const registerSchema = z.object({
@@ -36,29 +37,53 @@ const refreshTokenSchema = z.object({
 
 /** Normalize FRONTEND_URL (Railway often injects host without scheme). */
 function getFrontendUrl(): string {
-  const raw = (process.env.FRONTEND_URL || 'http://localhost:5174').trim();
-  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/$/, '');
-  return `https://${raw.replace(/\/$/, '')}`;
+  return normalizePublicUrl(process.env.FRONTEND_URL, 'http://localhost:5174');
+}
+
+/** Prefer GOOGLE_REDIRECT_URI; otherwise derive from the public request host. */
+function getGoogleRedirectUri(request: FastifyRequest): string {
+  const configured = process.env.GOOGLE_REDIRECT_URI?.trim();
+  if (configured) {
+    return googleAuthService.resolveRedirectUri(configured);
+  }
+  const origin = resolveRequestOrigin(request.headers as Record<string, unknown>);
+  if (origin) {
+    return `${origin}/api/auth/google/callback`;
+  }
+  return googleAuthService.resolveRedirectUri();
 }
 
 type OAuthCodePayload = { accessToken: string; refreshToken: string };
 const oauthCodeMemory = new Map<string, { payload: OAuthCodePayload; expiresAt: number }>();
 
 async function storeOAuthCode(code: string, payload: OAuthCodePayload): Promise<void> {
-  if (isRedisAvailable && redisInstance) {
-    await (redisInstance as any).set(`oauth_code:${code}`, JSON.stringify(payload), 'EX', 300);
-    return;
-  }
+  // Always keep an in-process copy so exchange works even if Redis blips.
   oauthCodeMemory.set(code, { payload, expiresAt: Date.now() + 300_000 });
+  if (!isRedisAvailable || !redisInstance) return;
+  try {
+    await (redisInstance as any).set(`oauth_code:${code}`, JSON.stringify(payload), 'EX', 300);
+  } catch (error) {
+    logger.warn('OAuth code Redis store failed; using memory fallback', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function consumeOAuthCode(code: string): Promise<OAuthCodePayload | null> {
   if (isRedisAvailable && redisInstance) {
-    const key = `oauth_code:${code}`;
-    const raw = await (redisInstance as any).get(key);
-    if (!raw) return null;
-    await (redisInstance as any).del(key);
-    return JSON.parse(raw) as OAuthCodePayload;
+    try {
+      const key = `oauth_code:${code}`;
+      const raw = await (redisInstance as any).get(key);
+      if (raw) {
+        await (redisInstance as any).del(key);
+        oauthCodeMemory.delete(code);
+        return JSON.parse(raw) as OAuthCodePayload;
+      }
+    } catch (error) {
+      logger.warn('OAuth code Redis consume failed; trying memory', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   const entry = oauthCodeMemory.get(code);
@@ -616,33 +641,60 @@ async function logout(request: FastifyRequest, reply: FastifyReply) {
 }
 
 // Google OAuth handlers
+async function googleAuthStatus(_request: FastifyRequest, reply: FastifyReply) {
+  const redirectUri = googleAuthService.resolveRedirectUri(process.env.GOOGLE_REDIRECT_URI);
+  return reply.send({
+    ok: true,
+    redirectUri,
+    frontendUrl: getFrontendUrl(),
+    hasClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
+    hasClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
+    redisAvailable: Boolean(isRedisAvailable),
+  });
+}
+
 async function googleAuth(request: FastifyRequest, reply: FastifyReply) {
   try {
-    logger.info('Google OAuth initiated');
-    const authUrl = googleAuthService.generateAuthUrl();
-    logger.info('Generated auth URL:', authUrl);
+    const redirectUri = getGoogleRedirectUri(request);
+    logger.info('Google OAuth initiated', { redirectUri, frontendUrl: getFrontendUrl() });
+    const authUrl = googleAuthService.generateAuthUrl(redirectUri);
     reply.redirect(authUrl);
   } catch (error) {
     logger.error('Google auth error:', error);
-    reply.redirect(`${getFrontendUrl()}/auth/error?message=Google authentication setup failed`);
+    reply.redirect(`${getFrontendUrl()}/auth/error?message=${encodeURIComponent('Google authentication setup failed')}`);
   }
 }
 
 async function googleCallback(request: FastifyRequest, reply: FastifyReply) {
   try {
-    const { code } = request.query as { code: string };
-    
-    logger.info('Google OAuth callback received', { code: code ? 'present' : 'missing' });
-    
-    if (!code) {
-      logger.error('No authorization code in callback');
-      reply.redirect(`${getFrontendUrl()}/auth/error?message=No authorization code provided`);
+    const query = request.query as { code?: string; error?: string; error_description?: string };
+    const redirectUri = getGoogleRedirectUri(request);
+
+    logger.info('Google OAuth callback received', {
+      code: query.code ? 'present' : 'missing',
+      error: query.error || null,
+      redirectUri,
+    });
+
+    if (query.error) {
+      const reason = query.error_description || query.error;
+      reply.redirect(
+        `${getFrontendUrl()}/auth/error?message=${encodeURIComponent(`Google denied access: ${reason}`)}`,
+      );
       return;
     }
 
-    // Get user info from Google
-    logger.info('Exchanging code for tokens...');
-    const { userInfo } = await googleAuthService.getTokenAndUserInfo(code);
+    if (!query.code) {
+      logger.error('No authorization code in callback');
+      reply.redirect(
+        `${getFrontendUrl()}/auth/error?message=${encodeURIComponent('No authorization code provided')}`,
+      );
+      return;
+    }
+
+    // Get user info from Google (redirect_uri must match the one used to start the flow)
+    logger.info('Exchanging code for tokens...', { redirectUri });
+    const { userInfo } = await googleAuthService.getTokenAndUserInfo(query.code, redirectUri);
     logger.info('Successfully got user info:', { email: userInfo.email, name: userInfo.name });
 
     // Check if user exists
@@ -714,7 +766,13 @@ async function googleCallback(request: FastifyRequest, reply: FastifyReply) {
 
   } catch (error) {
     logger.error('Google callback error:', error);
-    reply.redirect(`${getFrontendUrl()}/auth/error?message=Authentication failed`);
+    const detail = error instanceof Error ? error.message : 'Authentication failed';
+    const hint = /redirect_uri/i.test(detail)
+      ? ' Check GOOGLE_REDIRECT_URI matches Google Console exactly.'
+      : '';
+    reply.redirect(
+      `${getFrontendUrl()}/auth/error?message=${encodeURIComponent(`${detail}${hint}`)}`,
+    );
   }
 }
 
@@ -872,6 +930,7 @@ export async function authRoutes(fastify: FastifyInstance) {
   fastify.post('/reset-password', { config: { rateLimit: authRateLimit } }, resetPassword);
 
   // Google OAuth routes
+  fastify.get('/google/status', googleAuthStatus);
   fastify.get('/google', googleAuth);
   fastify.get('/google/callback', googleCallback);
 

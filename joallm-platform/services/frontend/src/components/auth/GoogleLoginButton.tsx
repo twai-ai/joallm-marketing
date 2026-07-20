@@ -1,20 +1,20 @@
-import { env } from '../../config/env';
+import { env, isApiUrlMisconfigured, resolveApiBaseUrl } from '../../config/env';
+import { showError } from '../../utils/toast';
 
 interface GoogleLoginButtonProps {
   className?: string;
   children?: React.ReactNode;
 }
 
-function resolveApiBaseUrl(): string {
-  const raw = (env.VITE_API_URL || '').trim().replace(/\/$/, '');
-  if (!raw) return 'http://localhost:3001';
-  if (/^https?:\/\//i.test(raw)) return raw;
-  // Railway sometimes injects host without scheme
-  return `https://${raw}`;
-}
-
 export function GoogleLoginButton({ className = '', children }: GoogleLoginButtonProps) {
   const handleGoogleLogin = () => {
+    if (isApiUrlMisconfigured()) {
+      showError(
+        'API URL not configured',
+        'Set frontend VITE_API_URL to your live backend HTTPS URL, then redeploy.',
+      );
+      return;
+    }
     window.location.href = `${resolveApiBaseUrl()}/api/auth/google`;
   };
 

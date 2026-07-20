@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { storage, STORAGE_KEYS } from '../utils/storage';
 import { showSuccess, showError } from '../utils/toast';
 import { useAuth } from '../contexts/AuthContext';
-import { env } from '../config/env';
+import { resolveApiBaseUrl } from '../config/env';
 import { authService } from '../services/authService';
 
 export function AuthCallback() {
@@ -31,13 +31,14 @@ export function AuthCallback() {
 
         // If we got a one-time code, exchange it for tokens
         if (oauthCode && !token) {
-          const raw = (env.VITE_API_URL || env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
-          const apiUrl = /^https?:\/\//i.test(raw) ? raw : `https://${raw || 'localhost:3001'}`;
+          const apiUrl = resolveApiBaseUrl();
           const resp = await fetch(`${apiUrl}/api/auth/exchange?code=${oauthCode}`);
           if (!resp.ok) {
+            const body = await resp.json().catch(() => ({} as { error?: string }));
+            const detail = body.error || `HTTP ${resp.status}`;
             setStatus('error');
-            setMessage('Failed to complete authentication');
-            showError('Authentication failed', 'Could not exchange authorization code');
+            setMessage(`Failed to complete authentication (${detail}). API: ${apiUrl}`);
+            showError('Authentication failed', detail);
             return;
           }
           const data = await resp.json();

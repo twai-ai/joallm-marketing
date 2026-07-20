@@ -20,6 +20,7 @@ import {
   Radio,
   Target,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import { Link, Navigate, useParams } from 'react-router-dom';
@@ -220,6 +221,7 @@ function CampaignsPanel({
   loading,
   reload,
   setCampaigns,
+  onUploadAssets,
 }: {
   programId: string;
   programName: string;
@@ -230,6 +232,7 @@ function CampaignsPanel({
   loading: boolean;
   reload: () => Promise<void>;
   setCampaigns: Dispatch<SetStateAction<AcquisitionCampaign[]>>;
+  onUploadAssets: (campaignId: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -413,6 +416,14 @@ function CampaignsPanel({
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={() => onUploadAssets(campaign.id)}
+            className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-medium text-teal-800 hover:border-teal-400"
+          >
+            <Upload className="h-3 w-3" />
+            Upload
+          </button>
           <button
             type="button"
             onClick={() => openEdit(campaign)}
@@ -617,6 +628,7 @@ export function AcquisitionWorkspacePage() {
   const program = getProgramById(programId);
   const [tab, setTab] = useState<WorkspaceTab>('intents');
   const [filterIntentId, setFilterIntentId] = useState<GrowthIntentId | null>(null);
+  const [assetsCampaignId, setAssetsCampaignId] = useState<string | null>(null);
 
   const brand = program?.id === 'amplify-with-ai' ? 'amplify' : 'institutional';
   const intents = useMemo(
@@ -635,6 +647,11 @@ export function AcquisitionWorkspacePage() {
   const openIntentCampaigns = (intentId: GrowthIntentId) => {
     setFilterIntentId(intentId);
     setTab('campaigns');
+  };
+
+  const openAssetsForCampaign = (campaignId: string) => {
+    setAssetsCampaignId(campaignId);
+    setTab('assets');
   };
 
   return (
@@ -785,6 +802,7 @@ export function AcquisitionWorkspacePage() {
           loading={loading}
           reload={reload}
           setCampaigns={setCampaigns}
+          onUploadAssets={openAssetsForCampaign}
         />
       )}
 
@@ -799,8 +817,12 @@ export function AcquisitionWorkspacePage() {
       {tab === 'assets' && (
         <AssetsPanel
           programId={program.id}
+          programName={program.name}
           campaigns={campaigns}
           campaignsLoading={loading}
+          preferredCampaignId={assetsCampaignId}
+          onCampaignsChanged={reload}
+          onGoToCampaigns={() => setTab('campaigns')}
         />
       )}
 

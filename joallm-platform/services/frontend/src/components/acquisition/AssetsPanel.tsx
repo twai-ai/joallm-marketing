@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { FolderPlus, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import type {
   AcquisitionCampaign,
@@ -18,38 +18,53 @@ function kindFromFile(file: File): GrowthAssetKind {
 
 export function AssetsPanel({
   programId,
+  programName,
   campaigns,
   campaignsLoading,
+  preferredCampaignId,
+  onCampaignsChanged,
+  onGoToCampaigns,
 }: {
   programId: string;
+  programName: string;
   campaigns: AcquisitionCampaign[];
   campaignsLoading: boolean;
+  preferredCampaignId?: string | null;
+  onCampaignsChanged: () => Promise<void> | void;
+  onGoToCampaigns: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [campaignId, setCampaignId] = useState('');
   const [projects, setProjects] = useState<CreativeProject[]>([]);
   const [assets, setAssets] = useState<GrowthMarketingAsset[]>([]);
   const [projectId, setProjectId] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [savingProject, setSavingProject] = useState(false);
 
   useEffect(() => {
+    if (preferredCampaignId && campaigns.some((c) => c.id === preferredCampaignId)) {
+      setCampaignId(preferredCampaignId);
+      return;
+    }
     if (!campaignId && campaigns[0]) {
       setCampaignId(campaigns[0].id);
     }
-  }, [campaigns, campaignId]);
+  }, [campaigns, campaignId, preferredCampaignId]);
 
-  const load = useCallback(async () => {
-    if (!campaignId) {
+  const load = useCallback(async (targetCampaignId?: string) => {
+    const id = targetCampaignId || campaignId;
+    if (!id) {
       setProjects([]);
       setAssets([]);
       return;
     }
     setLoading(true);
     try {
-      const base = `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${campaignId}`;
+      const base = `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${id}`;
       const [projectsRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: CreativeProject[] }>(`${base}/creative-projects`),
         apiClient.get<{ success: boolean; data: GrowthMarketingAsset[] }>(`${base}/assets`),
@@ -71,47 +86,80 @@ export function AssetsPanel({
     void load();
   }, [load]);
 
-  const handleCreateProject = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!campaignId || !projectName.trim()) return;
-    setSavingProject(true);
+  const ensureCampaignId = async (): Promise<string | null> => {
+    if (campaignId) return campaignId;
+    if (campaigns[0]) {
+      setCampaignId(campaigns[0].id);
+      return campaigns[0].id;
+    }
+
+    // Complete the loop: first upload creates a Registration campaign automatically
     try {
-      const res = await apiClient.post<{ success: boolean; data: CreativeProject }>(
-        `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${campaignId}/creative-projects`,
-        { name: projectName.trim(), status: 'active' },
+      const created = await apiClient.post<{ success: boolean; data: AcquisitionCampaign }>(
+        `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns`,
+        {
+          name: `${programName} asset upload`,
+          programName,
+          intentId: 'registration',
+          status: 'draft',
+        },
       );
-      showSuccess('Creative project created');
-      setProjectName('');
-      setShowProjectForm(false);
-      setProjectId(res.data.id);
-      await load();
+      const id = created.data.id;
+      setCampaignId(id);
+      await onCampaignsChanged();
+      showSuccess('Created a Registration campaign for your assets');
+      return id;
     } catch (error) {
-      showError(error instanceof Error ? error.message : 'Failed to create project');
-    } finally {
-      setSavingProject(false);
+      showError(error instanceof Error ? error.message : 'Could not create a campaign for upload');
+      return null;
     }
   };
 
-  const handleUpload = async (fileList: FileList | null) => {
-    if (!fileList?.length || !campaignId) return;
+  const ensureProjectId = async (
+    forCampaignId: string,
+    existingProjects: CreativeProject[],
+  ): Promise<string | null> => {
+    if (projectId) return projectId;
+    if (existingProjects[0]) {
+      setProjectId(existingProjects[0].id);
+      return existingProjects[0].id;
+    }
+    try {
+      const created = await apiClient.post<{ success: boolean; data: CreativeProject }>(
+        `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${forCampaignId}/creative-projects`,
+        { name: 'Default creatives', status: 'active' },
+      );
+      setProjectId(created.data.id);
+      return created.data.id;
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Could not create creative project');
+      return null;
+    }
+  };
+
+  const handleUpload = async (fileList: FileList | File[] | null) => {
+    const files = fileList ? Array.from(fileList) : [];
+    if (!files.length) return;
+
     setUploading(true);
     try {
-      let targetProjectId = projectId;
-      if (!targetProjectId) {
-        const existing = projects[0];
-        if (existing) {
-          targetProjectId = existing.id;
-        } else {
-          const created = await apiClient.post<{ success: boolean; data: CreativeProject }>(
-            `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${campaignId}/creative-projects`,
-            { name: 'Default creatives', status: 'active' },
-          );
-          targetProjectId = created.data.id;
-        }
-        setProjectId(targetProjectId);
+      const targetCampaignId = await ensureCampaignId();
+      if (!targetCampaignId) return;
+
+      // Refresh projects for the campaign we will use
+      let campaignProjects = projects;
+      if (targetCampaignId !== campaignId || projects.length === 0) {
+        const res = await apiClient.get<{ success: boolean; data: CreativeProject[] }>(
+          `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${targetCampaignId}/creative-projects`,
+        );
+        campaignProjects = res.data || [];
+        setProjects(campaignProjects);
       }
 
-      for (const file of Array.from(fileList)) {
+      const targetProjectId = await ensureProjectId(targetCampaignId, campaignProjects);
+      if (!targetProjectId) return;
+
+      for (const file of files) {
         const uploaded = await apiClient.uploadFile<{ fileId?: string; id?: string }>(
           API_ENDPOINTS.files.upload,
           file,
@@ -121,7 +169,7 @@ export function AssetsPanel({
           throw new Error(`Upload failed for ${file.name}`);
         }
         await apiClient.post(
-          `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${campaignId}/creative-projects/${targetProjectId}/assets`,
+          `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${targetCampaignId}/creative-projects/${targetProjectId}/assets`,
           {
             title: file.name.replace(/\.[^.]+$/, '') || file.name,
             kind: kindFromFile(file),
@@ -130,8 +178,8 @@ export function AssetsPanel({
           },
         );
       }
-      showSuccess(fileList.length === 1 ? 'Asset uploaded' : `${fileList.length} assets uploaded`);
-      await load();
+      showSuccess(files.length === 1 ? 'Asset uploaded' : `${files.length} assets uploaded`);
+      await load(targetCampaignId);
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Upload failed');
     } finally {
@@ -139,7 +187,30 @@ export function AssetsPanel({
     }
   };
 
+  const handleCreateProject = async (event: FormEvent) => {
+    event.preventDefault();
+    const targetCampaignId = await ensureCampaignId();
+    if (!targetCampaignId || !projectName.trim()) return;
+    setSavingProject(true);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: CreativeProject }>(
+        `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${targetCampaignId}/creative-projects`,
+        { name: projectName.trim(), status: 'active' },
+      );
+      showSuccess('Creative project created');
+      setProjectName('');
+      setShowProjectForm(false);
+      setProjectId(res.data.id);
+      await load(targetCampaignId);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Failed to create project');
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
   const handleDeleteAsset = async (asset: GrowthMarketingAsset) => {
+    if (!campaignId) return;
     if (!window.confirm(`Delete asset “${asset.title}”?`)) return;
     try {
       await apiClient.delete(
@@ -153,6 +224,7 @@ export function AssetsPanel({
   };
 
   const handleDeleteProject = async (project: CreativeProject) => {
+    if (!campaignId) return;
     if (!window.confirm(`Delete creative project “${project.name}” and its assets?`)) return;
     try {
       await apiClient.delete(
@@ -164,6 +236,12 @@ export function AssetsPanel({
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to delete project');
     }
+  };
+
+  const onDrop = (event: DragEvent) => {
+    event.preventDefault();
+    setDragOver(false);
+    void handleUpload(event.dataTransfer.files);
   };
 
   const visibleAssets = projectId
@@ -179,81 +257,129 @@ export function AssetsPanel({
     );
   }
 
-  if (campaigns.length === 0) {
-    return (
-      <section className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6">
-        <h2 className="text-xl font-semibold text-slate-950">Assets</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Create a Campaign under an Intent first — assets attach to a Creative Project under that
-          campaign.
-        </p>
-      </section>
-    );
-  }
-
   return (
     <section className="space-y-4">
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-950">Creative Projects & Assets</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Upload posters, Canva/Figma exports, and creatives under a campaign. AI generate is
-              postponed — manual attach validates the architecture.
-            </p>
-          </div>
-          <label className="btn-atrisi-primary inline-flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm disabled:opacity-60">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {uploading ? 'Uploading…' : 'Upload assets'}
-            <input
-              type="file"
-              className="hidden"
-              multiple
-              accept="image/*,video/*,.pdf,.png,.jpg,.jpeg,.webp,.gif,.mp4,.mov"
-              disabled={!campaignId || uploading}
-              onChange={(e) => {
-                void handleUpload(e.target.files);
-                e.target.value = '';
-              }}
-            />
-          </label>
+        <h2 className="text-xl font-semibold text-slate-950">Upload creatives</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Program → Intent → Campaign → Creative Project → Assets. Drop files here to complete the
+          loop (posters, Canva/Figma exports, images, video).
+        </p>
+
+        {/* Always-visible dropzone — primary upload surface */}
+        <div
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
+          onClick={() => !uploading && fileInputRef.current?.click()}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+          }}
+          onDrop={onDrop}
+          className={`mt-5 flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition ${
+            dragOver
+              ? 'border-teal-500 bg-teal-50'
+              : 'border-teal-300 bg-teal-50/40 hover:border-teal-500 hover:bg-teal-50'
+          } ${uploading ? 'pointer-events-none opacity-70' : ''}`}
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="h-10 w-10 animate-spin text-teal-700" />
+              <p className="mt-3 text-sm font-semibold text-teal-900">Uploading…</p>
+            </>
+          ) : (
+            <>
+              <Upload className="h-10 w-10 text-teal-700" />
+              <p className="mt-3 text-base font-semibold text-slate-950">
+                Drop files here or click to upload
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                PNG, JPG, WebP, GIF, PDF, MP4 · attaches under a campaign automatically
+              </p>
+              <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm">
+                <Upload className="h-4 w-4" />
+                Choose files
+              </span>
+            </>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept="image/*,video/*,.pdf,.png,.jpg,.jpeg,.webp,.gif,.mp4,.mov"
+            disabled={uploading}
+            onChange={(e) => {
+              void handleUpload(e.target.files);
+              e.target.value = '';
+            }}
+          />
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="block text-sm">
-            <span className="text-xs font-medium text-slate-600">Campaign</span>
-            <select
-              value={campaignId}
-              onChange={(e) => {
-                setCampaignId(e.target.value);
-                setProjectId('');
-              }}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
+        {campaigns.length === 0 && (
+          <p className="mt-3 text-xs text-slate-500">
+            No campaign yet — first upload will create a Registration campaign for {programName}.{' '}
+            <button
+              type="button"
+              onClick={onGoToCampaigns}
+              className="font-semibold text-teal-800 underline-offset-2 hover:underline"
             >
-              {campaigns.map((campaign) => (
-                <option key={campaign.id} value={campaign.id}>
-                  {campaign.name}
-                  {campaign.intentId ? ` · ${campaign.intentId}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="text-xs font-medium text-slate-600">Creative project (filter)</span>
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
-            >
-              <option value="">All projects</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+              Or create one manually
+            </button>
+          </p>
+        )}
+
+        {campaigns.length > 0 && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-slate-600">Campaign</span>
+              <select
+                value={campaignId}
+                onChange={(e) => {
+                  setCampaignId(e.target.value);
+                  setProjectId('');
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
+              >
+                {campaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>
+                    {campaign.name}
+                    {campaign.intentId ? ` · ${campaign.intentId}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-slate-600">Creative project (filter)</span>
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
+              >
+                <option value="">All projects</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -263,6 +389,15 @@ export function AssetsPanel({
           >
             <FolderPlus className="h-4 w-4" />
             New creative project
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-2 rounded-full bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-60"
+          >
+            <Upload className="h-4 w-4" />
+            Upload assets
           </button>
         </div>
 
@@ -285,7 +420,7 @@ export function AssetsPanel({
               <button
                 type="submit"
                 disabled={savingProject}
-                className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-full bg-teal-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {savingProject ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Create
@@ -340,7 +475,7 @@ export function AssetsPanel({
       )}
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-950">Assets</h3>
+        <h3 className="text-sm font-semibold text-slate-950">Uploaded assets</h3>
         {loading ? (
           <div className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -348,7 +483,7 @@ export function AssetsPanel({
           </div>
         ) : visibleAssets.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">
-            No assets yet. Upload a poster or export to attach it under this campaign.
+            Nothing uploaded yet — use the dropzone above.
           </p>
         ) : (
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">

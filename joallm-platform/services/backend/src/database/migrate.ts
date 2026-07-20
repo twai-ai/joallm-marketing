@@ -401,6 +401,51 @@ async function ensureSchemaCompatibility(): Promise<void> {
       ON "knowledge_artifacts" ("person_id")
     `);
 
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "platform_connectors" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "provider" text NOT NULL,
+        "name" text NOT NULL,
+        "api_version" text,
+        "status" text NOT NULL DEFAULT 'disconnected',
+        "capabilities" jsonb NOT NULL DEFAULT '[]'::jsonb,
+        "config" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "external_account_id" text,
+        "last_validated_at" timestamp,
+        "last_error_at" timestamp,
+        "last_error_message" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "studio_channels" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "kind" text NOT NULL,
+        "name" text NOT NULL,
+        "status" text NOT NULL DEFAULT 'active',
+        "connector_id" uuid,
+        "connector_provider" text,
+        "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      ALTER TABLE "acquisition_source_connections"
+      ADD COLUMN IF NOT EXISTS "connector_id" uuid
+    `);
+    await db.execute(sql`
+      ALTER TABLE "acquisition_source_connections"
+      ADD COLUMN IF NOT EXISTS "channel_id" uuid
+    `);
+
     logger.info('✅ Critical schema compatibility checks completed');
   } catch (error) {
     logger.error('❌ Critical schema compatibility check failed:', error);

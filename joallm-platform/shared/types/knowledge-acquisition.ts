@@ -208,6 +208,10 @@ export interface SourceConnection {
   name: string;
   status: SourceConnectionStatus;
   externalAccountId?: string | null;
+  /** Integration Platform connector (technical) */
+  connectorId?: string | null;
+  /** Marketing Studio channel (business) */
+  channelId?: string | null;
   config?: Record<string, unknown>;
   lastSuccessAt?: string | null;
   lastErrorAt?: string | null;

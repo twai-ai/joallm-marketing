@@ -15,6 +15,13 @@ import { eq, and } from 'drizzle-orm';
 import { logger } from '../utils/logger.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { requireTier } from '../middleware/subscription.js';
+import {
+  listConnectorRegistry,
+  listPlatformConnectors,
+  ensureMetaWhatsAppConnector,
+  validateConnector,
+} from '../services/connector-service.js';
+import { config } from '../config/config.js';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
@@ -36,6 +43,66 @@ function makeOAuthClient() {
 }
 
 export async function integrationsRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
+
+  // ── Integration Platform: Connector registry + instances ───────────────────
+
+  fastify.get('/connectors/registry', {
+    preHandler: authenticateToken,
+    schema: {
+      description: 'Catalog of Platform Connectors (technical providers)',
+      tags: ['integrations'],
+    },
+  }, async (_request, reply) => {
+    return reply.send({ success: true, data: listConnectorRegistry() });
+  });
+
+  fastify.get('/connectors', {
+    preHandler: authenticateToken,
+    schema: {
+      description: 'List Platform Connector instances for current user',
+      tags: ['integrations'],
+    },
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const connectors = await listPlatformConnectors(userId);
+    return reply.send({ success: true, data: connectors });
+  });
+
+  fastify.post('/connectors/meta-whatsapp', {
+    preHandler: authenticateToken,
+    schema: {
+      description: 'Ensure Meta WhatsApp Cloud API connector (Platform)',
+      tags: ['integrations'],
+    },
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const body = (request.body || {}) as {
+      phoneNumberId?: string;
+      displayPhoneNumber?: string;
+    };
+    const connector = await ensureMetaWhatsAppConnector({
+      ownerUserId: userId,
+      phoneNumberId: body.phoneNumberId || config.metaPhoneNumberId,
+      displayPhoneNumber: body.displayPhoneNumber,
+    });
+    return reply.status(201).send({ success: true, data: connector });
+  });
+
+  fastify.post('/connectors/:connectorId/validate', {
+    preHandler: authenticateToken,
+    schema: {
+      description: 'Validate a Platform Connector',
+      tags: ['integrations'],
+    },
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { connectorId } = request.params as { connectorId: string };
+    const connector = await validateConnector(userId, connectorId);
+    if (!connector) {
+      return reply.status(404).send({ success: false, error: 'Connector not found' });
+    }
+    return reply.send({ success: true, data: connector });
+  });
 
   // List connected integrations
   fastify.get('/', {

@@ -19,6 +19,12 @@ import {
   isRelationshipMaturity,
   type RelationshipMaturity,
 } from './relationship-maturity.js';
+import {
+  ensureDefaultWhatsAppPublishingProfile,
+  ensureMetaWhatsAppChannelStack,
+  listStudioChannels,
+} from './channel-service.js';
+import { listPlatformConnectors } from './connector-service.js';
 
 const META_PROVIDER = 'meta_whatsapp';
 
@@ -108,6 +114,27 @@ export async function ensureMetaSourceConnection(options: {
 }) {
   const { ownerUserId, phoneNumberId, displayPhoneNumber } = options;
 
+  // Studio-1: Platform Connector → Studio Channel → Publishing Profile
+  let connectorId: string | null = null;
+  let channelId: string | null = null;
+  try {
+    const stack = await ensureMetaWhatsAppChannelStack({
+      ownerUserId,
+      phoneNumberId,
+      displayPhoneNumber,
+    });
+    connectorId = stack.connector.id;
+    channelId = stack.channel.id;
+    await ensureDefaultWhatsAppPublishingProfile({
+      ownerUserId,
+      channelId: stack.channel.id,
+    });
+  } catch (error) {
+    logger.warn('Meta WhatsApp Connector/Channel stack ensure failed (continuing source)', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   if (phoneNumberId) {
     const [byExternal] = await db
       .select()
@@ -119,7 +146,21 @@ export async function ensureMetaSourceConnection(options: {
         ),
       )
       .limit(1);
-    if (byExternal) return byExternal;
+    if (byExternal) {
+      if (connectorId || channelId) {
+        const [linked] = await db
+          .update(acquisitionSourceConnections)
+          .set({
+            connectorId: connectorId || byExternal.connectorId,
+            channelId: channelId || byExternal.channelId,
+            updatedAt: new Date(),
+          })
+          .where(eq(acquisitionSourceConnections.id, byExternal.id))
+          .returning();
+        return linked;
+      }
+      return byExternal;
+    }
   }
 
   const [byOwner] = await db
@@ -132,7 +173,22 @@ export async function ensureMetaSourceConnection(options: {
       ),
     )
     .limit(1);
-  if (byOwner) return byOwner;
+  if (byOwner) {
+    if (connectorId || channelId) {
+      const [linked] = await db
+        .update(acquisitionSourceConnections)
+        .set({
+          connectorId: connectorId || byOwner.connectorId,
+          channelId: channelId || byOwner.channelId,
+          externalAccountId: phoneNumberId || byOwner.externalAccountId,
+          updatedAt: new Date(),
+        })
+        .where(eq(acquisitionSourceConnections.id, byOwner.id))
+        .returning();
+      return linked;
+    }
+    return byOwner;
+  }
 
   const [created] = await db
     .insert(acquisitionSourceConnections)
@@ -144,8 +200,12 @@ export async function ensureMetaSourceConnection(options: {
         : 'Meta WhatsApp',
       status: 'active',
       externalAccountId: phoneNumberId,
+      connectorId,
+      channelId,
       config: {
         displayPhoneNumber: displayPhoneNumber || null,
+        connectorId,
+        channelId,
       },
     })
     .returning();
@@ -554,10 +614,21 @@ export async function getAcquisitionOverview(ownerUserId: string) {
 
   const sources = await listSourceConnections(ownerUserId);
 
+  let channels: Awaited<ReturnType<typeof listStudioChannels>> = [];
+  let connectors: Awaited<ReturnType<typeof listPlatformConnectors>> = [];
+  try {
+    channels = await listStudioChannels(ownerUserId);
+    connectors = await listPlatformConnectors(ownerUserId);
+  } catch {
+    // Tables may not exist yet on partially migrated envs
+  }
+
   return {
     people: peopleCount?.count || 0,
     events: eventCount?.count || 0,
     interactions: interactionCount?.count || 0,
     sources,
+    channels,
+    connectors,
   };
 }

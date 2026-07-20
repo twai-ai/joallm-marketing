@@ -20,6 +20,7 @@ import { subscriptionRoutes } from '../routes/subscriptions.js';
 import { meRoutes } from '../routes/me.js';
 import { feedbackRoutes } from '../routes/feedback.js';
 import { integrationsRoutes } from '../routes/integrations.js';
+import { studioRoutes } from '../routes/studio.js';
 
 export async function registerDomains(fastify: FastifyInstance) {
   await registerTelemetryDomain(fastify);
@@ -51,6 +52,9 @@ export async function registerDomains(fastify: FastifyInstance) {
   // Feedback, training signals & consent
   fastify.register(feedbackRoutes, { prefix: '/api/feedback' });
 
-  // Third-party integrations (Google Workspace OAuth, etc.)
+  // Third-party integrations (Google Workspace OAuth + Platform Connectors)
   fastify.register(integrationsRoutes, { prefix: '/api/integrations' });
+
+  // Marketing Studio — Channels, Publishing Profiles (publish intent)
+  fastify.register(studioRoutes, { prefix: '/api/studio' });
 }

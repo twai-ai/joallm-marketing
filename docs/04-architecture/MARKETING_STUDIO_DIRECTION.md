@@ -198,11 +198,11 @@ Do **not** build full Marketing Studio before Timeline + KnowledgeArtifact dogfo
 
 | Phase | Focus |
 |---|---|
-| A–B | Person Timeline + KnowledgeArtifacts (in progress / shipped) |
+| A–B | Person Timeline + KnowledgeArtifacts (shipped — dogfood) |
 | C | Initiative / Campaign Brain surfaces |
 | Studio-0 | Shared contracts: Channel, Connector, PublishingProfile, PublishingJob |
-| Studio-1 | Connector registry + first Channel (Meta / WhatsApp already ingesting) |
-| Studio-2 | Publishing Profiles + Publishing Jobs + asset publish path |
+| Studio-1 | **Connector registry + WhatsApp Channel → Meta connector** (shipped) |
+| Studio-2 | Publishing Jobs + asset publish path + more Channels |
 
 Explicitly out of Studio / Marketing as owned builders: full social scheduler suite, CMS, email builder product islands. Publish through Channels; measure through Timeline.
 

@@ -531,5 +531,84 @@ export async function ensureCorePlatformTables(): Promise<void> {
     `,
   );
 
+  await exec(
+    'platform_connectors',
+    sql`
+      CREATE TABLE IF NOT EXISTS "platform_connectors" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "provider" text NOT NULL,
+        "name" text NOT NULL,
+        "api_version" text,
+        "status" text NOT NULL DEFAULT 'disconnected',
+        "capabilities" jsonb NOT NULL DEFAULT '[]'::jsonb,
+        "config" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "external_account_id" text,
+        "last_validated_at" timestamp,
+        "last_error_at" timestamp,
+        "last_error_message" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'studio_channels',
+    sql`
+      CREATE TABLE IF NOT EXISTS "studio_channels" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "kind" text NOT NULL,
+        "name" text NOT NULL,
+        "status" text NOT NULL DEFAULT 'active',
+        "connector_id" uuid REFERENCES "platform_connectors"("id") ON DELETE SET NULL,
+        "connector_provider" text,
+        "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'publishing_profiles',
+    sql`
+      CREATE TABLE IF NOT EXISTS "publishing_profiles" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "name" text NOT NULL,
+        "status" text NOT NULL DEFAULT 'active',
+        "channel_id" uuid NOT NULL REFERENCES "studio_channels"("id") ON DELETE CASCADE,
+        "brand_kit_id" uuid,
+        "default_hashtags" text[] DEFAULT '{}',
+        "default_utm" jsonb DEFAULT '{}'::jsonb,
+        "timezone" text,
+        "defaults" jsonb DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
+  await exec(
+    'acquisition_source_connections.connector_id',
+    sql`
+      ALTER TABLE "acquisition_source_connections"
+      ADD COLUMN IF NOT EXISTS "connector_id" uuid
+    `,
+  );
+
+  await exec(
+    'acquisition_source_connections.channel_id',
+    sql`
+      ALTER TABLE "acquisition_source_connections"
+      ADD COLUMN IF NOT EXISTS "channel_id" uuid
+    `,
+  );
+
   logger.info('✓ Core platform tables ensured');
 }

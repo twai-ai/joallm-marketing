@@ -1155,6 +1155,10 @@ export const acquisitionSourceConnections = pgTable('acquisition_source_connecti
     enum: ['active', 'paused', 'error', 'disconnected'],
   }).default('active').notNull(),
   externalAccountId: text('external_account_id'), // e.g. WhatsApp phone_number_id
+  /** Integration Platform connector (technical) */
+  connectorId: uuid('connector_id'),
+  /** Marketing Studio channel (business) */
+  channelId: uuid('channel_id'),
   config: jsonb('config').$type<Record<string, unknown>>().default({}),
   lastSuccessAt: timestamp('last_success_at'),
   lastErrorAt: timestamp('last_error_at'),
@@ -1291,4 +1295,95 @@ export const knowledgeArtifacts = pgTable('knowledge_artifacts', {
   ownerUserIdIdx: index('knowledge_artifacts_owner_user_id_idx').on(table.ownerUserId),
   personIdIdx: index('knowledge_artifacts_person_id_idx').on(table.personId),
   sourceFileIdIdx: index('knowledge_artifacts_source_file_id_idx').on(table.sourceFileId),
+}));
+
+// ─── Integration Platform + Marketing Studio publishing ───────────────────────
+
+export const platformConnectors = pgTable('platform_connectors', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  provider: text('provider').notNull(),
+  name: text('name').notNull(),
+  apiVersion: text('api_version'),
+  status: text('status', {
+    enum: ['disconnected', 'connecting', 'connected', 'error', 'revoked'],
+  }).default('disconnected').notNull(),
+  capabilities: jsonb('capabilities').$type<string[]>().default([]).notNull(),
+  config: jsonb('config').$type<Record<string, unknown>>().default({}),
+  externalAccountId: text('external_account_id'),
+  lastValidatedAt: timestamp('last_validated_at'),
+  lastErrorAt: timestamp('last_error_at'),
+  lastErrorMessage: text('last_error_message'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('platform_connectors_owner_user_id_idx').on(table.ownerUserId),
+  providerIdx: index('platform_connectors_provider_idx').on(table.provider),
+}));
+
+export const studioChannels = pgTable('studio_channels', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  kind: text('kind').notNull(),
+  name: text('name').notNull(),
+  status: text('status', {
+    enum: ['active', 'paused', 'archived'],
+  }).default('active').notNull(),
+  connectorId: uuid('connector_id').references(() => platformConnectors.id, { onDelete: 'set null' }),
+  connectorProvider: text('connector_provider'),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('studio_channels_owner_user_id_idx').on(table.ownerUserId),
+  kindIdx: index('studio_channels_kind_idx').on(table.kind),
+}));
+
+export const publishingProfiles = pgTable('publishing_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  status: text('status', {
+    enum: ['active', 'paused', 'archived'],
+  }).default('active').notNull(),
+  channelId: uuid('channel_id').notNull().references(() => studioChannels.id, { onDelete: 'cascade' }),
+  brandKitId: uuid('brand_kit_id'),
+  defaultHashtags: text('default_hashtags').array().default([]),
+  defaultUtm: jsonb('default_utm').$type<Record<string, string>>().default({}),
+  timezone: text('timezone'),
+  defaults: jsonb('defaults').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('publishing_profiles_owner_user_id_idx').on(table.ownerUserId),
+  channelIdIdx: index('publishing_profiles_channel_id_idx').on(table.channelId),
+}));
+
+export const publishingJobs = pgTable('publishing_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  initiativeId: uuid('initiative_id'),
+  campaignId: uuid('campaign_id'),
+  marketingAssetId: uuid('marketing_asset_id').notNull(),
+  publishingProfileId: uuid('publishing_profile_id').references(() => publishingProfiles.id, { onDelete: 'set null' }),
+  channelId: uuid('channel_id').notNull().references(() => studioChannels.id, { onDelete: 'cascade' }),
+  connectorId: uuid('connector_id').references(() => platformConnectors.id, { onDelete: 'set null' }),
+  status: text('status', {
+    enum: ['draft', 'queued', 'scheduled', 'publishing', 'published', 'failed', 'cancelled'],
+  }).default('draft').notNull(),
+  scheduledAt: timestamp('scheduled_at'),
+  publishedAt: timestamp('published_at'),
+  externalPostId: text('external_post_id'),
+  errorMessage: text('error_message'),
+  payload: jsonb('payload').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('publishing_jobs_owner_user_id_idx').on(table.ownerUserId),
+  channelIdIdx: index('publishing_jobs_channel_id_idx').on(table.channelId),
+  statusIdx: index('publishing_jobs_status_idx').on(table.status),
 }));

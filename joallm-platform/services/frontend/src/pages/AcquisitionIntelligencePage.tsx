@@ -13,6 +13,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import type {
   AcquisitionEvent,
   AcquisitionPerson,
+  Channel,
+  Connector,
   Interaction,
   SourceConnection,
   Timeline,
@@ -28,6 +30,8 @@ interface OverviewData {
   events: number;
   interactions: number;
   sources: SourceConnection[];
+  channels?: Channel[];
+  connectors?: Connector[];
 }
 
 function formatWhen(value?: string | null) {
@@ -132,15 +136,19 @@ export function AcquisitionIntelligencePage() {
     () => overview?.sources?.find((source) => source.provider === 'meta_whatsapp'),
     [overview],
   );
+  const whatsappChannel = useMemo(
+    () => overview?.channels?.find((channel) => channel.kind === 'whatsapp'),
+    [overview],
+  );
 
   const ensureMetaSource = async () => {
     setConnecting(true);
     try {
-      await apiClient.post('/api/acquisition/sources/meta', {});
-      showSuccess('Meta WhatsApp source connected');
+      await apiClient.post('/api/studio/channels/whatsapp', {});
+      showSuccess('WhatsApp channel + Meta connector ready');
       await load();
     } catch (error) {
-      showError(error instanceof Error ? error.message : 'Failed to connect Meta source');
+      showError(error instanceof Error ? error.message : 'Failed to connect WhatsApp channel');
     } finally {
       setConnecting(false);
     }
@@ -179,19 +187,19 @@ export function AcquisitionIntelligencePage() {
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm disabled:cursor-not-allowed"
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            {metaSource ? 'Re-sync Meta source' : 'Connect Meta WhatsApp'}
+            {whatsappChannel || metaSource ? 'Re-sync WhatsApp channel' : 'Connect WhatsApp channel'}
           </button>
         </>
       }
-      secondaryPanelTitle="Sources → People → Timeline"
-      secondaryPanelBody="Meta webhooks hit the Railway backend. Redis/BullMQ normalizes events into the Person timeline."
+      secondaryPanelTitle="Channel → Connector → Timeline"
+      secondaryPanelBody="Studio publishes intent via Channels. Platform Connectors talk to Meta. Events land on the Person Timeline."
       secondaryPanelContent={
         <div className="grid grid-cols-2 gap-3 text-sm">
           {[
             ['People', overview?.people],
             ['Events', overview?.events],
-            ['Interactions', overview?.interactions],
-            ['Sources', overview?.sources?.length ?? 0],
+            ['Channels', overview?.channels?.length ?? 0],
+            ['Connectors', overview?.connectors?.length ?? 0],
           ].map(([label, value]) => (
             <div
               key={String(label)}
@@ -208,41 +216,86 @@ export function AcquisitionIntelligencePage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-xl font-semibold text-slate-950">Sources</h2>
-              <p className="mt-1 text-sm text-slate-600">Webhook health for connected acquisition surfaces.</p>
+              <h2 className="text-xl font-semibold text-slate-950">Channels & connectors</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Business Channels bind to Platform Connectors — Studio never calls Meta directly.
+              </p>
             </div>
             <Activity className="h-5 w-5 text-teal-600" />
           </div>
 
           <div className="mt-5 space-y-3">
-            {(overview?.sources || []).length === 0 ? (
+            {(overview?.channels || []).length === 0 && (overview?.sources || []).length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                No sources yet. Connect Meta WhatsApp (reuses atrisi-meta-service).
+                No channels yet. Connect WhatsApp to create Channel → Connector → acquisition source.
               </div>
             ) : (
-              (overview?.sources || []).map((source) => (
-                <div
-                  key={source.id}
-                  className={`rounded-2xl border border-slate-200 bg-white p-4 ${
-                    source.status === 'error' ? 'border-l-4 border-l-amber-500' : ''
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-slate-950">{source.name}</div>
-                      <div className="mt-1 text-xs uppercase tracking-wide text-slate-500">{source.provider}</div>
+              <>
+                {(overview?.channels || []).map((channel) => (
+                  <div
+                    key={channel.id}
+                    className="rounded-2xl border border-slate-200 border-l-4 border-l-teal-500 bg-white p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">Channel</div>
+                        <div className="mt-1 font-medium text-slate-950">{channel.name}</div>
+                        <div className="mt-1 text-xs uppercase tracking-wide text-slate-500">{channel.kind}</div>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceStatusClass(channel.status === 'active' ? 'active' : 'paused')}`}>
+                        {channel.status}
+                      </span>
                     </div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceStatusClass(source.status)}`}>
-                      {source.status}
-                    </span>
+                    <div className="mt-3 text-sm text-slate-600">
+                      Connector: {channel.connectorProvider || '—'}
+                    </div>
                   </div>
-                  <div className="mt-3 space-y-1 text-sm text-slate-600">
-                    <div>Account: {source.externalAccountId || '—'}</div>
-                    <div>Last success: {formatWhen(source.lastSuccessAt)}</div>
-                    <div>Last error: {source.lastErrorMessage || formatWhen(source.lastErrorAt)}</div>
+                ))}
+                {(overview?.connectors || []).map((connector) => (
+                  <div
+                    key={connector.id}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Platform connector</div>
+                        <div className="mt-1 font-medium text-slate-950">{connector.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {connector.provider}
+                          {connector.apiVersion ? ` · ${connector.apiVersion}` : ''}
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceStatusClass(connector.status === 'connected' ? 'active' : connector.status === 'error' ? 'error' : 'paused')}`}>
+                        {connector.status}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+                {(overview?.sources || []).map((source) => (
+                  <div
+                    key={source.id}
+                    className={`rounded-2xl border border-slate-200 bg-white p-4 ${
+                      source.status === 'error' ? 'border-l-4 border-l-amber-500' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Acquisition source</div>
+                        <div className="mt-1 font-medium text-slate-950">{source.name}</div>
+                        <div className="mt-1 text-xs uppercase tracking-wide text-slate-500">{source.provider}</div>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceStatusClass(source.status)}`}>
+                        {source.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-1 text-sm text-slate-600">
+                      <div>Account: {source.externalAccountId || '—'}</div>
+                      <div>Last success: {formatWhen(source.lastSuccessAt)}</div>
+                      <div>Last error: {source.lastErrorMessage || formatWhen(source.lastErrorAt)}</div>
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </div>
 

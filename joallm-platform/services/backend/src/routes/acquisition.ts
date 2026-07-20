@@ -4,7 +4,6 @@ import { authenticateApiKey, authenticateToken } from '../middleware/auth.js';
 import { config } from '../config/config.js';
 import {
   getAcquisitionOverview,
-  getPersonTimeline,
   ingestMetaWhatsAppWebhook,
   listAcquisitionPeople,
   listRecentEvents,
@@ -12,6 +11,7 @@ import {
   ensureMetaSourceConnection,
   maybeSendWhatsAppAutoReply,
 } from '../services/acquisition-ingest-service.js';
+import { getPersonTimeline } from '../services/timeline-service.js';
 import { acquisitionIngestQueue } from '../services/queue.js';
 import { logger } from '../utils/logger.js';
 

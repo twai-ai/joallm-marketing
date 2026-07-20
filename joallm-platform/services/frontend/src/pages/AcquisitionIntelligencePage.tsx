@@ -15,6 +15,8 @@ import type {
   AcquisitionPerson,
   Interaction,
   SourceConnection,
+  Timeline,
+  TimelineEntry,
 } from '@joallm/shared';
 import { UseCaseHomeShell } from '../components/use-cases/UseCaseHomeShell';
 import { getUseCaseById } from '../constants/useCases';
@@ -40,6 +42,12 @@ function sourceStatusClass(status: string) {
   return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/80';
 }
 
+function entryKindClass(kind: TimelineEntry['kind']) {
+  if (kind === 'interaction') return 'border-l-teal-500';
+  if (kind === 'event') return 'border-l-sky-500';
+  return 'border-l-slate-400';
+}
+
 export function AcquisitionIntelligencePage() {
   const useCase = getUseCaseById('acquisition');
   const navigate = useNavigate();
@@ -48,7 +56,7 @@ export function AcquisitionIntelligencePage() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [people, setPeople] = useState<AcquisitionPerson[]>([]);
   const [events, setEvents] = useState<AcquisitionEvent[]>([]);
-  const [timeline, setTimeline] = useState<Interaction[]>([]);
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<AcquisitionPerson | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -75,10 +83,26 @@ export function AcquisitionIntelligencePage() {
     try {
       const res = await apiClient.get<{
         success: boolean;
-        data: { person: AcquisitionPerson; interactions: Interaction[] };
+        data: {
+          person: AcquisitionPerson;
+          timeline: Timeline;
+          interactions: Interaction[];
+          entries?: TimelineEntry[];
+        };
       }>(`/api/acquisition/people/${id}/timeline`);
       setSelectedPerson(res.data.person);
-      setTimeline(res.data.interactions || []);
+      const entries =
+        res.data.timeline?.entries ||
+        res.data.entries ||
+        (res.data.interactions || []).map((item) => ({
+          id: `interaction:${item.id}`,
+          kind: 'interaction' as const,
+          occurredAt: item.occurredAt,
+          summary: item.summary,
+          refId: item.id,
+          attributes: { kind: item.kind, direction: item.direction },
+        }));
+      setTimelineEntries(entries);
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to load person timeline');
     }
@@ -93,7 +117,7 @@ export function AcquisitionIntelligencePage() {
       void loadTimeline(personId);
     } else {
       setSelectedPerson(null);
-      setTimeline([]);
+      setTimelineEntries([]);
     }
   }, [personId, loadTimeline]);
 
@@ -278,32 +302,37 @@ export function AcquisitionIntelligencePage() {
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               {!personId ? (
-                <div className="text-sm text-slate-600">Select a person to open their interaction timeline.</div>
+                <div className="text-sm text-slate-600">Select a person to open their Person Timeline.</div>
               ) : (
                 <>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">
-                        Relationship Timeline
+                        Person Timeline
                       </div>
                       <h3 className="mt-1 text-lg font-semibold text-slate-950">
                         {selectedPerson?.displayName || selectedPerson?.primaryPhone || 'Person'}
                       </h3>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Timeline Service · events + interactions
+                      </p>
                     </div>
                     <MessageSquare className="h-5 w-5 text-teal-600" />
                   </div>
                   <div className="mt-4 space-y-3">
-                    {timeline.length === 0 ? (
-                      <div className="text-sm text-slate-500">No interactions yet.</div>
+                    {timelineEntries.length === 0 ? (
+                      <div className="text-sm text-slate-500">No timeline entries yet.</div>
                     ) : (
-                      timeline.map((item) => (
+                      timelineEntries.map((item) => (
                         <div
                           key={item.id}
-                          className="rounded-xl border border-slate-200 border-l-4 border-l-teal-500 bg-white p-3"
+                          className={`rounded-xl border border-slate-200 border-l-4 bg-white p-3 ${entryKindClass(item.kind)}`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <div className="text-sm font-medium text-slate-950">{item.kind}</div>
-                            <div className="text-xs text-slate-500">{item.direction || '—'}</div>
+                            <div className="text-sm font-medium text-slate-950 capitalize">{item.kind}</div>
+                            <div className="text-xs uppercase tracking-wide text-slate-500">
+                              {String(item.attributes?.direction || item.attributes?.eventType || '—')}
+                            </div>
                           </div>
                           <p className="mt-1 text-sm text-slate-600">{item.summary || '—'}</p>
                           <div className="mt-2 text-xs text-slate-400">{formatWhen(item.occurredAt)}</div>

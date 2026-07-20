@@ -450,32 +450,17 @@ export async function listAcquisitionPeople(ownerUserId: string, limit = 50) {
 }
 
 export async function getPersonTimeline(ownerUserId: string, personId: string, limit = 100) {
-  const [person] = await db
-    .select()
-    .from(acquisitionPersons)
-    .where(
-      and(
-        eq(acquisitionPersons.id, personId),
-        eq(acquisitionPersons.ownerUserId, ownerUserId),
-      ),
-    )
-    .limit(1);
-
-  if (!person) return null;
-
-  const interactions = await db
-    .select()
-    .from(acquisitionInteractions)
-    .where(
-      and(
-        eq(acquisitionInteractions.personId, personId),
-        eq(acquisitionInteractions.ownerUserId, ownerUserId),
-      ),
-    )
-    .orderBy(desc(acquisitionInteractions.occurredAt))
-    .limit(limit);
-
-  return { person, interactions };
+  // Phase A: delegate to Timeline Service (events + interactions → Timeline)
+  const { getPersonTimeline: getTimeline } = await import('./timeline-service.js');
+  const result = await getTimeline(ownerUserId, personId, limit);
+  if (!result) return null;
+  // Keep Phase-1 keys for older clients while exposing full Timeline
+  return {
+    person: result.person,
+    interactions: result.interactions,
+    timeline: result.timeline,
+    entries: result.timeline.entries,
+  };
 }
 
 export async function listSourceConnections(ownerUserId: string) {

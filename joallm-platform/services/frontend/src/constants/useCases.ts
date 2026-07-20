@@ -83,16 +83,16 @@ export const USE_CASES: UseCaseDefinition[] = [
   },
   {
     id: 'marketing-studio',
-    label: 'Marketing Studio',
-    shortLabel: 'Marketing',
+    label: 'Acquisition',
+    shortLabel: 'Acquire',
     homeRoute: '/studio/marketing',
     assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
     status: 'placeholder',
     description:
-      'Program catalog → Growth workspace. Pick a Program (Amplify, Resonance, …), then Campaigns and Assets — Growth is one Program capability.',
+      'Acquisition Workspace: Programs → Campaigns → Channels → Interest. Marketing/ads are one acquisition strategy — not the whole product.',
     helper:
-      'Institution → Program → Growth | Admissions | Learning. Studio starts from Program; Brain answers cross-program questions.',
-    audience: 'Growth, admissions, and institutional program teams',
+      'Output is Program Interest for Education to pull. atrisi.org owns program defs; this platform owns market acquisition.',
+    audience: 'Growth, outreach, and institutional acquisition teams',
     supportsAssetDetail: true,
   },
 ];

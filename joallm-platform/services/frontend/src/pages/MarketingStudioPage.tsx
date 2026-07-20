@@ -1,14 +1,10 @@
-import { ArrowRight, ExternalLink, GraduationCap, Palette, Radio, Sparkles } from 'lucide-react';
+import { ArrowRight, ExternalLink, GraduationCap, Radio, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { UseCaseHomeShell } from '../components/use-cases/UseCaseHomeShell';
 import { getUseCaseById } from '../constants/useCases';
-import { PLATFORM_CAPABILITY, PLATFORM_CONSTITUTION, PLATFORM_NAME } from '../constants/product';
+import { PLATFORM_CONSTITUTION, PLATFORM_NAME } from '../constants/product';
 import { ATRISI_PROGRAMS, PRIMARY_GROWTH_PROGRAM } from '../constants/programs';
 import { ONTOLOGY } from '../constants/ontology';
-
-function openCreativeSettings() {
-  window.dispatchEvent(new CustomEvent('openSettings', { detail: { tab: 'models' } }));
-}
 
 export function MarketingStudioPage() {
   const useCase = getUseCaseById('marketing-studio');
@@ -23,11 +19,11 @@ export function MarketingStudioPage() {
       badge={
         <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
           <Radio className="h-4 w-4 text-teal-600" />
-          Program Aggregate · Growth preview
+          Acquisition Platform · Phase 1
         </div>
       }
-      title="Programs are the OS — Growth is one capability"
-      description="ATRISI starts from Program, not Campaign. Each Program will carry Growth, Admissions, Learning, Assessment, and Analytics. Marketing Studio today is the entry to that Program catalog and the Growth workspace."
+      title="Acquire Program Interest — Education converts"
+      description="This is an Institution Acquisition Platform. Pick a Program, run Acquisition (campaigns, channels, assets). Output is interest for education.atrisi.org to pull — not enrollment. Marketing/ads are one strategy among many."
       primaryAction={
         <>
           <a
@@ -36,31 +32,34 @@ export function MarketingStudioPage() {
             rel="noreferrer"
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50/40"
           >
-            View catalog
+            Program catalog
             <ExternalLink className="h-4 w-4" />
           </a>
-          <button
-            type="button"
-            onClick={openCreativeSettings}
+          <Link
+            to="/studio/acquisition"
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm"
           >
-            <Palette className="h-4 w-4" />
-            Creative AI keys
-          </button>
+            Live WhatsApp acquisition
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </>
       }
-      secondaryPanelTitle="Core vs Capability"
-      secondaryPanelBody="Program Core defines what the Program is. Growth (and Admissions, Learning, …) are attached capabilities — not fields on Core."
+      secondaryPanelTitle="Handoff: Program Interest only"
+      secondaryPanelBody="Education does not pull posters, ads, or publishing jobs — only Person · Program · Source · Evidence · Intent."
       secondaryPanelContent={
-        <div className="space-y-3 text-sm">
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-xs uppercase tracking-wide text-teal-200/80">Program.Core</div>
-            <div className="mt-1 text-slate-200">{ONTOLOGY.programCore.join(' · ')}</div>
-          </div>
-          <div className="rounded-lg border border-teal-400/40 bg-teal-500/15 px-3 py-2">
-            <div className="text-xs uppercase tracking-wide text-teal-200">Capabilities</div>
-            <div className="mt-1 text-teal-50">{ONTOLOGY.programCapabilities.join(' · ')}</div>
-          </div>
+        <div className="space-y-2 text-sm text-slate-200">
+          {['Acquire (this platform)', 'Convert (Education)', 'Deliver (Education)'].map((phase, i) => (
+            <div
+              key={phase}
+              className={`rounded-lg border px-3 py-2 font-medium ${
+                i === 0
+                  ? 'border-teal-400/40 bg-teal-500/15 text-teal-100'
+                  : 'border-white/10 bg-white/5 text-slate-300'
+              }`}
+            >
+              {phase}
+            </div>
+          ))}
         </div>
       }
     >
@@ -78,7 +77,7 @@ export function MarketingStudioPage() {
               >
                 atrisi.org/programs
               </a>
-              . Select a Program to open its Marketing Workspace (coming next).
+              . Targeting catalog for acquisition — updates when atrisi.org adds programs. Select a Program to open its Acquisition Workspace (Sprint 1).
             </p>
           </div>
           <div className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-teal-800">
@@ -115,7 +114,7 @@ export function MarketingStudioPage() {
                   <p className="mt-3 text-xs text-slate-500">{program.tracks.join(' · ')}</p>
                 )}
                 <div className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-slate-400">
-                  Program Workspace soon
+                  Acquisition Workspace soon
                   <ArrowRight className="h-3.5 w-3.5" />
                 </div>
               </div>
@@ -128,47 +127,37 @@ export function MarketingStudioPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-2 text-teal-700">
             <GraduationCap className="h-5 w-5" />
-            <h2 className="text-lg font-semibold text-slate-950">Growth workspace (under Program)</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Roadmap (architecture first)</h2>
           </div>
-          <p className="mt-2 text-sm text-slate-600">
-            Workspace tabs: {ONTOLOGY.programWorkspaceTabs.join(' · ')}. Growth owns:{' '}
-            {ONTOLOGY.growthAggregate.join(' · ')}.
-          </p>
-          <ul className="mt-4 space-y-2 text-sm text-slate-600">
-            <li>· Pattern: Capability = Strategy · Operations · Timeline · Intelligence · Analytics</li>
-            <li>· Dogfood: {PRIMARY_GROWTH_PROGRAM.name}</li>
-            <li>· Next: Program + ProgramCore types/schema — then Growth objects</li>
-          </ul>
+          <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
+            <li>Program → Acquisition Workspace (static)</li>
+            <li>Campaign CRUD</li>
+            <li>Creative Projects + Assets (upload / Canva OK)</li>
+            <li>Publishing Jobs</li>
+            <li>One outbound connector (LinkedIn or Meta Ads)</li>
+            <li>Timeline → Program Interest</li>
+            <li>Program Interest API for Education pull</li>
+          </ol>
           <p className="mt-4 text-xs text-slate-500">{PLATFORM_CONSTITUTION}</p>
         </section>
         <section className="rounded-3xl border border-dashed border-teal-200 bg-teal-50/40 p-6">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-teal-700" />
-            <h2 className="text-lg font-semibold text-slate-950">Creative AI knows the Program</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Postpone: AI image generation</h2>
           </div>
           <p className="mt-2 text-sm text-slate-600">
-            Generate Poster · Reel · LinkedIn · Instagram · WhatsApp · Email with Program, Campaign,
-            Audience, Tone, and CTA already bound — via Generation Profiles.
+            Manual / Canva / Figma uploads still validate Campaigns → Assets → Publish → Timeline → Program
+            Interest. Creative AI is a later Platform enhancement.
           </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={openCreativeSettings}
-              className="inline-flex items-center gap-2 text-sm font-semibold text-teal-800 hover:text-teal-950"
-            >
-              Configure Creative AI
-              <ArrowRight className="h-4 w-4" />
-            </button>
-            <Link
-              to="/studio/acquisition"
-              className="inline-flex items-center gap-2 text-sm font-semibold text-teal-800 hover:text-teal-950"
-            >
-              Acquisition Timelines
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+          <Link
+            to="/studio/acquisition"
+            className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-800 hover:text-teal-950"
+          >
+            Live inbound acquisition (WhatsApp)
+            <ArrowRight className="h-4 w-4" />
+          </Link>
           <p className="mt-4 text-xs text-slate-500">
-            Capability: {PLATFORM_CAPABILITY} · Brand: {PLATFORM_NAME}
+            {ONTOLOGY.product.tagline} · Outcome: {ONTOLOGY.outcome.name} · {PLATFORM_NAME}
           </p>
         </section>
       </div>

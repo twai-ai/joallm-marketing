@@ -91,3 +91,10 @@ export * from './creative-ai';
  * @see ../../docs/04-architecture/INSTITUTION_CAPABILITY_PATTERN.md
  */
 export * from './program-aggregate';
+
+/**
+ * Program Interest — Education pull contract (Acquire → Convert boundary).
+ * @see ./program-interest.ts
+ * @see ../../docs/04-architecture/INSTITUTION_ACQUISITION_PLATFORM.md
+ */
+export * from './program-interest';

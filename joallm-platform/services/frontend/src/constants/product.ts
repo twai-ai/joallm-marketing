@@ -24,7 +24,7 @@ export const PRODUCT_LABELS = {
   documentation: 'Documentation',
   acquisition: 'Acquisition Intelligence',
   documentAi: 'Document AI',
-  marketingStudio: 'Marketing Studio',
+  marketingStudio: 'Acquisition',
 } as const;
 
 export const PRODUCT_DESCRIPTIONS = {
@@ -37,7 +37,7 @@ export const PRODUCT_DESCRIPTIONS = {
   documentation: 'Architecture notes and operator guides',
   acquisition: 'Connect Channels into Person Timelines (toward Program Growth)',
   documentAi: 'Ingest document sets and launch grounded retrieval',
-  marketingStudio: 'Program Growth workspace — Campaigns and Assets under a Program',
+  marketingStudio: 'Acquisition Workspace — Programs → Campaigns → Program Interest',
 } as const;
 
 export const PRODUCT_ROUTES = {

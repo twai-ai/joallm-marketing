@@ -20,17 +20,29 @@ export const ONTOLOGY = {
    */
   surfaces: {
     publicSite: 'atrisi.org — stable SoR for programs/jobs',
-    education: 'education.atrisi.org — stable delivery/admissions (on server)',
-    thisPlatform: 'Pure-play marketing & advertising (this codebase)',
+    education: 'education.atrisi.org — Convert + Deliver (stable on server)',
+    thisPlatform: 'Institution Acquisition Platform — Phase 1 Acquire only',
   },
   product: {
     name: 'ATRISI Marketing',
     shortName: 'ATRISI',
     role: 'Brain',
-    capability: 'Growth',
-    tagline: 'Pure-play marketing & advertising',
+    /** Transitional brand; constitutional name is Market Acquisition */
+    capability: 'Market Acquisition',
+    workspace: 'Acquisition Workspace',
+    tagline: 'Institution Acquisition Platform',
     meaning:
-      'Campaigns, creatives, channels, and market acquisition. atrisi.org + education.atrisi.org stay stable SoRs — this platform does not replace them.',
+      'Acquire Program Interest from the market. Marketing/ads are one strategy. Education converts & delivers — pulls Program Interest only, never campaigns/creatives.',
+  },
+  outcome: {
+    name: 'Program Interest',
+    alias: 'AcquisitionOutcome',
+    meaning: 'Person interested in a Program, with source, evidence, intent — handoff to Education.',
+  },
+  phases: {
+    acquire: 'This platform — interest',
+    convert: 'Education — application → enrollment',
+    deliver: 'Education — learning → outcome',
   },
   studio: {
     name: 'Studio',

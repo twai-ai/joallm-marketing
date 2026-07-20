@@ -40,7 +40,7 @@ Public catalog: [atrisi.org/programs](https://atrisi.org/programs)
 |---|---|
 | **[atrisi.org](https://atrisi.org)** | Public institution site — Programs catalog, jobs, narrative. **Source** of program/job definitions for Education. |
 | **[education.atrisi.org](https://education.atrisi.org)** | Education OS — Learning, Admissions, etc. **Already gets Program + job data from atrisi.org.** |
-| **This platform** (`platform.atrisi.org` / joallm-marketing) | **Pure-play marketing & advertising** — campaigns, creatives, channels, acquisition from the market. Not Education. Not the public program/job registry. |
+| **This platform** (`platform.atrisi.org` / joallm-marketing) | **Institution Acquisition Platform** — Phase 1 Acquire. Marketing/ads are one strategy. Output: **Program Interest**. |
 
 ```text
 atrisi.org  ──program/job defs──►  education.atrisi.org

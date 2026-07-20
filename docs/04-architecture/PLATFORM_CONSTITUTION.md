@@ -13,18 +13,18 @@ Last updated: 2026-07-21
 
 > **Institution Capability is the philosophy. Program is the aggregate. Capabilities attach — they are not Core fields.**
 
-> **Every Capability follows Strategy · Operations · Timeline · Intelligence · Analytics.**
+> **This platform is Phase 1 Acquire only. Education converts and delivers. Education pulls Program Interest — never campaigns or creatives.**
 
 These apply to the entire JoaLLM platform and every ATRISI product.
 
 ```text
-Institution → Program.Core + Capabilities → Workspace → Platform
+Acquire (this platform) → Convert (Education) → Deliver (Education)
 ```
 
 Foundational docs:
+- [INSTITUTION_ACQUISITION_PLATFORM.md](./INSTITUTION_ACQUISITION_PLATFORM.md) — product identity + Program Interest  
 - [INSTITUTION_CAPABILITY_PATTERN.md](./INSTITUTION_CAPABILITY_PATTERN.md) — reusable capability shape  
 - [PROGRAM_AGGREGATE_DIRECTION.md](./PROGRAM_AGGREGATE_DIRECTION.md) — Core vs Capability  
-- [PROGRAM_GROWTH_DIRECTION.md](./PROGRAM_GROWTH_DIRECTION.md) — Growth instantiation  
 
 ---
 

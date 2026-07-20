@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Menu, Settings, User, LogOut, ChevronDown, Sparkles, BookOpen, MessageSquare, Search, Workflow, Bot } from 'lucide-react';
 import { useUserRole } from '../../contexts/EnhancedUserRoleContext';
 import { useAuth } from '../../contexts/AuthContext';

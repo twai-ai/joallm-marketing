@@ -102,7 +102,7 @@ export function Sidebar({
   const fetchRecentChats = async () => {
     setLoadingChats(true);
     try {
-      const response = await apiClient.get('/api/chat/sessions?limit=10');
+      const response = await apiClient.get<{ sessions?: any[] }>('/api/chat/sessions?limit=10');
       setRecentChats(response.sessions || []);
     } catch (error) {
       console.error('Failed to fetch recent chats:', error);

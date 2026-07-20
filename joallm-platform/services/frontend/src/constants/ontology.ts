@@ -19,18 +19,18 @@ export const ONTOLOGY = {
    * - this platform → student acquisition from the market
    */
   surfaces: {
-    publicSite: 'atrisi.org',
-    education: 'education.atrisi.org',
-    thisPlatform: 'Marketing / student acquisition (this codebase)',
+    publicSite: 'atrisi.org — stable SoR for programs/jobs',
+    education: 'education.atrisi.org — stable delivery/admissions (on server)',
+    thisPlatform: 'Pure-play marketing & advertising (this codebase)',
   },
   product: {
     name: 'ATRISI Marketing',
     shortName: 'ATRISI',
     role: 'Brain',
     capability: 'Growth',
-    tagline: 'Student acquisition from the market',
+    tagline: 'Pure-play marketing & advertising',
     meaning:
-      'Acquire students/prospects via campaigns and channels. Program context aligns with atrisi.org; Education pulls interest later — programs/jobs are not sourced from here.',
+      'Campaigns, creatives, channels, and market acquisition. atrisi.org + education.atrisi.org stay stable SoRs — this platform does not replace them.',
   },
   studio: {
     name: 'Studio',

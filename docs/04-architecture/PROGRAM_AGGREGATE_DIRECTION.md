@@ -40,27 +40,29 @@ Public catalog: [atrisi.org/programs](https://atrisi.org/programs)
 |---|---|
 | **[atrisi.org](https://atrisi.org)** | Public institution site — Programs catalog, jobs, narrative. **Source** of program/job definitions for Education. |
 | **[education.atrisi.org](https://education.atrisi.org)** | Education OS — Learning, Admissions, etc. **Already gets Program + job data from atrisi.org.** |
-| **This platform** (`platform.atrisi.org` / joallm-marketing) | **Student acquisition from the market** — Growth, Acquisition Intelligence, campaigns, channel ingest, Person Timelines. |
+| **This platform** (`platform.atrisi.org` / joallm-marketing) | **Pure-play marketing & advertising** — campaigns, creatives, channels, acquisition from the market. Not Education. Not the public program/job registry. |
 
 ```text
 atrisi.org  ──program/job defs──►  education.atrisi.org
-     │
-     │  catalog copy (seed / reference)
+     │                              (stable · on server)
+     │  reference ids for targeting only
      ▼
-this platform (Marketing / Acquisition)
+this platform — pure-play marketing & advertising
+  Campaigns · Creatives · Channels · Ads · Acquisition
+  Person Timelines · attributed interest
      │
-     │  campaign + channel engagement
-     │  application / interest intent
+     │  future: Education may pull acquisition outcomes
      ▼
-education.atrisi.org  ◄── pulls acquisition outcomes (future contract)
+education.atrisi.org
 ```
 
 **Implication for this codebase:**
 
-- Do **not** become the system of record for Program/job definitions that Education already takes from atrisi.org.
-- Seed Program context here only as needed for Growth/Acquisition (which program a campaign targets).
-- Own: market channels → students/prospects → attributed interest / application intent.
-- Education continues to own delivery; it may later **pull** acquisition outcomes from this platform.
+- **atrisi.org** and **education.atrisi.org** are stable systems of record on the server — do not re-implement them here.
+- This product is **marketing and advertisement only**: attract students/prospects from the market.
+- Program names/ids here are **ad targeting context**, not a competing program registry.
+- Own: creatives, campaigns, publish, channel ingest, acquisition intelligence.
+- Education may later **pull** acquisition outcomes; it already owns programs/jobs via atrisi.org.
 
 ---
 

@@ -49,6 +49,11 @@ import {
   type ProviderPreference,
   type ProviderSupportLevel,
 } from '../../constants/modalities';
+import {
+  CREATIVE_API_PROVIDER_FIELDS,
+  EMPTY_CREATIVE_API_KEYS,
+  type CreativeApiKeySlot,
+} from '../../constants/creativeApiKeys';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -57,6 +62,8 @@ interface SettingsPanelProps {
 }
 
 type SettingsTab = 'workspace' | 'models' | 'data' | 'security' | 'billing';
+
+type ApiKeySlot = ProviderKey | Exclude<CreativeApiKeySlot, 'openai'>;
 
 const API_PROVIDER_FIELDS: Array<{
   key: ProviderKey;
@@ -71,10 +78,11 @@ const API_PROVIDER_FIELDS: Array<{
     key: 'openai',
     label: 'OpenAI',
     placeholder: 'sk-...',
-    description: 'Unlocks GPT-4o, GPT-4 Turbo, GPT-3.5, and image generation models.',
+    description:
+      'Chat, GPT-4o, and Creative AI (GPT Image) via Generation Profiles. One key powers both.',
     keyUrl: 'https://platform.openai.com/api-keys',
     keyUrlLabel: 'platform.openai.com/api-keys',
-    models: 'GPT-4o · GPT-4 Turbo · GPT-3.5 Turbo',
+    models: 'GPT-4o · GPT Image · GPT-4 Turbo · GPT-3.5',
   },
   {
     key: 'anthropic',
@@ -187,26 +195,37 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(false);
 
-  const [apiKeys, setApiKeys] = useState<Record<ProviderKey, string>>({
+  const [apiKeys, setApiKeys] = useState<Record<ApiKeySlot, string>>({
     openai: '',
     anthropic: '',
     groq: '',
     cohere: '',
     ollama: '',
+    ...EMPTY_CREATIVE_API_KEYS,
   });
-  const [showKeys, setShowKeys] = useState<Record<ProviderKey, boolean>>({
+  const [showKeys, setShowKeys] = useState<Record<ApiKeySlot, boolean>>({
     openai: false,
     anthropic: false,
     groq: false,
     cohere: false,
     ollama: false,
+    google_imagen: false,
+    flux: false,
+    ideogram: false,
+    stability: false,
+    adobe_firefly: false,
   });
-  const [keyStatus, setKeyStatus] = useState<Record<ProviderKey, 'none' | 'valid' | 'invalid'>>({
+  const [keyStatus, setKeyStatus] = useState<Record<ApiKeySlot, 'none' | 'valid' | 'invalid'>>({
     openai: 'none',
     anthropic: 'none',
     groq: 'none',
     cohere: 'none',
     ollama: 'none',
+    google_imagen: 'none',
+    flux: 'none',
+    ideogram: 'none',
+    stability: 'none',
+    adobe_firefly: 'none',
   });
   const [multimodalSettings, setMultimodalSettings] = useState<MultimodalSettings>(DEFAULT_MULTIMODAL_SETTINGS);
 
@@ -255,7 +274,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
 
     const loadSettings = async () => {
       const results = await Promise.allSettled([
-        apiClient.get<{ apiKeys?: Partial<Record<ProviderKey, string>> }>('/api/users/settings/api-keys', { showErrorToast: false }),
+        apiClient.get<{ apiKeys?: Partial<Record<ApiKeySlot, string>> }>('/api/users/settings/api-keys', { showErrorToast: false }),
         apiClient.get<{ preferences: Awaited<ReturnType<typeof preferencesApi.getPreferences>> }>('/api/preferences', { showErrorToast: false }),
         apiClient.get<{ security: Awaited<ReturnType<typeof securityApi.getSecuritySettings>> }>('/api/security', { showErrorToast: false }),
         apiClient.get<Awaited<ReturnType<typeof securityApi.getSessions>>>('/api/security/sessions', { showErrorToast: false }),
@@ -267,15 +286,15 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
       const issues: string[] = [];
 
       if (keysResult.status === 'fulfilled' && keysResult.value.apiKeys) {
-        setApiKeys((previous) => ({ ...previous, ...keysResult.value.apiKeys }));
-        setKeyStatus((previous) => ({
-          ...previous,
-          openai: keysResult.value.apiKeys?.openai ? 'valid' : previous.openai,
-          anthropic: keysResult.value.apiKeys?.anthropic ? 'valid' : previous.anthropic,
-          groq: keysResult.value.apiKeys?.groq ? 'valid' : previous.groq,
-          cohere: keysResult.value.apiKeys?.cohere ? 'valid' : previous.cohere,
-          ollama: keysResult.value.apiKeys?.ollama ? 'valid' : previous.ollama,
-        }));
+        const loaded = keysResult.value.apiKeys;
+        setApiKeys((previous) => ({ ...previous, ...loaded }));
+        setKeyStatus((previous) => {
+          const next = { ...previous };
+          (Object.keys(previous) as ApiKeySlot[]).forEach((slot) => {
+            if (loaded[slot]) next[slot] = 'valid';
+          });
+          return next;
+        });
       } else if (keysResult.status === 'rejected') {
         issues.push(`API keys: ${getErrorMessage(keysResult.reason, 'Unavailable')}`);
       }
@@ -430,26 +449,21 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
     }
   };
 
-  const handleApiKeyChange = (provider: ProviderKey, value: string) => {
+  const handleApiKeyChange = (provider: ApiKeySlot, value: string) => {
     setApiKeys((previous) => ({ ...previous, [provider]: value }));
     if (!value) {
       setKeyStatus((previous) => ({ ...previous, [provider]: 'none' }));
       return;
     }
-    if (
-      value.startsWith('sk-') ||
-      value.startsWith('gsk-') ||
-      value.startsWith('sk-ant-') ||
-      value.startsWith('cohere-') ||
-      value.startsWith('ollama-')
-    ) {
+    // Soft format check — creative vendors vary; accept any non-trivial secret
+    if (value.trim().length >= 8) {
       setKeyStatus((previous) => ({ ...previous, [provider]: 'valid' }));
     } else {
       setKeyStatus((previous) => ({ ...previous, [provider]: 'invalid' }));
     }
   };
 
-  const toggleKeyVisibility = (provider: ProviderKey) => {
+  const toggleKeyVisibility = (provider: ApiKeySlot) => {
     setShowKeys((previous) => ({ ...previous, [provider]: !previous[provider] }));
   };
 
@@ -894,7 +908,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
               <div className="space-y-6">
                 <SectionCard
                   title="Provider Keys"
-                  description="Encrypted API keys that power provider routing, BYOK model access, and the multimodal lanes you configure below."
+                  description="Encrypted API keys that power chat, multimodal routing, and Creative AI Generation Profiles (BYOK)."
                 >
                   {!limits?.canUseCustomApiKeys ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
@@ -967,6 +981,70 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </SectionCard>
+
+                <SectionCard
+                  title="Creative AI providers"
+                  description="BYOK for Marketing Studio Generation Profiles. Studio picks Style + Quality + Auto; Platform Creative AI uses these keys. OpenAI above already covers GPT Image."
+                >
+                  {!limits?.canUseCustomApiKeys ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+                      Upgrade to Pro to attach Ideogram, Imagen, FLUX, and other Creative AI keys. Until then, platform defaults apply when configured.
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Same encrypted store as chat keys. Marketing Studio never calls vendors directly — Generation Profiles resolve through Creative AI.
+                      </p>
+                      {CREATIVE_API_PROVIDER_FIELDS.map(
+                        ({ key, label, placeholder, description, keyUrl, keyUrlLabel, strengths }) => (
+                          <div
+                            key={key}
+                            className="rounded-2xl border border-teal-200/80 bg-teal-50/40 p-4 dark:border-teal-900/50 dark:bg-teal-950/20"
+                          >
+                            <div className="mb-3 flex items-start justify-between gap-4">
+                              <div>
+                                <p className="font-semibold text-gray-900 dark:text-white">{label}</p>
+                                <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{description}</p>
+                                <p className="mt-1 text-xs text-teal-800/80 dark:text-teal-200/80">{strengths}</p>
+                              </div>
+                              <a
+                                href={keyUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 rounded-lg border border-teal-300 bg-white px-3 py-1.5 text-xs font-medium text-teal-900 transition hover:bg-teal-50 dark:border-teal-800 dark:bg-gray-900 dark:text-teal-100"
+                              >
+                                Get key →
+                              </a>
+                            </div>
+                            <div className="relative">
+                              <input
+                                type={showKeys[key] ? 'text' : 'password'}
+                                value={apiKeys[key]}
+                                onChange={(event) => handleApiKeyChange(key, event.target.value)}
+                                placeholder={placeholder}
+                                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 pr-11 text-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => toggleKeyVisibility(key)}
+                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors hover:text-gray-600"
+                              >
+                                {showKeys[key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
+                            <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">{keyUrlLabel}</p>
+                            {keyStatus[key] === 'valid' ? (
+                              <span className="mt-2 inline-flex items-center gap-1 text-sm text-green-600">
+                                <CheckCircle className="h-4 w-4" />
+                                Saved when you click Save
+                              </span>
+                            ) : null}
+                          </div>
+                        ),
+                      )}
                     </div>
                   )}
                 </SectionCard>

@@ -14,11 +14,23 @@ const ApiKeysSchema = z.object({
   groq: z.string().optional(),
   cohere: z.string().optional(),
   ollama: z.string().optional(),
-});
+  // Creative AI Generation Profiles (same encrypted blob)
+  google_imagen: z.string().optional(),
+  google: z.string().optional(),
+  flux: z.string().optional(),
+  ideogram: z.string().optional(),
+  stability: z.string().optional(),
+  adobe_firefly: z.string().optional(),
+  adobe: z.string().optional(),
+}).passthrough();
 
 const UpdateApiKeysSchema = z.object({
   apiKeys: ApiKeysSchema,
 });
+
+function isLikelyMaskedKey(value: string): boolean {
+  return value.includes('…') || value.includes('...') || /^\*+$/.test(value) || /•/.test(value);
+}
 
 export async function userSettingsRoutes(fastify: FastifyInstance, options: FastifyPluginOptions) {
   // Get user's API keys
@@ -33,12 +45,18 @@ export async function userSettingsRoutes(fastify: FastifyInstance, options: Fast
           properties: {
             apiKeys: {
               type: 'object',
+              additionalProperties: { type: 'string' },
               properties: {
                 openai: { type: 'string' },
                 anthropic: { type: 'string' },
                 groq: { type: 'string' },
                 cohere: { type: 'string' },
                 ollama: { type: 'string' },
+                google_imagen: { type: 'string' },
+                flux: { type: 'string' },
+                ideogram: { type: 'string' },
+                stability: { type: 'string' },
+                adobe_firefly: { type: 'string' },
               }
             }
           }
@@ -90,12 +108,18 @@ export async function userSettingsRoutes(fastify: FastifyInstance, options: Fast
         properties: {
           apiKeys: {
             type: 'object',
+            additionalProperties: { type: 'string' },
             properties: {
               openai: { type: 'string' },
               anthropic: { type: 'string' },
               groq: { type: 'string' },
               cohere: { type: 'string' },
-              ollama: { type: 'string' }
+              ollama: { type: 'string' },
+              google_imagen: { type: 'string' },
+              flux: { type: 'string' },
+              ideogram: { type: 'string' },
+              stability: { type: 'string' },
+              adobe_firefly: { type: 'string' },
             }
           }
         },
@@ -119,10 +143,35 @@ export async function userSettingsRoutes(fastify: FastifyInstance, options: Fast
       // Validate API keys format
       const validatedKeys = ApiKeysSchema.parse(apiKeys);
 
-      // Encrypt API keys before storing
-      const encryptedKeys = encryptApiKeys(validatedKeys as Record<string, string>);
+      // Merge with existing so partial updates / masked unchanged fields don't wipe keys
+      const existingRow = await db
+        .select({ apiKeys: users.apiKeys })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      const existingRaw = decryptApiKeys((existingRow[0]?.apiKeys as Record<string, string>) || {});
+      const existing: Record<string, string> = {};
+      for (const [slot, value] of Object.entries(existingRaw)) {
+        if (typeof value === 'string' && value.length > 0) {
+          existing[slot] = value;
+        }
+      }
 
-      // Update user's API keys
+      const merged: Record<string, string> = { ...existing };
+      for (const [slot, value] of Object.entries(validatedKeys)) {
+        if (typeof value !== 'string') continue;
+        if (value === '') {
+          delete merged[slot];
+          continue;
+        }
+        if (isLikelyMaskedKey(value) && existing[slot]) {
+          continue;
+        }
+        merged[slot] = value;
+      }
+
+      const encryptedKeys = encryptApiKeys(merged);
+
       await db
         .update(users)
         .set({ 
@@ -131,8 +180,7 @@ export async function userSettingsRoutes(fastify: FastifyInstance, options: Fast
         })
         .where(eq(users.id, userId));
 
-      // Log with masked keys
-      const maskedLog = Object.entries(validatedKeys).reduce((acc, [key, value]) => {
+      const maskedLog = Object.entries(merged).reduce((acc, [key, value]) => {
         if (value) acc[key] = maskSensitiveData(value);
         return acc;
       }, {} as Record<string, string>);

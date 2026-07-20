@@ -66,4 +66,17 @@ export async function creativeAiRoutes(fastify: FastifyInstance, _options: Fasti
     }));
     return reply.send({ success: true, data: styles });
   });
+
+  fastify.get('/providers/status', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Which Creative AI providers have BYOK or platform keys configured',
+      tags: ['creative-ai'],
+    },
+  }, async (request, reply) => {
+    const userId = (request as any).user.id as string;
+    const { listConfiguredCreativeProviders } = await import('../services/creative-ai-keys.js');
+    const data = await listConfiguredCreativeProviders(userId);
+    return reply.send({ success: true, data });
+  });
 }

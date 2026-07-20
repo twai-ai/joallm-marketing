@@ -141,10 +141,14 @@ CreativeAI.upscale({ … })
 ### Platform owns
 
 * Provider registry and adapters
-* Secrets / API keys
+* Secrets / API keys (**same Settings BYOK store** as chat — `users.api_keys`, encrypted)
 * Auto router (style × quality × capability × cost × org policy)
 * Rate limits, usage metering, safety filters
 * Output storage hooks (files / media library)
+
+BYOK resolution order per provider: user Settings key → platform env fallback. Free tier without custom keys uses platform defaults when configured.
+
+Settings → **AI & Models** → Provider Keys (OpenAI shared with GPT Image) + **Creative AI providers** (Imagen, FLUX, Ideogram, Stability, Firefly).
 
 ### Studio owns
 

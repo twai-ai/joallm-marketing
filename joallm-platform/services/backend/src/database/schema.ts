@@ -28,6 +28,14 @@ export const users = pgTable('users', {
     groq?: string;
     cohere?: string;
     ollama?: string;
+    /** Creative AI — Google Imagen (also accepts legacy `google`) */
+    google_imagen?: string;
+    google?: string;
+    flux?: string;
+    ideogram?: string;
+    stability?: string;
+    adobe_firefly?: string;
+    adobe?: string;
   }>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

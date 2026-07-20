@@ -1,0 +1,114 @@
+import React, { useMemo, useState } from 'react';
+
+interface LogoProps {
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  showText?: boolean;
+  className?: string;
+  variant?: 'header' | 'sidebar' | 'footer' | 'standalone';
+}
+
+export function Logo({ 
+  size = 'md', 
+  showText = true, 
+  className = '',
+  variant = 'header'
+}: LogoProps) {
+  // Logo size mapping
+  const sizeMap = {
+    xs: { width: 'w-4', height: 'h-4', textSize: 'text-xs' },
+    sm: { width: 'w-6', height: 'h-6', textSize: 'text-sm' },
+    md: { width: 'w-8', height: 'h-8', textSize: 'text-lg' },
+    lg: { width: 'w-12', height: 'h-12', textSize: 'text-xl' },
+    xl: { width: 'w-16', height: 'h-16', textSize: 'text-2xl' }
+  };
+
+  const logoCandidates = useMemo(() => {
+    const shared = [
+      '/JoaLLM-logo-standard.png',
+      '/JoaLLM-logo.png',
+      '/JoaLLM-logo-2-logo.png',
+      '/JoaLLM-logo-2-logo (1).png',
+      '/JoaLLM-logo-2-logo (2).png',
+    ];
+
+    if (size === 'lg' || size === 'xl') {
+      return ['/JoaLLM-logo-large.png', '/JoaLLM-logo-medium.png', ...shared];
+    }
+
+    return ['/JoaLLM-logo-medium.png', '/JoaLLM-logo-large.png', ...shared];
+  }, [size]);
+
+  const [logoIndex, setLogoIndex] = useState(0);
+
+  // Text color based on variant
+  const getTextColors = () => {
+    switch (variant) {
+      case 'sidebar':
+        return {
+          joa: 'text-joa-primary',
+          llm: 'text-white',
+          ai: 'text-gray-300'
+        };
+      case 'footer':
+        return {
+          joa: 'text-joa-primary',
+          llm: 'text-gray-600',
+          ai: 'text-gray-500'
+        };
+      default: // header, standalone
+        return {
+          joa: 'text-joa-primary',
+          llm: 'text-joa-secondary',
+          ai: 'text-joa-secondary'
+        };
+    }
+  };
+
+  const { width, height, textSize } = sizeMap[size];
+  const logoSrc = logoCandidates[Math.min(logoIndex, logoCandidates.length - 1)];
+  const textColors = getTextColors();
+
+  return (
+    <div className={`logo-container flex items-center space-x-2.5 ${className}`}>
+      <img 
+        src={logoSrc}
+        alt="JoaLLM.AI Logo" 
+        className={`${width} ${height} object-contain select-none`}
+        draggable={false}
+        onError={() => {
+          setLogoIndex((current) => (
+            current < logoCandidates.length - 1 ? current + 1 : current
+          ));
+        }}
+      />
+      {showText && (
+        <h1 className={`${textSize} font-bold tracking-tight select-none`}>
+          <span className={textColors.joa}>Joa</span>
+          <span className={textColors.llm}>LLM</span>
+          <span className={`${textColors.ai} ${size === 'xs' ? 'text-xs' : 'text-sm'} font-normal`}>.AI</span>
+        </h1>
+      )}
+    </div>
+  );
+}
+
+// Preset logo components for common use cases
+export function HeaderLogo() {
+  return <Logo size="md" variant="header" />;
+}
+
+export function SidebarLogo() {
+  return <Logo size="sm" variant="sidebar" />;
+}
+
+export function FooterLogo() {
+  return <Logo size="sm" variant="footer" />;
+}
+
+export function StandaloneLogo() {
+  return <Logo size="lg" variant="standalone" />;
+}
+
+export function CompactLogo() {
+  return <Logo size="xs" showText={false} />;
+}

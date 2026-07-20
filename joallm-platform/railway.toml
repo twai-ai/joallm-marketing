@@ -1,0 +1,7 @@
+# Railway Volume Configuration for File Storage
+# This configures persistent storage for uploaded files
+
+[[mounts]]
+path = "/app/data"
+name = "uploads-volume"
+

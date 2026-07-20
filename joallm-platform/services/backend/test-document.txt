@@ -1,0 +1,14 @@
+This is a test document for RAG functionality.
+
+The document contains information about artificial intelligence and machine learning.
+
+Key topics covered:
+- Natural Language Processing
+- Computer Vision
+- Deep Learning
+- Neural Networks
+- Large Language Models
+
+This document should be processed and indexed for semantic search.
+
+The system should be able to find this content when searching for terms like "AI", "machine learning", or "neural networks".

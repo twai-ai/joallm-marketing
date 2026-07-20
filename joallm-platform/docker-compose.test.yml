@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database with pgvector
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: joallm-postgres-test
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: joallm
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: joallm-redis-test
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_test_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    container_name: joallm-backend-test
+    ports:
+      - "3001:3001"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/joallm
+      REDIS_URL: redis://redis:6379
+      
+      # Security Keys (GENERATED - Replace with your own)
+      JWT_SECRET: 8b43e8d8c43454f67c0287d600237d3684a8f91e0e81300ae51622875e03aa9d
+      API_KEY: 873c68fa24d556ee1fe0a30696224e8b41846392e41dd67af77eb2473c1e706f
+      ENCRYPTION_KEY: 118bb75f2183cdd8b0f711b13b2332f885937fa1def3561e3aeeffe248061066
+      
+      # Google OAuth (Optional)
+      GOOGLE_CLIENT_ID: test-client-id
+      GOOGLE_CLIENT_SECRET: test-secret
+      GOOGLE_REDIRECT_URI: http://localhost:3001/api/auth/google/callback
+      
+      # Server Config
+      PORT: 3001
+      NODE_ENV: development
+      CORS_ORIGIN: http://localhost:5173,http://localhost:5174
+      FRONTEND_URL: http://localhost:5173
+      LOG_LEVEL: info
+      
+      # Optional LLM Keys
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-ant-placeholder}
+      GROQ_API_KEY: ${GROQ_API_KEY:-gsk-placeholder}
+      COHERE_API_KEY: ${COHERE_API_KEY:-placeholder}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3001
+        VITE_API_BASE_URL: http://localhost:3001
+        VITE_APP_ENV: development
+    container_name: joallm-frontend-test
+    ports:
+      - "5173:5174"
+    environment:
+      NODE_ENV: development
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5174"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Landing Page Service
+  landing-page:
+    build:
+      context: ./services/landing-page
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3001
+        VITE_APP_ENV: development
+    container_name: joallm-landing-test
+    ports:
+      - "5174:5175"
+    environment:
+      NODE_ENV: development
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5175"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_test_data:
+  redis_test_data:
+
+networks:
+  default:
+    name: joallm-test-network
+

@@ -1,0 +1,43 @@
+# Frontend-specific .dockerignore
+# This ensures Docker copies ALL necessary source files
+
+# Dependencies (will be installed in Docker)
+node_modules
+
+# Build outputs (will be generated in Docker)
+dist
+build
+.vite
+
+# Development files
+*.log
+npm-debug.log*
+.DS_Store
+.env.local
+.env.development
+
+# IDE files
+.vscode
+.idea
+*.swp
+
+# Test files
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Documentation
+README.md
+*.md
+
+# Git
+.git
+.gitignore
+
+# DO NOT IGNORE source files - we need them!
+# All .tsx and .ts files in src/ should be copied
+
+
+

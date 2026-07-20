@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear All Caches - JoaLLM Platform</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #1a202c;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #718096;
+            margin-bottom: 30px;
+        }
+        .step {
+            background: #f7fafc;
+            border-left: 4px solid #4299e1;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .step h3 {
+            margin-top: 0;
+            color: #2d3748;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .success {
+            background: #48bb78;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+        .info {
+            background: #bee3f8;
+            border-left: 4px solid #4299e1;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            color: #2c5282;
+        }
+        kbd {
+            background: #edf2f7;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #cbd5e0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .warning {
+            background: #fed7d7;
+            border-left: 4px solid #fc8181;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            color: #742a2a;
+        }
+        .code {
+            background: #2d3748;
+            color: #68d391;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+        ul {
+            line-height: 1.8;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Clear All Caches - JoaLLM Platform</h1>
+        <p class="subtitle">Force refresh to see the new Knowledge Manager features</p>
+
+        <div class="info">
+            <strong>📌 Current Deployment Status:</strong><br>
+            CI/CD is running on commit <code>72d2729</code>. New features should be visible once deployment completes and caches are cleared.
+        </div>
+
+        <div class="step">
+            <h3>🎯 Quick Method (Try This First!)</h3>
+            <p>Use the browser's hard refresh to bypass all caches:</p>
+            <div class="code">
+                Windows/Linux: Ctrl + Shift + R<br>
+                Mac: Cmd + Shift + R<br>
+                <br>
+                Or: Ctrl + F5 (Windows)
+            </div>
+            <button onclick="hardRefresh()">🔄 Hard Refresh Now</button>
+        </div>
+
+        <div class="step">
+            <h3>🌐 Method 2: Incognito Mode</h3>
+            <p>Open a fresh incognito window with zero cache:</p>
+            <ol>
+                <li>Press <kbd>Ctrl+Shift+N</kbd> (or <kbd>Cmd+Shift+N</kbd> on Mac)</li>
+                <li>Navigate to: <code>https://platform.joallm.ai</code></li>
+                <li>Login and open Knowledge Manager</li>
+                <li>You should see new features (if deployed)</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>🧹 Method 3: Clear Browser Cache</h3>
+            <div class="action-buttons">
+                <button onclick="clearAllCaches()">Clear All Caches</button>
+                <button onclick="clearServiceWorker()">Clear Service Workers</button>
+                <button onclick="clearLocalStorage()">Clear Local Storage</button>
+            </div>
+            <div id="success" class="success"></div>
+        </div>
+
+        <div class="step">
+            <h3>🔍 Method 4: Check if Deployed</h3>
+            <p>Verify the new code is actually on the server:</p>
+            <button onclick="checkDeployment()">Check Deployment Status</button>
+            <div id="deploymentStatus" style="margin-top: 15px;"></div>
+        </div>
+
+        <div class="warning">
+            <strong>⚠️ Important:</strong><br>
+            If after clearing all caches you STILL don't see the new features, the deployment hasn't completed yet. Check:
+            <ul style="margin: 10px 0;">
+                <li>GitHub Actions: <a href="https://github.com/support-joallm/joallm-platform/actions" target="_blank">View Pipeline</a></li>
+                <li>Railway Dashboard: Check frontend service status</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>✅ How to Know if It Worked</h3>
+            <p>After clearing cache, you should see:</p>
+            <ul>
+                <li>✨ Orange "Clear All & Upload New" button</li>
+                <li>✨ "Filters" button (expandable panel)</li>
+                <li>✨ Checkboxes next to each file</li>
+                <li>✨ Blue toolbar when files selected</li>
+                <li>✨ Sort by dropdown</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>🚀 Nuclear Option: Complete Cache Clear</h3>
+            <p>If nothing else works, clear everything:</p>
+            <button onclick="nuclearOption()">☢️ Nuclear Clear (All Caches + Reload)</button>
+            <p style="margin-top: 10px; font-size: 14px; color: #718096;">
+                This will clear ALL browser data for this site and force a complete reload.
+            </p>
+        </div>
+
+    </div>
+
+    <script>
+        function hardRefresh() {
+            // Force a hard refresh
+            window.location.reload(true);
+            // Alternative: hold Shift and click refresh
+            setTimeout(() => {
+                location.href = location.href;
+            }, 100);
+        }
+
+        async function clearAllCaches() {
+            const successDiv = document.getElementById('success');
+            try {
+                // Clear all caches
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+                    console.log('Cleared', cacheNames.length, 'cache(s)');
+                }
+                
+                successDiv.textContent = '✅ All caches cleared! Refreshing in 2 seconds...';
+                successDiv.style.display = 'block';
+                
+                setTimeout(() => {
+                    window.location.href = 'https://platform.joallm.ai';
+                }, 2000);
+            } catch (error) {
+                successDiv.textContent = '❌ Error: ' + error.message;
+                successDiv.style.display = 'block';
+            }
+        }
+
+        async function clearServiceWorker() {
+            const successDiv = document.getElementById('success');
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(registrations.map(reg => reg.unregister()));
+                    successDiv.textContent = `✅ Cleared ${registrations.length} service worker(s)! Refreshing...`;
+                } else {
+                    successDiv.textContent = '✅ No service workers found.';
+                }
+                successDiv.style.display = 'block';
+                
+                setTimeout(() => {
+                    window.location.reload(true);
+                }, 2000);
+            } catch (error) {
+                successDiv.textContent = '❌ Error: ' + error.message;
+                successDiv.style.display = 'block';
+            }
+        }
+
+        function clearLocalStorage() {
+            const successDiv = document.getElementById('success');
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                successDiv.textContent = '✅ Local storage cleared! Refreshing...';
+                successDiv.style.display = 'block';
+                
+                setTimeout(() => {
+                    window.location.reload(true);
+                }, 2000);
+            } catch (error) {
+                successDiv.textContent = '❌ Error: ' + error.message;
+                successDiv.style.display = 'block';
+            }
+        }
+
+        async function checkDeployment() {
+            const statusDiv = document.getElementById('deploymentStatus');
+            statusDiv.innerHTML = '🔍 Checking deployment...';
+            
+            try {
+                // Check if the new bundle exists
+                const response = await fetch('https://platform.joallm.ai', { cache: 'no-store' });
+                const html = await response.text();
+                
+                // Check for new component hash
+                const hasNewKnowledgeManager = html.includes('KnowledgeManagerNew-CqVwXhoF.js') || 
+                                              html.includes('BulkActionToolbar') ||
+                                              html.includes('DocumentFilters');
+                
+                // Check for old hash
+                const hasOldKnowledgeManager = html.includes('KnowledgeManagerNew-Bx99GOWI.js');
+                
+                if (hasNewKnowledgeManager) {
+                    statusDiv.innerHTML = `
+                        <div style="background: #c6f6d5; padding: 15px; border-radius: 8px; color: #22543d;">
+                            ✅ <strong>NEW CODE IS DEPLOYED!</strong><br>
+                            The new Knowledge Manager is live. Clear your browser cache to see it.
+                        </div>
+                    `;
+                } else if (hasOldKnowledgeManager) {
+                    statusDiv.innerHTML = `
+                        <div style="background: #feebc8; padding: 15px; border-radius: 8px; color: #7c2d12;">
+                            ⚠️ <strong>OLD CODE STILL DEPLOYED</strong><br>
+                            The deployment hasn't completed yet. Wait 5 more minutes and try again.
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `
+                        <div style="background: #e2e8f0; padding: 15px; border-radius: 8px; color: #2d3748;">
+                            ❓ <strong>CANNOT DETERMINE</strong><br>
+                            Unable to detect deployment status. Try clearing cache and refreshing.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div style="background: #fed7d7; padding: 15px; border-radius: 8px; color: #742a2a;">
+                        ❌ <strong>ERROR:</strong> ${error.message}<br>
+                        Check your internet connection.
+                    </div>
+                `;
+            }
+        }
+
+        async function nuclearOption() {
+            const successDiv = document.getElementById('success');
+            
+            if (!confirm('This will clear ALL browser data for platform.joallm.ai. Continue?')) {
+                return;
+            }
+            
+            try {
+                // Clear everything
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+                }
+                
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(registrations.map(reg => reg.unregister()));
+                }
+                
+                // Clear IndexedDB
+                if ('indexedDB' in window) {
+                    const dbs = await indexedDB.databases();
+                    dbs.forEach(db => {
+                        if (db.name) indexedDB.deleteDatabase(db.name);
+                    });
+                }
+                
+                successDiv.textContent = '☢️ Nuclear clear complete! Redirecting in 2 seconds...';
+                successDiv.style.display = 'block';
+                
+                setTimeout(() => {
+                    window.location.href = 'https://platform.joallm.ai';
+                }, 2000);
+            } catch (error) {
+                successDiv.textContent = '❌ Error: ' + error.message;
+                successDiv.style.display = 'block';
+            }
+        }
+
+        // Auto-check deployment on load
+        window.addEventListener('load', () => {
+            setTimeout(checkDeployment, 1000);
+        });
+    </script>
+</body>
+</html>
+

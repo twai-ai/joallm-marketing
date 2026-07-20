@@ -133,7 +133,7 @@ export function ChatHeader({
             <button
               onClick={onToggleHistory}
               className={`p-2 rounded-lg transition-colors ${
-                showHistory ? 'bg-red-50 text-joa-primary' : 'hover:bg-gray-100 text-gray-600'
+                showHistory ? 'bg-teal-50 text-joa-primary' : 'hover:bg-gray-100 text-gray-600'
               }`}
               title={showHistory ? 'Hide conversation history' : 'Show conversation history'}
             >
@@ -262,7 +262,7 @@ export function ChatHeader({
             {!showHistory && (
               <button
                 onClick={onNewChat}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-joa-primary hover:bg-red-800 text-white rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-joa-primary hover:bg-teal-800 text-white rounded-lg transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span className="hidden sm:inline">New Chat</span>

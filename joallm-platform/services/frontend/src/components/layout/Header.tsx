@@ -157,7 +157,7 @@ export function Header({ onToggleSidebar, onOpenSettings, onOpenKnowledge, curre
         {/* Quick Actions Group - Only show when authenticated */}
         {isAuthenticated && (
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <div className="hidden xl:flex items-center gap-2 rounded-full border border-red-100 bg-red-50/90 px-3 py-2 text-sm shadow-sm">
+            <div className="hidden xl:flex items-center gap-2 rounded-full border border-teal-100 bg-teal-50/90 px-3 py-2 text-sm shadow-sm">
               <span className="text-gray-500">Signed in as</span>
               <span className="font-semibold text-joa-primary">{displayName}</span>
             </div>
@@ -217,7 +217,7 @@ export function Header({ onToggleSidebar, onOpenSettings, onOpenKnowledge, curre
             </button>
             <button
               onClick={() => navigate('/register')}
-              className="px-4 py-2 text-sm font-medium text-white bg-joa-primary hover:bg-red-800 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md active:scale-95"
+              className="px-4 py-2 text-sm font-medium text-white bg-joa-primary hover:bg-teal-800 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md active:scale-95"
             >
               Sign Up
             </button>

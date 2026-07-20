@@ -259,7 +259,7 @@ export function AttachmentPanel({
                 {/* Remove */}
                 <button
                   onClick={() => onRemove(doc.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                  className="p-1.5 text-gray-400 hover:text-teal-700 hover:bg-teal-50 rounded transition-colors"
                   title="Remove attachment"
                 >
                   <X className="w-3.5 h-3.5" />

@@ -33,7 +33,7 @@ const assistantMarkdownComponents = {
   ol: ({ children }: any) => <ol className="my-4 space-y-2 pl-6 list-decimal marker:text-joa-primary marker:font-semibold">{children}</ol>,
   li: ({ children }: any) => <li className="ml-5 whitespace-pre-wrap leading-7 text-gray-700 pl-1 marker:text-joa-primary">{children}</li>,
   blockquote: ({ children }: any) => (
-    <blockquote className="my-4 border-l-4 border-joa-primary/70 bg-red-50/40 py-1 pl-4 italic text-gray-600 whitespace-pre-wrap">
+    <blockquote className="my-4 border-l-4 border-joa-primary/70 bg-teal-50/40 py-1 pl-4 italic text-gray-600 whitespace-pre-wrap">
       {children}
     </blockquote>
   ),
@@ -54,7 +54,7 @@ const assistantMarkdownComponents = {
     ),
   hr: () => <hr className="my-6 border-gray-200" />,
   a: ({ children, href, ...props }: any) => (
-    <a className="font-medium text-joa-primary underline underline-offset-2 hover:text-red-800" href={href} {...props}>
+    <a className="font-medium text-joa-primary underline underline-offset-2 hover:text-teal-800" href={href} {...props}>
       {children}
     </a>
   ),

@@ -5,12 +5,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        // JoaLLM Brand Colors
-        'joa-primary': '#8B0000',
-        'joa-secondary': '#000000',
-        'joa-dark': '#1E293B',
-        'joa-accent': '#3B82F6',
-        'joa-bg': '#E8EDF2',
+        // Brand aliases → ATRISI institutional (kept as joa-* for existing classnames)
+        'joa-primary': '#0f766e',
+        'joa-secondary': '#0f172a',
+        'joa-dark': '#1e293b',
+        'joa-accent': '#3b82f6',
+        'joa-bg': '#f1f5f9',
         // ATRISI institutional palette (mirrors App.css --atrisi-*)
         atrisi: {
           navy: '#0f172a',

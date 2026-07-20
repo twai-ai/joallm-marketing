@@ -192,7 +192,7 @@ export function FormatSupportModal({ isOpen, onClose }: FormatSupportModalProps)
             </p>
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-red-800 transition-colors"
+              className="px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-teal-800 transition-colors"
             >
               Got it
             </button>

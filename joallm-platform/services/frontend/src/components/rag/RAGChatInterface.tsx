@@ -18,7 +18,7 @@ const MODE_STYLES: Record<RAGModeId, {
 }> = {
   standard: {
     label: 'Standard',
-    userBubble: 'bg-gradient-to-r from-joa-primary to-red-600 text-white',
+    userBubble: 'bg-gradient-to-r from-joa-primary to-teal-600 text-white',
     aiBubble: 'bg-white/90 backdrop-blur-sm border border-blue-200/60',
     inputRing: 'focus:ring-joa-primary/50 focus:border-joa-primary',
     badge: 'bg-blue-100 text-blue-700',
@@ -292,7 +292,7 @@ export function RAGChatInterface({ className = '', documentIds, documents = [] }
     return (
       <div key={message.id} className={`flex gap-4 ${isUser ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
         {!isUser && (
-          <div className="w-10 h-10 bg-gradient-to-r from-joa-primary via-red-600 to-joa-accent rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+          <div className="w-10 h-10 bg-gradient-to-r from-joa-primary via-teal-600 to-joa-accent rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
             <Bot className="w-5 h-5 text-white" />
           </div>
         )}
@@ -359,7 +359,7 @@ export function RAGChatInterface({ className = '', documentIds, documents = [] }
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 bg-gradient-to-r from-joa-primary to-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
+          <div className="w-7 h-7 bg-gradient-to-r from-joa-primary to-teal-600 rounded-lg flex items-center justify-center flex-shrink-0">
             <Bot className="w-4 h-4 text-white" />
           </div>
           <span className="text-sm font-semibold text-gray-900">Knowledge Assistant</span>
@@ -379,7 +379,7 @@ export function RAGChatInterface({ className = '', documentIds, documents = [] }
           )}
           <button
             onClick={clearConversation}
-            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            className="p-1.5 text-gray-400 hover:text-teal-700 hover:bg-teal-50 rounded-lg transition-colors"
             title="Clear conversation"
           >
             <Trash2 className="w-4 h-4" />
@@ -392,7 +392,7 @@ export function RAGChatInterface({ className = '', documentIds, documents = [] }
         {messages.length === 0 ? (
           <div className="text-center py-16">
             <div className="relative mb-8">
-              <div className="w-20 h-20 bg-gradient-to-r from-joa-primary via-red-600 to-joa-accent rounded-2xl flex items-center justify-center mx-auto shadow-xl">
+              <div className="w-20 h-20 bg-gradient-to-r from-joa-primary via-teal-600 to-joa-accent rounded-2xl flex items-center justify-center mx-auto shadow-xl">
                 <Bot className="w-10 h-10 text-white" />
               </div>
               <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full border-4 border-white animate-pulse"></div>
@@ -484,7 +484,7 @@ export function RAGChatInterface({ className = '', documentIds, documents = [] }
         
         {isChatting && (
           <div className="flex gap-4 justify-start animate-in slide-in-from-bottom-2 duration-300">
-            <div className="w-10 h-10 bg-gradient-to-r from-joa-primary via-red-600 to-joa-accent rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+            <div className="w-10 h-10 bg-gradient-to-r from-joa-primary via-teal-600 to-joa-accent rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
               <Bot className="w-5 h-5 text-white" />
             </div>
             <div className="rounded-2xl p-4 bg-white border border-gray-200 shadow-sm flex items-center gap-3 text-gray-600">
@@ -554,7 +554,7 @@ export function RAGChatInterface({ className = '', documentIds, documents = [] }
           <button
             onClick={handleSendMessage}
             disabled={!inputMessage.trim() || isChatting}
-            className="px-5 py-3 bg-gradient-to-r from-joa-primary to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm font-medium"
+            className="px-5 py-3 bg-gradient-to-r from-joa-primary to-teal-600 hover:from-teal-600 hover:to-teal-800 text-white rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm font-medium"
           >
             <Send className="w-4 h-4" />
             <span className="hidden sm:inline text-sm">Send</span>

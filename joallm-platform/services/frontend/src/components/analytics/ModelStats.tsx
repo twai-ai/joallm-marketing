@@ -47,7 +47,7 @@ export function ModelStats({ className = '' }: ModelStatsProps) {
           <p className="text-gray-600 text-sm mb-4">{error}</p>
           <button
             onClick={loadStats}
-            className="px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-red-600 transition-colors"
+            className="px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-teal-600 transition-colors"
           >
             Retry
           </button>
@@ -159,7 +159,7 @@ export function ModelStats({ className = '' }: ModelStatsProps) {
         </div>
         <button
           onClick={loadStats}
-          className="flex items-center space-x-2 px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-red-600 transition-colors"
+          className="flex items-center space-x-2 px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-teal-600 transition-colors"
         >
           <Activity className="w-4 h-4" />
           <span>Refresh</span>
@@ -216,7 +216,7 @@ export function ModelStats({ className = '' }: ModelStatsProps) {
       </div>
 
       {/* Summary */}
-      <div className="bg-gradient-to-r from-joa-primary to-red-600 rounded-lg p-6 text-white">
+      <div className="bg-gradient-to-r from-joa-primary to-teal-600 rounded-lg p-6 text-white">
         <div className="flex items-center space-x-2 mb-2">
           <DollarSign className="w-5 h-5" />
           <h3 className="text-lg font-semibold">Model Ecosystem Summary</h3>

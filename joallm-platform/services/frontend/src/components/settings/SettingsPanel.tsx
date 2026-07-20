@@ -1131,7 +1131,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                                     onClick={() => toggleFallbackProvider(capability.id, provider.key)}
                                     className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                                       active
-                                        ? 'border-joa-primary bg-red-50 text-joa-primary'
+                                        ? 'border-joa-primary bg-teal-50 text-joa-primary'
                                         : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
                                     }`}
                                   >
@@ -1260,7 +1260,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                               <button
                                 onClick={disconnectGoogleWorkspace}
                                 disabled={isDisconnectingGoogle}
-                                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-teal-50 hover:border-red-300 hover:text-teal-700 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300"
                               >
                                 {isDisconnectingGoogle ? 'Disconnecting…' : 'Disconnect'}
                               </button>
@@ -1363,7 +1363,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                   title="Danger Zone"
                   description="High-impact account actions. Keep these visually distinct from routine preferences."
                 >
-                  <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+                  <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4 dark:border-red-900 dark:bg-red-950/30">
                     <h4 className="font-medium text-red-900 dark:text-red-200">Delete Account</h4>
                     <p className="mt-1 text-sm text-red-700 dark:text-red-300">
                       Permanently delete your account and all associated data. This cannot be undone.
@@ -1519,7 +1519,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                           </div>
                           <button
                             onClick={() => handleRevokeSession(session.token)}
-                            className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
+                            className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-teal-50 dark:border-red-900 dark:hover:bg-red-950/30"
                           >
                             Revoke
                           </button>
@@ -1624,7 +1624,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                 </SectionCard>
 
                 {subscriptionTier === 'free' && (
-                  <div className="rounded-3xl border-2 border-joa-primary bg-gradient-to-br from-red-50 to-white p-6">
+                  <div className="rounded-3xl border-2 border-joa-primary bg-gradient-to-br from-teal-50 to-white p-6">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="flex items-center gap-2">
@@ -1649,7 +1649,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                           type="button"
                           onClick={() => void startProCheckout()}
                           disabled={isStartingCheckout}
-                          className="inline-flex items-center gap-2 rounded-xl bg-joa-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-70"
+                          className="inline-flex items-center gap-2 rounded-xl bg-joa-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           <CreditCard className="h-4 w-4" />
                           {isStartingCheckout ? 'Opening checkout...' : 'Activate Pro'}

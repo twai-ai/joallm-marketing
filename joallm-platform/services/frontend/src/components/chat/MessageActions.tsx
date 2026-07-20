@@ -187,7 +187,7 @@ export function MessageActions({
       <button
         onClick={() => void handleSaveToKnowledge()}
         disabled={isSavingToKnowledge}
-        className="p-1.5 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50"
+        className="p-1.5 rounded-md hover:bg-teal-50 transition-colors disabled:opacity-50"
         title="Save to Knowledge"
       >
         <Database className="w-3.5 h-3.5 text-joa-primary" />
@@ -220,7 +220,7 @@ export function MessageActions({
               onDelete(messageId);
             }
           }}
-          className="p-1.5 rounded-md hover:bg-red-50 transition-colors"
+          className="p-1.5 rounded-md hover:bg-teal-50 transition-colors"
           title="Delete message"
         >
           <Trash2 className="w-3.5 h-3.5 text-red-600" />

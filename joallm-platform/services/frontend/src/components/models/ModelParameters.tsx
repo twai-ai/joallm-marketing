@@ -209,7 +209,7 @@ export function ModelParameters({ onParametersChange, className = '' }: ModelPar
                 <button
                   key={key}
                   onClick={() => applyPreset(preset.parameters)}
-                  className="flex items-center space-x-2 p-3 text-left border border-gray-200 rounded-lg hover:border-joa-primary hover:bg-red-50 transition-colors"
+                  className="flex items-center space-x-2 p-3 text-left border border-gray-200 rounded-lg hover:border-joa-primary hover:bg-teal-50 transition-colors"
                 >
                   {preset.icon}
                   <div>
@@ -255,7 +255,7 @@ export function ModelParameters({ onParametersChange, className = '' }: ModelPar
               <h4 className="text-sm font-medium text-gray-900">Advanced Parameters</h4>
               <button
                 onClick={saveCurrentAsPreset}
-                className="flex items-center space-x-1 text-sm text-joa-primary hover:text-red-600 transition-colors"
+                className="flex items-center space-x-1 text-sm text-joa-primary hover:text-teal-700 transition-colors"
               >
                 <Save className="w-4 h-4" />
                 <span>Save Preset</span>

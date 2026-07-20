@@ -415,7 +415,7 @@ export function ChatInterfaceNew() {
               </span>
               <button
                 onClick={() => setSelectedRAGDocuments([])}
-                className="ml-auto text-joa-primary hover:text-red-800"
+                className="ml-auto text-joa-primary hover:text-teal-800"
               >
                 ✕
               </button>
@@ -444,7 +444,7 @@ export function ChatInterfaceNew() {
                     {attachments.length} attachment{attachments.length > 1 ? 's' : ''}
                   </span>
                 ) : null}
-                <span className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-joa-primary">
+                <span className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-joa-primary">
                   {processingMode.replace(/_/g, ' ')}
                 </span>
               </div>
@@ -452,7 +452,7 @@ export function ChatInterfaceNew() {
           )}
 
           {nextActionSuggestion && latestAssistantMessage && (
-            <div className="mb-3 rounded-2xl border border-red-100 bg-white px-3 py-3 shadow-sm">
+            <div className="mb-3 rounded-2xl border border-teal-100 bg-white px-3 py-3 shadow-sm">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-900">
@@ -474,7 +474,7 @@ export function ChatInterfaceNew() {
                   {(nextActionSuggestion === 'add_to_knowledge' || nextActionSuggestion === 'extract_first') && (
                     <button
                       onClick={() => void handleSaveMessageToKnowledge(latestAssistantMessage.id)}
-                      className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-joa-primary transition hover:bg-red-100"
+                      className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-medium text-joa-primary transition hover:bg-teal-100"
                     >
                       Save Latest Reply
                     </button>

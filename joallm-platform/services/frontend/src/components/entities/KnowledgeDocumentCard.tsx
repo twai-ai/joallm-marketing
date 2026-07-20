@@ -28,7 +28,7 @@ export function KnowledgeDocumentCard({
   return (
     <label
       className={`flex flex-col gap-3 rounded-2xl border p-4 transition sm:flex-row sm:items-start ${
-        selected ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'
+        selected ? 'border-teal-200 bg-teal-50' : 'border-gray-200 bg-white'
       } ${!document.isReady && selectable ? 'opacity-85' : ''} ${selectable ? 'cursor-pointer' : ''}`}
     >
       <div className="flex items-start gap-3">

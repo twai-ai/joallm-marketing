@@ -104,7 +104,7 @@ export function PromptComposer({
           </button>
         </div>
         {showPipelineHelp && (
-          <div className="mb-3 rounded-xl border border-red-100 bg-red-50/50 px-3 py-3 text-xs leading-5 text-slate-600">
+          <div className="mb-3 rounded-xl border border-teal-100 bg-red-50/50 px-3 py-3 text-xs leading-5 text-slate-600">
             <p className="font-medium text-slate-800">How to use these modes</p>
             <p className="mt-1">
               <span className="font-medium text-slate-700">Answer now:</span> use the attachment in the current chat reply.
@@ -128,7 +128,7 @@ export function PromptComposer({
               onClick={() => onProcessingModeChange?.(mode.id)}
               className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                 processingMode === mode.id
-                  ? 'border-joa-primary bg-red-50 text-joa-primary'
+                  ? 'border-joa-primary bg-teal-50 text-joa-primary'
                   : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300 hover:bg-white'
               }`}
               title={mode.description}
@@ -168,7 +168,7 @@ export function PromptComposer({
               className={`p-2 rounded-md transition-colors ${
                 hasRAGContext 
                   ? 'bg-joa-primary text-white' 
-                  : 'text-gray-400 hover:text-joa-primary hover:bg-red-50'
+                  : 'text-gray-400 hover:text-joa-primary hover:bg-teal-50'
               }`}
               title="Add Knowledge Base Context"
             >
@@ -183,7 +183,7 @@ export function PromptComposer({
               className={`p-2 rounded-md transition-colors ${
                 hasAttachments 
                   ? 'bg-joa-primary text-white' 
-                  : 'text-gray-400 hover:text-joa-primary hover:bg-red-50'
+                  : 'text-gray-400 hover:text-joa-primary hover:bg-teal-50'
               }`}
               title="Attach Files"
             >
@@ -195,7 +195,7 @@ export function PromptComposer({
           <button
             onClick={onSend}
             disabled={!value.trim() || isLoading}
-            className="p-2 rounded-md bg-joa-primary text-white hover:bg-red-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="p-2 rounded-md bg-joa-primary text-white hover:bg-teal-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             <Send className="w-4 h-4" />
           </button>

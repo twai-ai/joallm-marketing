@@ -44,7 +44,7 @@ export function RegisterPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-joa-bg bg-joa-network flex items-center justify-center p-4">
+    <div className="atrisi-page min-h-screen flex items-center justify-center p-4">
       <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
         {/* Left Side - Features */}
         <div className="hidden lg:block space-y-8">
@@ -52,36 +52,36 @@ export function RegisterPage() {
             <div className="mb-6">
               <StandaloneLogo />
             </div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-red-200 bg-white/80 px-4 py-2 text-sm font-medium text-joa-primary shadow-sm">
-              <Sparkles className="h-4 w-4" />
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800 shadow-sm">
+              <Sparkles className="h-4 w-4 text-teal-600" />
               Connected AI workspace
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            <h1 className="text-4xl font-bold text-slate-950 mb-4">
               Bring chat, knowledge, workflows, and governance into one workspace
             </h1>
-            <p className="text-xl text-gray-600 mb-8">
+            <p className="text-xl text-slate-600 mb-8">
               Create your account and start with the same connected product experience the landing page promises.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-6">
             {features.map((feature, index) => (
-              <div key={index} className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-red-100 shadow-sm">
-                <div className="mb-3 inline-flex rounded-2xl bg-red-50 p-3 text-joa-primary">
+              <div key={index} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <div className="mb-3 inline-flex rounded-2xl bg-teal-50 p-3 text-teal-700">
                   <feature.icon className="h-5 w-5" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600 text-sm">{feature.description}</p>
+                <h3 className="font-semibold text-slate-950 mb-2">{feature.title}</h3>
+                <p className="text-slate-600 text-sm">{feature.description}</p>
               </div>
             ))}
           </div>
 
-          <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-joa-primary to-red-700 p-6 text-white shadow-lg shadow-red-200">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6 text-white shadow-[0_0_40px_rgba(20,184,166,0.12)]">
             <div className="flex items-center mb-3">
-              <Sparkles className="w-6 h-6 mr-2" />
+              <Sparkles className="w-6 h-6 mr-2 text-teal-300" />
               <h3 className="text-lg font-semibold">Free Forever Plan</h3>
             </div>
-            <p className="text-red-50">
+            <p className="text-slate-300">
               Start with the free workspace and upgrade only when you need higher limits, more automation, and broader team access.
             </p>
           </div>
@@ -116,11 +116,11 @@ export function RegisterPage() {
             <div className="mt-6 text-center">
               <p className="text-xs text-gray-500">
                 By creating an account, you agree to our{' '}
-                <Link to="/terms" className="text-joa-primary hover:text-red-800">
+                <Link to="/terms" className="text-joa-primary hover:text-teal-800">
                   Terms of Service
                 </Link>{' '}
                 and{' '}
-                <Link to="/privacy" className="text-joa-primary hover:text-red-800">
+                <Link to="/privacy" className="text-joa-primary hover:text-teal-800">
                   Privacy Policy
                 </Link>
               </p>
@@ -133,7 +133,7 @@ export function RegisterPage() {
               Already have an account?{' '}
               <Link
                 to="/login"
-                className="font-medium text-joa-primary hover:text-red-800 transition-colors"
+                className="font-medium text-joa-primary hover:text-teal-800 transition-colors"
               >
                 Sign in here
               </Link>
@@ -141,7 +141,7 @@ export function RegisterPage() {
           </div>
 
           {/* Mobile Features */}
-          <div className="lg:hidden mt-8 bg-white/70 backdrop-blur-sm rounded-2xl p-6 border border-red-100 shadow-sm">
+          <div className="lg:hidden mt-8 bg-white/70 backdrop-blur-sm rounded-2xl p-6 border border-teal-100 shadow-sm">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
               What you'll get:
             </h3>

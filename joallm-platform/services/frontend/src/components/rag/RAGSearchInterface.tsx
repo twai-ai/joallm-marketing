@@ -163,7 +163,7 @@ export function RAGSearchInterface({ className = '' }: RAGSearchInterfaceProps) 
           <div className="flex items-center space-x-2">
             <button
               onClick={handleNewSearch}
-              className="flex items-center space-x-2 px-3 py-2 bg-joa-primary text-white rounded-lg hover:bg-red-800 transition-colors"
+              className="flex items-center space-x-2 px-3 py-2 bg-joa-primary text-white rounded-lg hover:bg-teal-800 transition-colors"
             >
               <Plus className="w-4 h-4" />
               <span className="text-sm">New Search</span>

@@ -276,7 +276,7 @@ export function ClearAndUploadModal({
             </button>
             <button
               onClick={handleExecute}
-              className="flex items-center space-x-2 px-6 py-2.5 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-lg transition-colors font-medium"
+              className="flex items-center space-x-2 px-6 py-2.5 bg-gradient-to-r from-orange-600 to-teal-600 hover:from-orange-700 hover:to-teal-800 text-white rounded-lg transition-colors font-medium"
             >
               <RefreshCw className="w-4 h-4" />
               <span>

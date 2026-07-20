@@ -63,7 +63,7 @@ export function RAGContextSelector({
                 onClick={() => handleToggle(doc.id)}
                 className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors ${
                   localSelection.includes(doc.id)
-                    ? 'bg-red-50 hover:bg-red-100'
+                    ? 'bg-red-50 hover:bg-teal-100'
                     : 'hover:bg-gray-50'
                 }`}
               >
@@ -106,7 +106,7 @@ export function RAGContextSelector({
           </button>
           <button
             onClick={handleApply}
-            className="px-3 py-1.5 text-sm bg-joa-primary hover:bg-red-800 text-white rounded-md transition-colors"
+            className="px-3 py-1.5 text-sm bg-joa-primary hover:bg-teal-800 text-white rounded-md transition-colors"
           >
             Apply
           </button>

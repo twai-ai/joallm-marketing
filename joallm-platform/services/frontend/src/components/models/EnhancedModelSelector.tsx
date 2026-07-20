@@ -337,7 +337,7 @@ export function EnhancedModelSelector({ className = '', onModelSelect }: Enhance
                     {filteredModels.length > 6 && (
                       <button
                         onClick={() => setShowAllModels(!showAllModels)}
-                        className="text-sm text-joa-primary hover:text-red-600 transition-colors"
+                        className="text-sm text-joa-primary hover:text-teal-700 transition-colors"
                       >
                         {showAllModels ? 'Show Less' : 'Show All'}
                       </button>

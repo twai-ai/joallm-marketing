@@ -631,7 +631,7 @@ export function KnowledgeManagerNew({ isOpen, onClose, inline = false }: Knowled
                   />
                   <label
                     htmlFor="file-upload"
-                    className={`flex items-center space-x-2 px-4 py-2 bg-joa-primary hover:bg-red-800 text-white rounded-lg cursor-pointer transition-colors ${
+                    className={`flex items-center space-x-2 px-4 py-2 bg-joa-primary hover:bg-teal-800 text-white rounded-lg cursor-pointer transition-colors ${
                       isUploading ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                   >
@@ -644,7 +644,7 @@ export function KnowledgeManagerNew({ isOpen, onClose, inline = false }: Knowled
                 <button
                   onClick={() => setShowClearAndUpload(true)}
                   disabled={isUploading || documents.length === 0}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-orange-600 to-teal-600 hover:from-orange-700 hover:to-teal-800 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Delete all documents and upload new ones"
                 >
                   <RefreshCw className="w-4 h-4" />
@@ -843,7 +843,7 @@ export function KnowledgeManagerNew({ isOpen, onClose, inline = false }: Knowled
               <button
                 onClick={handleRAGSearch}
                 disabled={!ragQuery.trim() || isSearching}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-joa-primary hover:bg-red-800 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-joa-primary hover:bg-teal-800 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Search className="w-4 h-4" />
                 <span>{isSearching ? 'Searching...' : 'Search'}</span>
@@ -958,7 +958,7 @@ export function KnowledgeManagerNew({ isOpen, onClose, inline = false }: Knowled
 
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-joa-primary hover:bg-red-800 text-white rounded-lg transition-colors"
+                className="px-4 py-2 bg-joa-primary hover:bg-teal-800 text-white rounded-lg transition-colors"
               >
                 Close
               </button>
@@ -1071,7 +1071,7 @@ export function KnowledgeManagerNew({ isOpen, onClose, inline = false }: Knowled
                   type="button"
                   onClick={handleUploadClick}
                   disabled={isUploading}
-                  className={`flex items-center space-x-2 px-3 py-2 bg-joa-primary text-white rounded-lg hover:bg-red-800 transition-colors cursor-pointer text-sm ${
+                  className={`flex items-center space-x-2 px-3 py-2 bg-joa-primary text-white rounded-lg hover:bg-teal-800 transition-colors cursor-pointer text-sm ${
                     isUploading ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 >
@@ -1206,7 +1206,7 @@ export function KnowledgeManagerNew({ isOpen, onClose, inline = false }: Knowled
                             e.stopPropagation();
                             handleDelete(document.id);
                           }}
-                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                          className="p-1 text-gray-400 hover:text-teal-700 transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4 text-red-400" />
@@ -1243,7 +1243,7 @@ export function KnowledgeManagerNew({ isOpen, onClose, inline = false }: Knowled
             <button
               onClick={handleRAGSearch}
               disabled={!ragQuery.trim() || isSearching}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-teal-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Search className="w-4 h-4" />
               <span>{isSearching ? 'Searching...' : 'Search'}</span>

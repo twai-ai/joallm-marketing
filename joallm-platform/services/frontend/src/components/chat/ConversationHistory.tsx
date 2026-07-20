@@ -45,7 +45,7 @@ export function ConversationHistory({
       <div className="p-4 border-b border-gray-200">
         <button
           onClick={onNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-joa-primary hover:bg-red-800 text-white rounded-lg transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-joa-primary hover:bg-teal-800 text-white rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
           <span className="font-medium">New Chat</span>
@@ -125,7 +125,7 @@ export function ConversationHistory({
                         onDeleteSession(session.id);
                       }
                     }}
-                    className="p-1 hover:bg-red-50 rounded transition-colors"
+                    className="p-1 hover:bg-teal-50 rounded transition-colors"
                     title="Delete conversation"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-red-500" />

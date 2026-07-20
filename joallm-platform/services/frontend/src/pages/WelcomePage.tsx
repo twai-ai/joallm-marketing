@@ -82,7 +82,7 @@ function DashboardCard({
           <p className="mt-2 break-words text-xl font-semibold leading-tight text-gray-900 sm:mt-3 sm:text-2xl">{value}</p>
           <p className="mt-2 text-sm leading-5 text-gray-600 sm:leading-6">{description}</p>
         </div>
-        <div className="rounded-2xl bg-red-50 p-2.5 text-joa-primary sm:p-3">
+        <div className="rounded-2xl bg-teal-50 p-2.5 text-joa-primary sm:p-3">
           <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </div>
       </div>
@@ -281,7 +281,7 @@ export function WelcomePage() {
             </div>
 
             <div className="space-y-4 sm:space-y-5">
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-joa-primary shadow-sm sm:px-4 sm:py-2 sm:text-sm">
+              <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white/80 px-3 py-1.5 text-xs font-medium text-joa-primary shadow-sm sm:px-4 sm:py-2 sm:text-sm">
                 <Sparkles className="h-4 w-4" />
                 Workspace home
               </div>
@@ -289,7 +289,7 @@ export function WelcomePage() {
               <div>
                 <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl md:text-6xl">
                   Start with the clearest view
-                  <span className="block bg-gradient-to-r from-joa-primary to-red-500 bg-clip-text text-transparent">
+                  <span className="block bg-gradient-to-r from-joa-primary to-teal-500 bg-clip-text text-transparent">
                     of what is ready, active, and next
                   </span>
                 </h1>
@@ -302,7 +302,7 @@ export function WelcomePage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <button
                   onClick={() => navigate(PRODUCT_ROUTES.media)}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-joa-primary px-5 py-3 font-medium text-white shadow-lg shadow-red-200 transition hover:bg-red-800 sm:w-auto"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-joa-primary px-5 py-3 font-medium text-white shadow-lg shadow-teal-200/40 transition hover:bg-teal-800 sm:w-auto"
                 >
                   <Clapperboard className="h-5 w-5" />
                   Open Media AI
@@ -356,7 +356,7 @@ export function WelcomePage() {
                   <button
                     key={card.title}
                     onClick={card.onClick}
-                    className="group rounded-2xl border border-gray-200 bg-gray-50/80 p-4 text-left transition hover:-translate-y-1 hover:border-red-200 hover:bg-white hover:shadow-lg sm:p-5"
+                    className="group rounded-2xl border border-gray-200 bg-gray-50/80 p-4 text-left transition hover:-translate-y-1 hover:border-teal-200 hover:bg-white hover:shadow-lg sm:p-5"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-joa-primary shadow-sm sm:h-12 sm:w-12">
@@ -396,7 +396,7 @@ export function WelcomePage() {
                       disabled={!isClickable}
                       className={`group rounded-2xl border p-4 text-left transition hover:-translate-y-1 hover:shadow-lg disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none sm:p-5 ${
                         isActive
-                          ? 'border-red-200 bg-red-50/70 hover:bg-white'
+                          ? 'border-teal-200 bg-teal-50/70 hover:bg-white'
                           : isAdvanced
                           ? 'border-slate-300 bg-slate-50 hover:bg-white'
                           : 'border-dashed border-gray-300 bg-gray-50/70 hover:bg-gray-50/70'
@@ -410,7 +410,7 @@ export function WelcomePage() {
                         </div>
                         <div className={`rounded-full px-3 py-1 text-xs font-semibold ${
                           isActive
-                            ? 'bg-red-100 text-joa-primary'
+                            ? 'bg-teal-100 text-joa-primary'
                             : isAdvanced
                             ? 'bg-slate-200 text-slate-700'
                             : 'bg-gray-200 text-gray-600'
@@ -528,7 +528,7 @@ export function WelcomePage() {
 
             <div className="rounded-3xl border border-gray-200 bg-white/90 p-4 shadow-sm sm:p-6">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-joa-primary">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-joa-primary">
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <div>
@@ -541,7 +541,7 @@ export function WelcomePage() {
                   <button
                     key={item.label}
                     onClick={() => navigate(item.route)}
-                    className="group flex w-full items-start justify-between gap-3 rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-left transition hover:border-red-200 hover:bg-white"
+                    className="group flex w-full items-start justify-between gap-3 rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-left transition hover:border-teal-200 hover:bg-white"
                   >
                     <div className="flex min-w-0 items-start gap-3">
                       <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-joa-primary shadow-sm">
@@ -563,7 +563,7 @@ export function WelcomePage() {
         <section className="mt-8 rounded-[32px] border border-gray-200 bg-white/82 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-6 md:mt-10 md:p-8">
           <div className="grid gap-8 xl:grid-cols-[0.82fr_1.18fr]">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-joa-primary shadow-sm sm:px-4 sm:py-2 sm:text-sm">
+              <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-joa-primary shadow-sm sm:px-4 sm:py-2 sm:text-sm">
                 <Layers3 className="h-4 w-4" />
                 Core modalities
               </div>

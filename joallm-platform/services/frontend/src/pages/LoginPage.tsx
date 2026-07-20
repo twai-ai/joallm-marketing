@@ -18,7 +18,7 @@ export function LoginPage() {
     try {
       setErrors({});
       await login(data.email, data.password);
-      navigate('/'); // Redirect to home page after successful login
+      navigate('/');
     } catch (error: any) {
       if (error?.requiresTwoFactor && error?.preAuthToken) {
         setPreAuthToken(error.preAuthToken);
@@ -43,136 +43,133 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-joa-bg bg-joa-network flex items-center justify-center p-4">
+    <div className="atrisi-page min-h-screen flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8">
-        {/* Header */}
         <div className="text-center">
           <div className="flex justify-center mb-6">
             <StandaloneLogo />
           </div>
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-red-200 bg-white/80 px-4 py-2 text-sm font-medium text-joa-primary shadow-sm">
-            <Sparkles className="h-4 w-4" />
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800 shadow-sm">
+            <Sparkles className="h-4 w-4 text-teal-600" />
             Connected AI workspace
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back
-          </h2>
-          <p className="text-gray-600">
+          <h2 className="text-3xl font-bold text-slate-950 mb-2">Welcome back</h2>
+          <p className="text-slate-600">
             Sign in to continue with chat, knowledge, workflows, and model routing in one place.
           </p>
         </div>
 
-        {/* Login Form */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
-          {errors.general && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 text-sm">{errors.general}</p>
-            </div>
-          )}
-
-          {preAuthToken ? (
-            <form onSubmit={handleTwoFactorVerify} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Two-Factor Code
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={twoFactorCode}
-                  onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-200"
-                  placeholder="Enter 6-digit code"
-                />
-                {twoFactorMessage && (
-                  <p className="mt-2 text-sm text-gray-600">{twoFactorMessage}</p>
-                )}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+          <div className="atrisi-accent-line w-full" aria-hidden />
+          <div className="p-8">
+            {errors.general && (
+              <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
+                <p className="text-sm text-red-600">{errors.general}</p>
               </div>
-              <button
-                type="submit"
-                disabled={isLoading || twoFactorCode.length !== 6}
-                className="w-full rounded-lg bg-joa-primary px-4 py-3 text-white hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Verify and Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPreAuthToken(null);
-                  setTwoFactorCode('');
-                  setTwoFactorMessage('');
-                  setErrors({});
-                }}
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-700 hover:bg-gray-50"
-              >
-                Back to Login
-              </button>
-            </form>
-          ) : (
-            <LoginForm onSubmit={handleLogin} loading={isLoading} />
-          )}
+            )}
 
-          {!preAuthToken && (
-            <>
-              <div className="mt-6 mb-6">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-4 bg-white text-gray-500">Or continue with</span>
+            {preAuthToken ? (
+              <form onSubmit={handleTwoFactorVerify} className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">
+                    Two-Factor Code
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                    className="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-200"
+                    placeholder="Enter 6-digit code"
+                  />
+                  {twoFactorMessage && (
+                    <p className="mt-2 text-sm text-slate-600">{twoFactorMessage}</p>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={isLoading || twoFactorCode.length !== 6}
+                  className="btn-atrisi-primary w-full rounded-lg px-4 py-3 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Verify and Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreAuthToken(null);
+                    setTwoFactorCode('');
+                    setTwoFactorMessage('');
+                    setErrors({});
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-slate-700 hover:bg-slate-50"
+                >
+                  Back to Login
+                </button>
+              </form>
+            ) : (
+              <LoginForm onSubmit={handleLogin} loading={isLoading} />
+            )}
+
+            {!preAuthToken && (
+              <>
+                <div className="mb-6 mt-6">
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-200" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="bg-white px-4 text-slate-500">Or continue with</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <GoogleLoginButton className="w-full mb-3" />
-              <button
-                type="button"
-                onClick={() => handleLogin({ email: 'demo@joallm.ai', password: 'demo123' })}
-                disabled={isLoading}
-                className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <Sparkles className="w-5 h-5 mr-2 text-joa-primary" />
-                Try Demo Account
-              </button>
-            </>
-          )}
+                <GoogleLoginButton className="mb-3 w-full" />
+                <button
+                  type="button"
+                  onClick={() => handleLogin({ email: 'demo@joallm.ai', password: 'demo123' })}
+                  disabled={isLoading}
+                  className="flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-200 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Sparkles className="mr-2 h-5 w-5 text-teal-700" />
+                  Try Demo Account
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Footer */}
         <div className="text-center">
-          <p className="text-gray-600">
+          <p className="text-slate-600">
             Don't have an account?{' '}
             <Link
               to="/register"
-              className="font-medium text-joa-primary hover:text-red-800 transition-colors"
+              className="font-medium text-teal-700 transition-colors hover:text-teal-800"
             >
               Sign up for free
             </Link>
           </p>
         </div>
 
-        {/* Features Preview */}
-        <div className="mt-8 bg-white/70 backdrop-blur-sm rounded-2xl p-6 border border-red-100 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+        <div className="mt-8 rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur-sm">
+          <h3 className="mb-4 text-center text-lg font-semibold text-slate-950">
             What the platform includes:
           </h3>
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center text-gray-600">
-              <Workflow className="mr-2 h-4 w-4 text-joa-primary" />
+            <div className="flex items-center text-slate-600">
+              <Workflow className="mr-2 h-4 w-4 text-teal-700" />
               Workflow automation
             </div>
-            <div className="flex items-center text-gray-600">
-              <Search className="mr-2 h-4 w-4 text-joa-primary" />
+            <div className="flex items-center text-slate-600">
+              <Search className="mr-2 h-4 w-4 text-teal-700" />
               Grounded retrieval
             </div>
-            <div className="flex items-center text-gray-600">
-              <Sparkles className="mr-2 h-4 w-4 text-joa-primary" />
+            <div className="flex items-center text-slate-600">
+              <Sparkles className="mr-2 h-4 w-4 text-teal-700" />
               Multi-model chat
             </div>
-            <div className="flex items-center text-gray-600">
-              <ShieldCheck className="mr-2 h-4 w-4 text-joa-primary" />
+            <div className="flex items-center text-slate-600">
+              <ShieldCheck className="mr-2 h-4 w-4 text-teal-700" />
               Enterprise-aware access
             </div>
           </div>

@@ -173,7 +173,7 @@ export function SessionList({ currentSessionId, onClose }: SessionListProps) {
                   {/* Actions */}
                   <button
                     onClick={(e) => handleDeleteSession(session.id, e)}
-                    className="flex-shrink-0 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                    className="flex-shrink-0 p-1.5 text-gray-400 hover:text-teal-700 hover:bg-teal-50 rounded transition-colors"
                     title="Delete session"
                   >
                     <Trash2 className="w-4 h-4" />

@@ -539,7 +539,7 @@ export function Sidebar({
                               showError('Failed to delete chat');
                             }
                           }}
-                          className="rounded-lg p-2 opacity-0 transition-all hover:bg-red-100 group-hover:opacity-100 dark:hover:bg-red-900"
+                          className="rounded-lg p-2 opacity-0 transition-all hover:bg-teal-100 group-hover:opacity-100 dark:hover:bg-red-900"
                         >
                           <Trash2 className="h-4 w-4 text-red-600" />
                         </button>

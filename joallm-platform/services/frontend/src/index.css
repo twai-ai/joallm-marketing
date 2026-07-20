@@ -3,17 +3,17 @@
 @tailwind components;
 @tailwind utilities;
 
-    /* JoaLLM Brand Colors - Based on Logo Design */
+    /* Brand aliases → ATRISI institutional palette (teal + slate) */
     :root {
-      --joa-primary: #8B0000;     /* Dark red/maroon from "Joa" text in logo */
-      --joa-secondary: #000000;   /* Black from "LLM" text in logo */
-      --joa-dark: #1E293B;        /* Dark slate for backgrounds */
-      --joa-accent: #3B82F6;      /* Blue accent for links and highlights */
-      --joa-bg: #E8EDF2;          /* Light blue-grey background from logo */
-      --joa-text: #334155;        /* Professional text color */
-      --joa-chip-bg: #ffffff;     /* White for AI chip background */
-      --joa-chip-border: #000000; /* Black for chip borders */
-      --joa-network-pattern: #f3f4f6; /* Very light grey for network pattern */
+      --joa-primary: #0f766e;     /* ATRISI teal-700 accent */
+      --joa-secondary: #0f172a;   /* ATRISI navy */
+      --joa-dark: #1e293b;        /* ATRISI navy-light */
+      --joa-accent: #3b82f6;      /* ATRISI blue-light */
+      --joa-bg: #f1f5f9;          /* ATRISI gray page background */
+      --joa-text: #334155;        /* ATRISI slate-dark */
+      --joa-chip-bg: #ffffff;
+      --joa-chip-border: #0f766e;
+      --joa-network-pattern: #e2e8f0;
       --workspace-max: 1720px;
       --workspace-max-comfort: 1520px;
       --workspace-gutter: clamp(1rem, 2vw, 2rem);
@@ -36,16 +36,16 @@
       --gradient-atrisi-card: linear-gradient(135deg, var(--atrisi-white) 0%, var(--atrisi-gray) 100%);
     }
 
-    /* Dark mode CSS variables - JoaLLM Brand Theme */
+    /* Dark mode — institutional teal on slate */
     :root.dark {
-      --joa-bg: #1A1A1A;             /* Dark background maintaining JoaLLM feel */
-      --joa-text: #F5F5F5;            /* Light text for readability */
-      --joa-primary: #FF4444;         /* Brighter red for dark mode contrast */
-      --joa-secondary: #F0F0F0;       /* Light gray maintaining brand feel */
-      --joa-accent: #4A90E2;          /* Brighter blue for dark mode */
-      --joa-chip-bg: #2A2A2A;         /* Dark chip background */
-      --joa-chip-border: #8B0000;     /* JoaLLM primary red for borders */
-      --joa-network-pattern: #333333; /* Subtle dark pattern */
+      --joa-bg: #020617;
+      --joa-text: #f1f5f9;
+      --joa-primary: #2dd4bf;         /* teal-400 */
+      --joa-secondary: #e2e8f0;
+      --joa-accent: #60a5fa;
+      --joa-chip-bg: #1e293b;
+      --joa-chip-border: #14b8a6;
+      --joa-network-pattern: #334155;
     }
 
 @layer base {
@@ -56,9 +56,9 @@
   body {
     font-family: 'Inter', system-ui, sans-serif;
     background:
-      radial-gradient(circle at top left, rgba(139, 0, 0, 0.06), transparent 28%),
-      radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 30%),
-      linear-gradient(180deg, #eff4f9 0%, #e8edf2 52%, #f5f8fb 100%);
+      radial-gradient(circle at top left, rgba(15, 118, 110, 0.10), transparent 28%),
+      radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 32%),
+      linear-gradient(180deg, #f8fafc 0%, #f1f5f9 52%, #eef2f7 100%);
     color: var(--joa-text);
   }
 }

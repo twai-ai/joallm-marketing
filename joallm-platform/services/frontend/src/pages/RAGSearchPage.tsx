@@ -330,7 +330,7 @@ export function RAGSearchPage({ className = '', onUpgrade }: RAGSearchPageProps)
         <section className="grid gap-6 lg:grid-cols-[0.98fr_1.02fr] workspace-split-balanced">
           <div className="space-y-6">
             {error ? (
-              <div className="rounded-3xl border border-red-200 bg-red-50 p-5 shadow-sm">
+              <div className="rounded-3xl border border-teal-200 bg-teal-50 p-5 shadow-sm">
                 <div className="flex items-start gap-3">
                   <ShieldAlert className="mt-0.5 h-5 w-5 text-red-600" />
                   <div>
@@ -421,11 +421,11 @@ export function RAGSearchPage({ className = '', onUpgrade }: RAGSearchPageProps)
                 }}
                 className={`rounded-2xl border-2 border-dashed p-5 text-center transition sm:p-8 ${
                   dragOver
-                    ? 'border-joa-primary bg-red-50'
+                    ? 'border-joa-primary bg-teal-50'
                     : 'border-gray-300 bg-gradient-to-br from-gray-50 to-white'
                 }`}
               >
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-joa-primary">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-50 text-joa-primary">
                   {isUploading ? <Loader2 className="h-7 w-7 animate-spin" /> : <Upload className="h-7 w-7" />}
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -436,7 +436,7 @@ export function RAGSearchPage({ className = '', onUpgrade }: RAGSearchPageProps)
                 </p>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-joa-primary px-4 py-3 text-sm font-medium text-white transition hover:bg-red-800"
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-joa-primary px-4 py-3 text-sm font-medium text-white transition hover:bg-teal-800"
                   disabled={isUploading}
                 >
                   <Upload className="h-4 w-4" />
@@ -588,7 +588,7 @@ export function RAGSearchPage({ className = '', onUpgrade }: RAGSearchPageProps)
                               void handleDeleteDocument(document.id, document.displayName);
                             }}
                             disabled={busyDocumentId === document.id || isDeleting}
-                            className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-xs font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-50 sm:w-auto"
+                            className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-2 text-xs font-medium text-red-700 transition hover:bg-teal-100 disabled:opacity-50 sm:w-auto"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             Remove
@@ -613,7 +613,7 @@ export function RAGSearchPage({ className = '', onUpgrade }: RAGSearchPageProps)
               ) : null}
 
               {failedDocuments.length > 0 ? (
-                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <div className="mt-4 rounded-2xl border border-teal-200 bg-teal-50 p-4">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="mt-0.5 h-5 w-5 text-red-600" />
                     <div className="min-w-0 flex-1">

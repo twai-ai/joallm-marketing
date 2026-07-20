@@ -340,7 +340,7 @@ export function FileUploadZone({
                   
                   <button
                     onClick={() => handleRemoveFile(item.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                    className="p-1.5 text-gray-400 hover:text-teal-700 hover:bg-teal-50 rounded transition-colors"
                     title="Remove file"
                   >
                     <X className="w-4 h-4" />

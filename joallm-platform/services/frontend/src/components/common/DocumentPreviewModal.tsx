@@ -250,7 +250,7 @@ export function DocumentPreviewModal({ document, isOpen, onClose }: DocumentPrev
                 <p className="text-red-600 mb-2">{error}</p>
                 <button
                   onClick={loadDocumentContent}
-                  className="px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-red-800 transition-colors"
+                  className="px-4 py-2 bg-joa-primary text-white rounded-lg hover:bg-teal-800 transition-colors"
                 >
                   Retry
                 </button>

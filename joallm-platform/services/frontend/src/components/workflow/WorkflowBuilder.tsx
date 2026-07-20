@@ -433,7 +433,7 @@ export function WorkflowBuilder() {
           {(selectedExecution.status === 'running' || selectedExecution.status === 'suspended') && (
             <button
               onClick={() => void handleCancelExecution(selectedExecution.id)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-teal-100"
             >
               <XCircle className="h-3.5 w-3.5" />
               Cancel
@@ -442,7 +442,7 @@ export function WorkflowBuilder() {
         </div>
 
         {selectedExecution.error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
+          <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2.5 text-sm text-red-800">
             {selectedExecution.error}
           </div>
         )}

@@ -280,7 +280,7 @@ export function BookmarksPanel({ isOpen, onClose }: BookmarksPanelProps) {
                               e.stopPropagation();
                               handleDelete(bookmark.id);
                             }}
-                            className="p-2 hover:bg-red-100 dark:hover:bg-red-900 rounded-lg transition-colors"
+                            className="p-2 hover:bg-teal-100 dark:hover:bg-red-900 rounded-lg transition-colors"
                           >
                             <Trash2 className="w-4 h-4 text-red-600" />
                           </button>

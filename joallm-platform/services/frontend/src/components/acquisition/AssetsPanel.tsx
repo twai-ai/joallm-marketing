@@ -32,7 +32,17 @@ function kindFromFile(file: File): GrowthAssetKind {
   return 'other';
 }
 
-function AssetImagePreview({ fileId, title }: { fileId: string; title: string }) {
+function AssetImagePreview({
+  fileId,
+  title,
+  transparent,
+  onOpen,
+}: {
+  fileId: string;
+  title: string;
+  transparent?: boolean;
+  onOpen?: () => void;
+}) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -64,26 +74,42 @@ function AssetImagePreview({ fileId, title }: { fileId: string; title: string })
 
   if (failed) {
     return (
-      <div className="flex h-36 items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-500">
-        Preview unavailable
+      <div className="flex aspect-[4/5] items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-500">
+        Preview unavailable — use Download
       </div>
     );
   }
 
   if (!src) {
     return (
-      <div className="flex h-36 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-        <Loader2 className="h-4 w-4 animate-spin" />
+      <div className="flex aspect-[4/5] items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+        <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
   }
 
   return (
-    <img
-      src={src}
-      alt={title}
-      className="h-36 w-full rounded-xl object-cover ring-1 ring-slate-200"
-    />
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`group relative block w-full overflow-hidden rounded-xl ring-1 ring-slate-200 transition hover:ring-teal-300 ${
+        transparent
+          ? 'bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] bg-white'
+          : 'bg-slate-100'
+      }`}
+      title="Open preview"
+    >
+      <div className="flex aspect-[4/5] items-center justify-center p-2">
+        <img
+          src={src}
+          alt={title}
+          className="max-h-full max-w-full object-contain"
+        />
+      </div>
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/50 to-transparent px-3 py-2 text-left text-[11px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+        Click to open full size
+      </span>
+    </button>
   );
 }
 
@@ -194,6 +220,8 @@ export function AssetsPanel({
   const [transparentBackground, setTransparentBackground] = useState(false);
   const [variantCount, setVariantCount] = useState(1);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
   const [sessionRefs, setSessionRefs] = useState<SessionReference[]>([]);
   const [referenceMode, setReferenceMode] = useState<'style' | 'edit'>('style');
   const [uploadingRefs, setUploadingRefs] = useState(false);
@@ -567,6 +595,30 @@ export function AssetsPanel({
       showError(error instanceof Error ? error.message : 'Download failed');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleOpenAsset = async (asset: GrowthMarketingAsset) => {
+    const fileId = asset.fileIds[0];
+    if (!fileId) return;
+    setOpeningId(asset.id);
+    try {
+      const blob = await fetchAuthenticatedBlob(API_ENDPOINTS.files.download(fileId));
+      const src = URL.createObjectURL(blob);
+      if (blob.type.startsWith('image/')) {
+        setLightbox({ src, title: asset.title });
+      } else {
+        const opened = window.open(src, '_blank', 'noopener,noreferrer');
+        if (!opened) {
+          window.location.assign(src);
+        } else {
+          window.setTimeout(() => URL.revokeObjectURL(src), 60_000);
+        }
+      }
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Could not open file');
+    } finally {
+      setOpeningId(null);
     }
   };
 
@@ -1290,7 +1342,12 @@ export function AssetsPanel({
                 >
                   {fileId && (
                     <div className="mb-3">
-                      <AssetImagePreview fileId={fileId} title={asset.title} />
+                      <AssetImagePreview
+                        fileId={fileId}
+                        title={asset.title}
+                        transparent={asset.metadata?.transparentBackground === true}
+                        onOpen={() => void handleOpenAsset(asset)}
+                      />
                     </div>
                   )}
                   <div className="flex items-start justify-between gap-2">
@@ -1323,15 +1380,19 @@ export function AssetsPanel({
                           )}
                           Download
                         </button>
-                        <a
-                          href={API_ENDPOINTS.files.download(fileId)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:border-teal-300"
+                        <button
+                          type="button"
+                          disabled={openingId === asset.id}
+                          onClick={() => void handleOpenAsset(asset)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:border-teal-300 disabled:opacity-60"
                         >
-                          <Eye className="h-3 w-3" />
+                          {openingId === asset.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Eye className="h-3 w-3" />
+                          )}
                           Open
-                        </a>
+                        </button>
                       </>
                     )}
                     {generated && (
@@ -1384,6 +1445,45 @@ export function AssetsPanel({
           </div>
         )}
       </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={lightbox.title}
+          onClick={() => {
+            URL.revokeObjectURL(lightbox.src);
+            setLightbox(null);
+          }}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-5xl overflow-auto rounded-2xl bg-white p-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="truncate text-sm font-semibold text-slate-950">{lightbox.title}</div>
+              <button
+                type="button"
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-teal-300"
+                onClick={() => {
+                  URL.revokeObjectURL(lightbox.src);
+                  setLightbox(null);
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <div className="rounded-xl bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%),linear-gradient(-45deg,#e2e8f0_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e2e8f0_75%),linear-gradient(-45deg,transparent_75%,#e2e8f0_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0] bg-white p-2">
+              <img
+                src={lightbox.src}
+                alt={lightbox.title}
+                className="mx-auto max-h-[78vh] max-w-full object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -39,6 +39,20 @@ export async function downloadAuthenticatedFile(options: {
   URL.revokeObjectURL(objectUrl);
 }
 
+/** Open an authenticated file in a new tab (Bearer token cannot be sent via plain <a href>). */
+export async function openAuthenticatedFileInNewTab(url: string): Promise<void> {
+  const blob = await fetchAuthenticatedBlob(url);
+  const objectUrl = URL.createObjectURL(blob);
+  const opened = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    // Popup blocked — fall back to same-tab navigation
+    window.location.assign(objectUrl);
+    return;
+  }
+  // Revoke later so the new tab can load the blob
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
+
 export function extensionForMime(mime: string | undefined, fallback = 'png'): string {
   if (!mime) return fallback;
   if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';

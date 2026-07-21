@@ -16,4 +16,10 @@ describe('creative AI generate dimensions', () => {
   it('honors explicit aspect override', () => {
     expect(resolveDimensions('marketing_poster', '16:9').ideogramAspect).toBe('16x9');
   });
+
+  it('supports story and portrait marketing sizes', () => {
+    expect(resolveDimensions('social_media', '9x16').label).toBe('9:16');
+    expect(resolveDimensions('marketing_poster', '4x5').ideogramAspect).toBe('4x5');
+    expect(resolveDimensions('hero_banner', '16x10').width % 32).toBe(0);
+  });
 });

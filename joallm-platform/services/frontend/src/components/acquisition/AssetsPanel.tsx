@@ -11,6 +11,11 @@ import type {
 } from '@joallm/shared';
 import { API_ENDPOINTS } from '../../config/api';
 import { getIntentById } from '../../constants/growthIntents';
+import {
+  CREATIVE_SIZE_OPTIONS,
+  defaultSizeForStyle,
+  type CreativeSizeId,
+} from '../../constants/creativeSizes';
 import { apiClient } from '../../utils/api-client';
 import { showError, showSuccess } from '../../utils/toast';
 import { CHANNEL_OPTIONS } from './PublishingPanel';
@@ -101,6 +106,8 @@ export function AssetsPanel({
   const [genStyle, setGenStyle] = useState<ImageGenerationStyle>('marketing_poster');
   const [genQuality, setGenQuality] = useState<ImageGenerationQuality>('standard');
   const [genProvider, setGenProvider] = useState<ProviderChoice>('auto');
+  const [genSize, setGenSize] = useState<CreativeSizeId>('3x4');
+  const [genMedia, setGenMedia] = useState<'image' | 'video'>('image');
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
   const [referenceMode, setReferenceMode] = useState<'style' | 'edit'>('style');
   const [uploadingRefs, setUploadingRefs] = useState(false);
@@ -224,6 +231,12 @@ export function AssetsPanel({
 
   const handleGenerate = async (event: FormEvent) => {
     event.preventDefault();
+    if (genMedia === 'video') {
+      showError(
+        'Ideogram API does not offer video generation yet — use image sizes (e.g. 9:16 Story still).',
+      );
+      return;
+    }
     if (!genPrompt.trim()) {
       showError('Add a prompt for the creative');
       return;
@@ -260,6 +273,7 @@ export function AssetsPanel({
           style: genStyle,
           quality: genQuality,
           providerOverride: genProvider,
+          aspectRatio: genSize,
           creativeProjectId: targetProjectId || undefined,
           referenceFileIds: referenceFileIds.length ? referenceFileIds : undefined,
           referenceMode: referenceFileIds.length ? referenceMode : undefined,
@@ -554,6 +568,67 @@ export function AssetsPanel({
             />
           </label>
 
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">Media & size</h3>
+                <p className="mt-1 text-xs text-slate-600">
+                  Pick the output format for this acquisition creative.
+                </p>
+              </div>
+              <div className="inline-flex rounded-full border border-slate-200 bg-white p-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setGenMedia('image')}
+                  className={`rounded-full px-3 py-1.5 ${
+                    genMedia === 'image' ? 'bg-teal-600 text-white' : 'text-slate-600'
+                  }`}
+                >
+                  Image
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGenMedia('video')}
+                  className={`rounded-full px-3 py-1.5 ${
+                    genMedia === 'video' ? 'bg-slate-800 text-white' : 'text-slate-600'
+                  }`}
+                  title="Ideogram API does not support video generation yet"
+                >
+                  Video
+                </button>
+              </div>
+            </div>
+
+            {genMedia === 'video' ? (
+              <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                Ideogram’s public API is <strong>image-only</strong> right now (no video generate
+                endpoint). Use <strong>9:16 Story</strong> for vertical stills until Ideogram ships
+                video, or upload an MP4 in the Upload section.
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {CREATIVE_SIZE_OPTIONS.map((option) => {
+                  const selected = genSize === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setGenSize(option.id)}
+                      className={`rounded-xl border px-3 py-2 text-left transition ${
+                        selected
+                          ? 'border-teal-400 bg-teal-50 ring-1 ring-teal-300'
+                          : 'border-slate-200 bg-white hover:border-teal-300'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold text-slate-950">{option.label}</div>
+                      <div className="mt-0.5 text-[11px] text-slate-500">{option.hint}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/30 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -688,7 +763,11 @@ export function AssetsPanel({
               <span className="text-xs font-medium text-slate-600">Style</span>
               <select
                 value={genStyle}
-                onChange={(e) => setGenStyle(e.target.value as ImageGenerationStyle)}
+                onChange={(e) => {
+                  const next = e.target.value as ImageGenerationStyle;
+                  setGenStyle(next);
+                  setGenSize(defaultSizeForStyle(next));
+                }}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
               >
                 {STYLE_OPTIONS.map((option) => (

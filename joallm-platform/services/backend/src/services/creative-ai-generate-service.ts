@@ -74,12 +74,19 @@ export function resolveDimensions(
   aspectRatio?: string | null,
 ): { ideogramAspect: string; width: number; height: number; label: string } {
   const raw = (aspectRatio || '').trim().toLowerCase().replace(':', 'x');
+  // Ideogram AspectRatioV3 + FLUX sizes (width/height multiples of 32)
   const presets: Record<string, { ideogramAspect: string; width: number; height: number; label: string }> = {
     '1x1': { ideogramAspect: '1x1', width: 1024, height: 1024, label: '1:1' },
+    '2x3': { ideogramAspect: '2x3', width: 832, height: 1216, label: '2:3' },
+    '3x2': { ideogramAspect: '3x2', width: 1216, height: 832, label: '3:2' },
     '3x4': { ideogramAspect: '3x4', width: 896, height: 1152, label: '3:4' },
     '4x3': { ideogramAspect: '4x3', width: 1152, height: 896, label: '4:3' },
-    '16x9': { ideogramAspect: '16x9', width: 1344, height: 768, label: '16:9' },
+    '4x5': { ideogramAspect: '4x5', width: 896, height: 1120, label: '4:5' },
+    '5x4': { ideogramAspect: '5x4', width: 1120, height: 896, label: '5:4' },
     '9x16': { ideogramAspect: '9x16', width: 768, height: 1344, label: '9:16' },
+    '16x9': { ideogramAspect: '16x9', width: 1344, height: 768, label: '16:9' },
+    '10x16': { ideogramAspect: '10x16', width: 800, height: 1280, label: '10:16' },
+    '16x10': { ideogramAspect: '16x10', width: 1280, height: 800, label: '16:10' },
   };
 
   if (raw && presets[raw]) return presets[raw];
@@ -101,6 +108,20 @@ export function resolveDimensions(
       return presets['3x4'];
   }
 }
+
+/** Studio-facing size catalog (shared with frontend via mirrored constants). */
+export const CREATIVE_SIZE_PRESETS = [
+  { id: '1x1', label: '1:1 Square', hint: 'Instagram / feed', ideogramAspect: '1x1' },
+  { id: '4x5', label: '4:5 Portrait', hint: 'Instagram portrait', ideogramAspect: '4x5' },
+  { id: '3x4', label: '3:4 Flyer', hint: 'Print / WhatsApp flyer', ideogramAspect: '3x4' },
+  { id: '2x3', label: '2:3 Poster', hint: 'Tall poster', ideogramAspect: '2x3' },
+  { id: '9x16', label: '9:16 Story', hint: 'Reels / Stories / Shorts', ideogramAspect: '9x16' },
+  { id: '16x9', label: '16:9 Landscape', hint: 'YouTube / LinkedIn / banner', ideogramAspect: '16x9' },
+  { id: '4x3', label: '4:3 Landscape', hint: 'Presentation / deck', ideogramAspect: '4x3' },
+  { id: '3x2', label: '3:2 Photo', hint: 'Photo-like landscape', ideogramAspect: '3x2' },
+  { id: '5x4', label: '5:4 Landscape', hint: 'Slightly wide', ideogramAspect: '5x4' },
+  { id: '16x10', label: '16:10 Wide', hint: 'Wide hero', ideogramAspect: '16x10' },
+] as const;
 
 async function ingestGeneratedImage(options: {
   ownerUserId: string;

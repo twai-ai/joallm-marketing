@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { FolderPlus, Loader2, Plus, Send, Sparkles, Trash2, Upload } from 'lucide-react';
+import { FolderPlus, Loader2, Plus, Send, Sparkles, Trash2, Upload, Download, Copy, Eye } from 'lucide-react';
 import type {
   AcquisitionCampaign,
   ChannelKind,
@@ -17,6 +17,12 @@ import {
   type CreativeSizeId,
 } from '../../constants/creativeSizes';
 import { apiClient } from '../../utils/api-client';
+import {
+  downloadAuthenticatedFile,
+  extensionForMime,
+  fetchAuthenticatedBlob,
+  safeDownloadFilename,
+} from '../../utils/downloadFile';
 import { showError, showSuccess } from '../../utils/toast';
 import { CHANNEL_OPTIONS } from './PublishingPanel';
 
@@ -24,6 +30,61 @@ function kindFromFile(file: File): GrowthAssetKind {
   if (file.type.startsWith('image/')) return 'image';
   if (file.type.startsWith('video/')) return 'video';
   return 'other';
+}
+
+function AssetImagePreview({ fileId, title }: { fileId: string; title: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let revoked: string | null = null;
+    let cancelled = false;
+    setFailed(false);
+    setSrc(null);
+    void (async () => {
+      try {
+        const blob = await fetchAuthenticatedBlob(API_ENDPOINTS.files.download(fileId));
+        if (cancelled) return;
+        if (!blob.type.startsWith('image/')) {
+          setFailed(true);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        revoked = url;
+        setSrc(url);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (revoked) URL.revokeObjectURL(revoked);
+    };
+  }, [fileId]);
+
+  if (failed) {
+    return (
+      <div className="flex h-36 items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-500">
+        Preview unavailable
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div className="flex h-36 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={title}
+      className="h-36 w-full rounded-xl object-cover ring-1 ring-slate-200"
+    />
+  );
 }
 
 const STYLE_OPTIONS: { value: ImageGenerationStyle; label: string }[] = [
@@ -108,6 +169,9 @@ export function AssetsPanel({
   const [genProvider, setGenProvider] = useState<ProviderChoice>('auto');
   const [genSize, setGenSize] = useState<CreativeSizeId>('3x4');
   const [genMedia, setGenMedia] = useState<'image' | 'video'>('image');
+  const [transparentBackground, setTransparentBackground] = useState(false);
+  const [variantCount, setVariantCount] = useState(1);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
   const [referenceMode, setReferenceMode] = useState<'style' | 'edit'>('style');
   const [uploadingRefs, setUploadingRefs] = useState(false);
@@ -277,16 +341,27 @@ export function AssetsPanel({
           creativeProjectId: targetProjectId || undefined,
           referenceFileIds: referenceFileIds.length ? referenceFileIds : undefined,
           referenceMode: referenceFileIds.length ? referenceMode : undefined,
+          transparentBackground: transparentBackground || undefined,
+          variantCount,
           kind:
-            genStyle === 'marketing_poster' || genStyle === 'infographic'
-              ? 'poster'
-              : genStyle === 'hero_banner'
-                ? 'landing_hero'
-                : 'image',
+            transparentBackground
+              ? 'image'
+              : genStyle === 'marketing_poster' || genStyle === 'infographic'
+                ? 'poster'
+                : genStyle === 'hero_banner'
+                  ? 'landing_hero'
+                  : 'image',
         },
       );
 
-      showSuccess(`Creative generated with ${res.data.provider} (${res.data.modelId})`);
+      const count = Array.isArray((res.data as { assets?: unknown[] }).assets)
+        ? (res.data as { assets: unknown[] }).assets.length
+        : 1;
+      showSuccess(
+        count > 1
+          ? `${count} creatives generated with ${res.data.provider}`
+          : `Creative generated with ${res.data.provider} (${res.data.modelId})`,
+      );
       await load(targetCampaignId);
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Generation failed');
@@ -393,6 +468,39 @@ export function AssetsPanel({
       showError(error instanceof Error ? error.message : 'Upload failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDownloadAsset = async (asset: GrowthMarketingAsset) => {
+    const fileId = asset.fileIds[0];
+    if (!fileId) return;
+    setDownloadingId(asset.id);
+    try {
+      const transparent = asset.metadata?.transparentBackground === true;
+      const ext = transparent ? 'png' : extensionForMime('image/png');
+      await downloadAuthenticatedFile({
+        url: API_ENDPOINTS.files.download(fileId),
+        filename: safeDownloadFilename(asset.title, ext),
+      });
+      showSuccess('Download started');
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Download failed');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleCopyPrompt = async (asset: GrowthMarketingAsset) => {
+    const prompt = typeof asset.metadata?.prompt === 'string' ? asset.metadata.prompt : '';
+    if (!prompt) {
+      showError('No prompt stored on this asset');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(prompt);
+      showSuccess('Prompt copied');
+    } catch {
+      showError('Could not copy prompt');
     }
   };
 
@@ -803,7 +911,38 @@ export function AssetsPanel({
                 <option value="flux">FLUX (BFL)</option>
               </select>
             </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-slate-600">Variants</span>
+              <select
+                value={variantCount}
+                onChange={(e) => setVariantCount(Number(e.target.value))}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+              >
+                <option value={1}>1 image</option>
+                <option value={2}>2 variants</option>
+                <option value={3}>3 variants</option>
+                <option value={4}>4 variants</option>
+              </select>
+            </label>
           </div>
+
+          <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm">
+            <input
+              type="checkbox"
+              checked={transparentBackground}
+              onChange={(e) => {
+                setTransparentBackground(e.target.checked);
+                if (e.target.checked) setGenProvider('ideogram');
+              }}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium text-slate-950">Transparent PNG (Ideogram)</span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                Best for logos, stickers, and overlays. Uses Ideogram’s transparent generate endpoint.
+              </span>
+            </span>
+          </label>
 
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -1069,6 +1208,11 @@ export function AssetsPanel({
                   key={asset.id}
                   className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
                 >
+                  {fileId && (
+                    <div className="mb-3">
+                      <AssetImagePreview fileId={fileId} title={asset.title} />
+                    </div>
+                  )}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate font-medium text-slate-950">{asset.title}</div>
@@ -1076,6 +1220,7 @@ export function AssetsPanel({
                         {asset.kind}
                         {project ? ` · ${project.name}` : ''}
                         {generated && provider ? ` · AI · ${provider}` : ''}
+                        {asset.metadata?.transparentBackground === true ? ' · transparent' : ''}
                       </div>
                     </div>
                     <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200">
@@ -1084,14 +1229,40 @@ export function AssetsPanel({
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {fileId && (
-                      <a
-                        href={API_ENDPOINTS.files.download(fileId)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-teal-800 hover:border-teal-300"
+                      <>
+                        <button
+                          type="button"
+                          disabled={downloadingId === asset.id}
+                          onClick={() => void handleDownloadAsset(asset)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-teal-800 hover:border-teal-300 disabled:opacity-60"
+                        >
+                          {downloadingId === asset.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Download className="h-3 w-3" />
+                          )}
+                          Download
+                        </button>
+                        <a
+                          href={API_ENDPOINTS.files.download(fileId)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:border-teal-300"
+                        >
+                          <Eye className="h-3 w-3" />
+                          Open
+                        </a>
+                      </>
+                    )}
+                    {generated && (
+                      <button
+                        type="button"
+                        onClick={() => void handleCopyPrompt(asset)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:border-teal-300"
                       >
-                        Open file
-                      </a>
+                        <Copy className="h-3 w-3" />
+                        Copy prompt
+                      </button>
                     )}
                     <button
                       type="button"

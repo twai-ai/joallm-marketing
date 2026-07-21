@@ -46,7 +46,7 @@ import {
   listProgramInterests,
   toPullItem,
 } from '../services/program-interest-service.js';
-import { generateCreativeImage } from '../services/creative-ai-generate-service.js';
+import { generateCreativeImages } from '../services/creative-ai-generate-service.js';
 
 const MetaIngestSchema = z.object({
   payload: z.record(z.unknown()),
@@ -651,6 +651,8 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
     creativeProjectId: z.string().uuid().optional(),
     referenceFileIds: z.array(z.string().uuid()).max(4).optional(),
     referenceMode: z.enum(['style', 'edit']).optional(),
+    transparentBackground: z.boolean().optional(),
+    variantCount: z.number().int().min(1).max(4).optional(),
   });
 
   fastify.post('/programs/:programId/campaigns/:campaignId/assets/generate', {
@@ -679,7 +681,7 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         body.title?.trim() ||
         `${style.replace(/_/g, ' ')} · ${new Date().toLocaleDateString()}`;
 
-      const generated = await generateCreativeImage({
+      const generated = await generateCreativeImages({
         ownerUserId: userId,
         prompt: body.prompt,
         style,
@@ -689,6 +691,8 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         titleHint: title,
         referenceFileIds: body.referenceFileIds,
         referenceMode: body.referenceMode || 'style',
+        transparentBackground: body.transparentBackground,
+        variantCount: body.variantCount || 1,
         metadata: {
           programId,
           campaignId,
@@ -699,47 +703,62 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
 
       const kind =
         body.kind ||
-        (style === 'marketing_poster' || style === 'infographic'
-          ? 'poster'
-          : style === 'hero_banner'
-            ? 'landing_hero'
-            : 'image');
+        (body.transparentBackground
+          ? 'image'
+          : style === 'marketing_poster' || style === 'infographic'
+            ? 'poster'
+            : style === 'hero_banner'
+              ? 'landing_hero'
+              : 'image');
 
-      const asset = await createMarketingAsset({
-        ownerUserId: userId,
-        programId,
-        campaignId,
-        creativeProjectId: projectId,
-        title,
-        kind,
-        status: 'draft',
-        body: body.body,
-        fileIds: [generated.fileId],
-        metadata: {
-          generatedBy: 'creative_ai',
-          provider: generated.provider,
-          modelId: generated.modelId,
-          style: generated.style,
-          quality: generated.quality,
-          prompt: generated.prompt,
-          latencyMs: generated.latencyMs,
-          referenceFileIds: generated.referenceFileIds,
-          referenceMode: generated.referenceMode,
-        },
-      });
+      const assets = [];
+      for (let i = 0; i < generated.files.length; i += 1) {
+        const file = generated.files[i];
+        const assetTitle =
+          generated.files.length > 1 ? `${title} · v${i + 1}` : title;
+        const asset = await createMarketingAsset({
+          ownerUserId: userId,
+          programId,
+          campaignId,
+          creativeProjectId: projectId,
+          title: assetTitle,
+          kind,
+          status: 'draft',
+          body: body.body,
+          fileIds: [file.fileId],
+          metadata: {
+            generatedBy: 'creative_ai',
+            provider: file.provider,
+            modelId: file.modelId,
+            style: file.style,
+            quality: file.quality,
+            prompt: file.prompt,
+            latencyMs: generated.latencyMs,
+            referenceFileIds: file.referenceFileIds,
+            referenceMode: file.referenceMode,
+            transparentBackground: file.transparentBackground,
+            variantIndex: i + 1,
+            variantCount: generated.files.length,
+          },
+        });
+        if (asset) assets.push(asset);
+      }
 
-      if (!asset) {
+      if (assets.length === 0) {
         return reply.status(404).send({ success: false, error: 'Creative project not found' });
       }
 
       return reply.status(201).send({
         success: true,
         data: {
-          asset,
-          fileId: generated.fileId,
+          asset: assets[0],
+          assets,
+          fileId: generated.files[0]?.fileId,
           provider: generated.provider,
           modelId: generated.modelId,
-          downloadUrl: `/api/files/${generated.fileId}/download`,
+          downloadUrl: generated.files[0]
+            ? `/api/files/${generated.files[0].fileId}/download`
+            : undefined,
         },
       });
     } catch (error) {

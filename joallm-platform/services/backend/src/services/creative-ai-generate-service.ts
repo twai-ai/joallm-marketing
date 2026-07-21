@@ -40,6 +40,10 @@ export type GenerateImageInput = {
    * edit — FLUX input_image remix / composition
    */
   referenceMode?: 'style' | 'edit';
+  /** Ideogram transparent PNG path (logos / stickers / overlays) */
+  transparentBackground?: boolean;
+  /** How many variants to generate (1–4). Creates one Platform file each. */
+  variantCount?: number;
 };
 
 export type GeneratedImageFile = {
@@ -53,6 +57,19 @@ export type GeneratedImageFile = {
   sourceUrl?: string;
   referenceFileIds?: string[];
   referenceMode?: 'style' | 'edit';
+  transparentBackground?: boolean;
+};
+
+export type GenerateCreativeBatchResult = {
+  files: GeneratedImageFile[];
+  provider: ExecutableProvider;
+  modelId: string;
+  style: ImageGenerationStyle;
+  quality: ImageGenerationQuality;
+  latencyMs: number;
+  referenceFileIds?: string[];
+  referenceMode?: 'style' | 'edit';
+  transparentBackground?: boolean;
 };
 
 export type ReferenceImageBlob = {
@@ -242,11 +259,13 @@ async function generateWithIdeogram(options: {
   quality: ImageGenerationQuality;
   ideogramAspect: string;
   references?: ReferenceImageBlob[];
-}): Promise<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }> {
+  transparentBackground?: boolean;
+  variantCount?: number;
+}): Promise<Array<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }>> {
   const form = new FormData();
   form.append('prompt', options.prompt);
   form.append('aspect_ratio', options.ideogramAspect);
-  form.append('num_images', '1');
+  form.append('num_images', String(Math.min(4, Math.max(1, options.variantCount || 1))));
   form.append('magic_prompt', 'AUTO');
   form.append(
     'rendering_speed',
@@ -264,11 +283,15 @@ async function generateWithIdeogram(options: {
         ref.filename,
       );
     }
-  } else {
+  } else if (!options.transparentBackground) {
     form.append('style_type', 'DESIGN');
   }
 
-  const res = await fetch('https://api.ideogram.ai/v1/ideogram-v3/generate', {
+  const endpoint = options.transparentBackground
+    ? 'https://api.ideogram.ai/v1/ideogram-v3/generate-transparent'
+    : 'https://api.ideogram.ai/v1/ideogram-v3/generate';
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Api-Key': options.apiKey },
     body: form,
@@ -289,17 +312,31 @@ async function generateWithIdeogram(options: {
     throw new Error(`Ideogram generate failed (${res.status}): ${detail}`);
   }
 
-  const url = payload.data?.[0]?.url;
-  if (!url) {
+  const urls = (payload.data || []).map((item) => item.url).filter(Boolean) as string[];
+  if (urls.length === 0) {
     throw new Error('Ideogram returned no image URL');
   }
 
-  const downloaded = await downloadImage(url);
-  return {
-    ...downloaded,
-    modelId: refs.length > 0 ? 'ideogram-v3+style-ref' : 'ideogram-v3',
-    sourceUrl: url,
-  };
+  const modelId = options.transparentBackground
+    ? refs.length > 0
+      ? 'ideogram-v3-transparent+style-ref'
+      : 'ideogram-v3-transparent'
+    : refs.length > 0
+      ? 'ideogram-v3+style-ref'
+      : 'ideogram-v3';
+
+  const outputs = [];
+  for (const url of urls) {
+    const downloaded = await downloadImage(url);
+    outputs.push({
+      ...downloaded,
+      // Transparent endpoint returns PNG with alpha
+      contentType: options.transparentBackground ? 'image/png' : downloaded.contentType,
+      modelId,
+      sourceUrl: url,
+    });
+  }
+  return outputs;
 }
 
 async function generateWithFlux(options: {
@@ -410,7 +447,11 @@ async function pickProvider(
   userId: string,
   style: ImageGenerationStyle,
   override?: ImageGenerationProviderId | null,
-  options?: { hasReferences?: boolean; referenceMode?: 'style' | 'edit' },
+  options?: {
+    hasReferences?: boolean;
+    referenceMode?: 'style' | 'edit';
+    transparentBackground?: boolean;
+  },
 ): Promise<{ provider: ExecutableProvider; apiKey: string; source: 'byok' | 'platform' }> {
   const candidates: ExecutableProvider[] = [];
 
@@ -420,7 +461,12 @@ async function pickProvider(
         `Provider "${override}" is not wired yet. Use Auto, Ideogram, or FLUX.`,
       );
     }
+    if (options?.transparentBackground && override === 'flux') {
+      throw new Error('Transparent PNG is Ideogram-only. Switch provider to Ideogram or Auto.');
+    }
     candidates.push(override);
+  } else if (options?.transparentBackground) {
+    candidates.push('ideogram');
   } else if (options?.hasReferences) {
     // Style match → Ideogram; edit/remix → FLUX
     if (options.referenceMode === 'edit') {
@@ -452,11 +498,11 @@ async function pickProvider(
 }
 
 /**
- * Generate one marketing image and store it as a Platform file.
+ * Generate one or more marketing images and store them as Platform files.
  */
-export async function generateCreativeImage(
+export async function generateCreativeImages(
   input: GenerateImageInput,
-): Promise<GeneratedImageFile> {
+): Promise<GenerateCreativeBatchResult> {
   const prompt = input.prompt.trim();
   if (prompt.length < 3) {
     throw new Error('Prompt is required');
@@ -465,13 +511,19 @@ export async function generateCreativeImage(
   const style: ImageGenerationStyle = input.style || 'marketing_poster';
   const quality: ImageGenerationQuality = input.quality || 'standard';
   const referenceMode = input.referenceMode || 'style';
+  const transparentBackground = Boolean(input.transparentBackground);
+  const variantCount = Math.min(4, Math.max(1, input.variantCount || 1));
   const references = await loadReferenceImages(input.ownerUserId, input.referenceFileIds);
   const dims = resolveDimensions(style, input.aspectRatio);
   const { provider, apiKey, source } = await pickProvider(
     input.ownerUserId,
     style,
     input.providerOverride,
-    { hasReferences: references.length > 0, referenceMode },
+    {
+      hasReferences: references.length > 0,
+      referenceMode,
+      transparentBackground,
+    },
   );
 
   const started = Date.now();
@@ -484,28 +536,36 @@ export async function generateCreativeImage(
     aspect: dims.label,
     referenceCount: references.length,
     referenceMode: references.length ? referenceMode : undefined,
+    transparentBackground,
+    variantCount,
   });
 
-  let generated: { buffer: Buffer; contentType: string; modelId: string; sourceUrl: string };
+  let outputs: Array<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }> = [];
 
   try {
     if (provider === 'ideogram') {
-      generated = await generateWithIdeogram({
+      outputs = await generateWithIdeogram({
         apiKey,
         prompt,
         quality,
         ideogramAspect: dims.ideogramAspect,
         references,
+        transparentBackground,
+        variantCount,
       });
     } else {
-      generated = await generateWithFlux({
-        apiKey,
-        prompt,
-        quality,
-        width: dims.width,
-        height: dims.height,
-        references,
-      });
+      // FLUX has no native multi-variant in one call — loop for variants
+      for (let i = 0; i < variantCount; i += 1) {
+        const one = await generateWithFlux({
+          apiKey,
+          prompt,
+          quality,
+          width: dims.width,
+          height: dims.height,
+          references,
+        });
+        outputs.push(one);
+      }
     }
   } catch (error) {
     logger.error('Creative AI generate failed', {
@@ -519,46 +579,80 @@ export async function generateCreativeImage(
     .replace(/[^a-zA-Z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60) || 'creative';
-  const filename = `${safeTitle}-${provider}-${randomUUID().slice(0, 8)}`;
 
-  const fileId = await ingestGeneratedImage({
-    ownerUserId: input.ownerUserId,
-    buffer: generated.buffer,
-    contentType: generated.contentType,
-    filename,
-    metadata: {
+  const filesOut: GeneratedImageFile[] = [];
+  for (let i = 0; i < outputs.length; i += 1) {
+    const generated = outputs[i];
+    const filename =
+      outputs.length > 1
+        ? `${safeTitle}-${provider}-v${i + 1}-${randomUUID().slice(0, 8)}`
+        : `${safeTitle}-${provider}-${randomUUID().slice(0, 8)}`;
+
+    const fileId = await ingestGeneratedImage({
+      ownerUserId: input.ownerUserId,
+      buffer: generated.buffer,
+      contentType: generated.contentType,
+      filename,
+      metadata: {
+        provider,
+        modelId: generated.modelId,
+        style,
+        quality,
+        prompt,
+        aspectRatio: dims.label,
+        keySource: source,
+        referenceFileIds: references.map((r) => r.fileId),
+        referenceMode: references.length ? referenceMode : undefined,
+        transparentBackground: transparentBackground || undefined,
+        variantIndex: i + 1,
+        variantCount: outputs.length,
+        ...(input.metadata || {}),
+      },
+    });
+
+    filesOut.push({
+      fileId,
       provider,
       modelId: generated.modelId,
+      prompt,
       style,
       quality,
-      prompt,
-      aspectRatio: dims.label,
-      keySource: source,
+      latencyMs: Date.now() - started,
+      sourceUrl: generated.sourceUrl,
       referenceFileIds: references.map((r) => r.fileId),
       referenceMode: references.length ? referenceMode : undefined,
-      ...(input.metadata || {}),
-    },
-  });
+      transparentBackground: transparentBackground || undefined,
+    });
+  }
 
   const latencyMs = Date.now() - started;
   logger.info('Creative AI generate succeeded', {
     userId: input.ownerUserId,
     provider,
-    fileId,
+    fileCount: filesOut.length,
     latencyMs,
-    referenceCount: references.length,
   });
 
   return {
-    fileId,
+    files: filesOut,
     provider,
-    modelId: generated.modelId,
-    prompt,
+    modelId: filesOut[0]?.modelId || provider,
     style,
     quality,
     latencyMs,
-    sourceUrl: generated.sourceUrl,
     referenceFileIds: references.map((r) => r.fileId),
     referenceMode: references.length ? referenceMode : undefined,
+    transparentBackground: transparentBackground || undefined,
   };
+}
+
+/** @deprecated Prefer generateCreativeImages — kept for single-file callers */
+export async function generateCreativeImage(
+  input: GenerateImageInput,
+): Promise<GeneratedImageFile> {
+  const batch = await generateCreativeImages(input);
+  if (!batch.files[0]) {
+    throw new Error('Generation returned no files');
+  }
+  return batch.files[0];
 }

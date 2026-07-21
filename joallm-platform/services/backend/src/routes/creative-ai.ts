@@ -11,7 +11,7 @@ import {
   preferredProvidersForStyle,
   type ImageGenerationStyle,
 } from '../services/creative-ai-registry.js';
-import { generateCreativeImage } from '../services/creative-ai-generate-service.js';
+import { generateCreativeImages } from '../services/creative-ai-generate-service.js';
 import { logger } from '../utils/logger.js';
 
 const StyleSchema = z.enum([
@@ -48,6 +48,8 @@ const GenerateImageSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
   referenceFileIds: z.array(z.string().uuid()).max(4).optional(),
   referenceMode: z.enum(['style', 'edit']).optional(),
+  transparentBackground: z.boolean().optional(),
+  variantCount: z.number().int().min(1).max(4).optional(),
 });
 
 export async function creativeAiRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
@@ -117,7 +119,7 @@ export async function creativeAiRoutes(fastify: FastifyInstance, _options: Fasti
     try {
       const userId = (request as any).user.id as string;
       const body = GenerateImageSchema.parse(request.body || {});
-      const result = await generateCreativeImage({
+      const result = await generateCreativeImages({
         ownerUserId: userId,
         prompt: body.prompt,
         style: body.style,
@@ -128,13 +130,17 @@ export async function creativeAiRoutes(fastify: FastifyInstance, _options: Fasti
         metadata: body.metadata,
         referenceFileIds: body.referenceFileIds,
         referenceMode: body.referenceMode || 'style',
+        transparentBackground: body.transparentBackground,
+        variantCount: body.variantCount || 1,
       });
 
+      const primary = result.files[0];
       return reply.status(201).send({
         success: true,
         data: {
-          fileId: result.fileId,
-          fileIds: [result.fileId],
+          fileId: primary?.fileId,
+          fileIds: result.files.map((f) => f.fileId),
+          files: result.files,
           provider: result.provider,
           modelId: result.modelId,
           style: result.style,
@@ -142,7 +148,8 @@ export async function creativeAiRoutes(fastify: FastifyInstance, _options: Fasti
           latencyMs: result.latencyMs,
           referenceFileIds: result.referenceFileIds,
           referenceMode: result.referenceMode,
-          downloadUrl: `/api/files/${result.fileId}/download`,
+          transparentBackground: result.transparentBackground,
+          downloadUrl: primary ? `/api/files/${primary.fileId}/download` : undefined,
         },
       });
     } catch (error) {

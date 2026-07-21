@@ -670,6 +670,9 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         mustIncludeText: z.string().max(800).optional(),
         avoid: z.string().max(800).optional(),
         institutionName: z.string().max(200).optional(),
+        paletteType: z
+          .enum(['auto', 'institutional_navy', 'teal_modern', 'forest', 'burgundy'])
+          .optional(),
         primaryColor: z.string().max(20).optional(),
         secondaryColor: z.string().max(20).optional(),
         accentColor: z.string().max(20).optional(),

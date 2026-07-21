@@ -16,6 +16,11 @@ import {
   defaultSizeForStyle,
   type CreativeSizeId,
 } from '../../constants/creativeSizes';
+import {
+  CREATIVE_PALETTE_TYPES,
+  getPaletteType,
+  type CreativePaletteTypeId,
+} from '../../constants/creativePalettes';
 import { apiClient } from '../../utils/api-client';
 import {
   downloadAuthenticatedFile,
@@ -163,7 +168,6 @@ function buildDefaultPrompt(
   const intent = campaign?.intentId
     ? getIntentById(programId, campaign.intentId)
     : undefined;
-  const cta = intent?.cta || 'Learn more';
   const purpose = intent?.purpose || 'Acquire program interest from the market';
   const intentLabel = intent?.name || 'Registration';
 
@@ -188,48 +192,9 @@ function buildDefaultPrompt(
   return [
     `Professional ${style.replace(/_/g, ' ')} creative for "${programName}".`,
     `Growth intent: ${intentLabel} — ${purpose}.`,
-    `Clear headline with program name, short supporting line, and CTA "${cta}".`,
+    'Clean layout with strong visual hierarchy; leave clear space for headline and CTA.',
     styleLine[style] || styleLine.marketing_poster,
   ].join(' ');
-}
-
-const PALETTE_PRESETS: { id: string; label: string; primary: string; secondary: string; accent: string }[] = [
-  { id: 'navy-gold', label: 'Navy & gold', primary: '#0B2C5E', secondary: '#C4A35A', accent: '#F5F7FA' },
-  { id: 'teal-slate', label: 'Teal & slate', primary: '#0F766E', secondary: '#334155', accent: '#E2E8F0' },
-  { id: 'forest-cream', label: 'Forest & cream', primary: '#1B4332', secondary: '#D8E2DC', accent: '#F8F1E7' },
-  { id: 'burgundy-sand', label: 'Burgundy & sand', primary: '#7A1F2B', secondary: '#E6D5B8', accent: '#F7F3EE' },
-];
-
-function ColorField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  const hex = /^#[0-9A-Fa-f]{6}$/.test(value) ? value : '#64748B';
-  return (
-    <label className="block text-sm">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
-      <div className="mt-1 flex items-center gap-2">
-        <input
-          type="color"
-          value={hex}
-          onChange={(e) => onChange(e.target.value.toUpperCase())}
-          className="h-9 w-10 cursor-pointer rounded border border-slate-200 bg-white p-1"
-          aria-label={label}
-        />
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="#0B2C5E"
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-        />
-      </div>
-    </label>
-  );
 }
 
 function briefDefaults(
@@ -295,11 +260,7 @@ export function AssetsPanel({
   const [variantCount, setVariantCount] = useState(1);
   const [briefHeadline, setBriefHeadline] = useState('');
   const [briefCta, setBriefCta] = useState('');
-  const [briefMustInclude, setBriefMustInclude] = useState('');
-  const [briefAvoid, setBriefAvoid] = useState('fake logos, watermarks, unreadable text, clutter');
-  const [primaryColor, setPrimaryColor] = useState('');
-  const [secondaryColor, setSecondaryColor] = useState('');
-  const [accentColor, setAccentColor] = useState('');
+  const [paletteType, setPaletteType] = useState<CreativePaletteTypeId>('institutional_navy');
   const [useLogoReference, setUseLogoReference] = useState(true);
   const [analyzeReferences, setAnalyzeReferences] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -336,8 +297,6 @@ export function AssetsPanel({
     const defaults = briefDefaults(programId, programName, selectedCampaign);
     setBriefHeadline((current) => (current.trim() ? current : defaults.headline));
     setBriefCta((current) => (current.trim() ? current : defaults.cta));
-    setBriefMustInclude((current) => (current.trim() ? current : defaults.mustIncludeText));
-    setBriefAvoid((current) => (current.trim() ? current : defaults.avoid));
     if (!genTitle.trim()) {
       const intentName = selectedCampaign?.intentId
         ? getIntentById(programId, selectedCampaign.intentId)?.name
@@ -491,11 +450,8 @@ export function AssetsPanel({
             institutionName: programName,
             headline: briefHeadline.trim() || undefined,
             cta: briefCta.trim() || undefined,
-            mustIncludeText: briefMustInclude.trim() || undefined,
-            avoid: briefAvoid.trim() || undefined,
-            primaryColor: primaryColor.trim() || undefined,
-            secondaryColor: secondaryColor.trim() || undefined,
-            accentColor: accentColor.trim() || undefined,
+            mustIncludeText: briefHeadline.trim() || undefined,
+            paletteType,
             useLogoReference: sessionRefs.length > 0 ? useLogoReference : undefined,
           },
           analyzeReferences:
@@ -908,17 +864,17 @@ export function AssetsPanel({
               placeholder="Describe the flyer…"
             />
             <span className="mt-1 block text-[11px] text-slate-500">
-              Tip: fill the brief below so exact headline / CTA text stays sharp. Backend also
-              adds style guidance and avoid-rules automatically.
+              Put exact words in Headline / CTA below (short phrases). Prompt is for look & layout.
             </span>
           </label>
 
           <div className="rounded-2xl border border-teal-200 bg-teal-50/40 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold text-slate-950">Creative brief (precision)</h3>
+                <h3 className="text-sm font-semibold text-slate-950">Exact text & palette</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Exact copy the model must render. Leave blank to rely on the free-form prompt only.
+                  Keep headline/CTA short — Ideogram renders 2–6 words best. Palette is a type from
+                  the brand catalog (not freeform hex).
                 </p>
               </div>
               <button
@@ -927,15 +883,13 @@ export function AssetsPanel({
                   const defaults = briefDefaults(programId, programName, selectedCampaign);
                   setBriefHeadline(defaults.headline);
                   setBriefCta(defaults.cta);
-                  setBriefMustInclude(defaults.mustIncludeText);
-                  setBriefAvoid(defaults.avoid);
                 }}
                 className="rounded-full border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-900 hover:border-teal-400"
               >
                 Prefill from program
               </button>
             </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <label className="block text-sm">
                 <span className="text-xs font-medium text-slate-600">Headline (exact)</span>
                 <input
@@ -954,79 +908,43 @@ export function AssetsPanel({
                   placeholder="Apply now"
                 />
               </label>
-              <label className="block text-sm sm:col-span-2">
-                <span className="text-xs font-medium text-slate-600">
-                  Must include (exact text, dates, city…)
-                </span>
-                <textarea
-                  value={briefMustInclude}
-                  onChange={(e) => setBriefMustInclude(e.target.value)}
-                  rows={2}
+              <label className="block text-sm">
+                <span className="text-xs font-medium text-slate-600">Palette type</span>
+                <select
+                  value={paletteType}
+                  onChange={(e) => setPaletteType(e.target.value as CreativePaletteTypeId)}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-                  placeholder="Program name, intake date, campus…"
-                />
-              </label>
-              <label className="block text-sm sm:col-span-2">
-                <span className="text-xs font-medium text-slate-600">Avoid</span>
-                <input
-                  value={briefAvoid}
-                  onChange={(e) => setBriefAvoid(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-                  placeholder="fake logos, watermarks…"
-                />
-              </label>
-            </div>
-
-            <div className="mt-4 border-t border-teal-100 pt-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  Brand palette & logo
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPrimaryColor('');
-                    setSecondaryColor('');
-                    setAccentColor('');
-                  }}
-                  className="text-[11px] font-medium text-slate-500 hover:text-teal-800"
                 >
-                  Clear colors
-                </button>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {PALETTE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      setPrimaryColor(preset.primary);
-                      setSecondaryColor(preset.secondary);
-                      setAccentColor(preset.accent);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-teal-300"
-                  >
-                    <span
-                      className="inline-flex h-3.5 overflow-hidden rounded-full ring-1 ring-slate-200"
-                      aria-hidden
-                    >
-                      <span className="h-3.5 w-3.5" style={{ background: preset.primary }} />
-                      <span className="h-3.5 w-3.5" style={{ background: preset.secondary }} />
-                      <span className="h-3.5 w-3.5" style={{ background: preset.accent }} />
+                  {CREATIVE_PALETTE_TYPES.map((palette) => (
+                    <option key={palette.id} value={palette.id}>
+                      {palette.label}
+                    </option>
+                  ))}
+                </select>
+                {(() => {
+                  const selected = getPaletteType(paletteType);
+                  if (!selected.colors.length) {
+                    return (
+                      <span className="mt-1 block text-[11px] text-slate-500">{selected.hint}</span>
+                    );
+                  }
+                  return (
+                    <span className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500">
+                      <span className="inline-flex overflow-hidden rounded-full ring-1 ring-slate-200">
+                        {selected.colors.map((color) => (
+                          <span
+                            key={color}
+                            className="h-3.5 w-3.5"
+                            style={{ background: color }}
+                            title={color}
+                          />
+                        ))}
+                      </span>
+                      {selected.hint}
                     </span>
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                <ColorField label="Primary" value={primaryColor} onChange={setPrimaryColor} />
-                <ColorField label="Secondary" value={secondaryColor} onChange={setSecondaryColor} />
-                <ColorField label="Accent" value={accentColor} onChange={setAccentColor} />
-              </div>
-              <p className="mt-2 text-[11px] text-slate-500">
-                Colors go into the prompt and Ideogram’s color palette. Leave empty to let vision
-                infer colors from references when available.
-              </p>
+                  );
+                })()}
+              </label>
             </div>
           </div>
 
@@ -1302,8 +1220,8 @@ export function AssetsPanel({
                 onChange={(e) => setGenProvider(e.target.value as ProviderChoice)}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
               >
-                <option value="auto">Auto (poster → Ideogram)</option>
-                <option value="ideogram">Ideogram</option>
+                <option value="auto">Auto (text → Ideogram)</option>
+                <option value="ideogram">Ideogram (best for text)</option>
                 <option value="flux">FLUX (BFL)</option>
               </select>
             </label>
@@ -1362,8 +1280,6 @@ export function AssetsPanel({
                 const defaults = briefDefaults(programId, programName, selectedCampaign);
                 setBriefHeadline(defaults.headline);
                 setBriefCta(defaults.cta);
-                setBriefMustInclude(defaults.mustIncludeText);
-                setBriefAvoid(defaults.avoid);
               }}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300"
             >

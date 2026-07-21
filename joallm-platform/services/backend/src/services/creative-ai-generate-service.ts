@@ -22,6 +22,7 @@ import {
 import { resolveCreativeProviderApiKey } from './creative-ai-keys.js';
 import { describeCreativeReferenceImages } from './vision-analysis-service.js';
 import { userApiKeyRepository } from '../repositories/user-api-key-repository.js';
+import { resolvePaletteColors } from './creative-palettes.js';
 
 const EXECUTABLE_PROVIDERS = ['ideogram', 'flux'] as const;
 type ExecutableProvider = (typeof EXECUTABLE_PROVIDERS)[number];
@@ -35,7 +36,9 @@ export type PromptPrecision = {
   /** Things to avoid (wrong logos, watermarks, clutter…) */
   avoid?: string;
   institutionName?: string;
-  /** Brand palette hex colors (#RRGGBB) */
+  /** Palette type id from creative-palettes catalog (preferred over raw hex) */
+  paletteType?: string;
+  /** Brand palette hex colors (#RRGGBB) — optional override */
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
@@ -161,28 +164,36 @@ export function resolveDimensions(
 }
 
 const DEFAULT_AVOID =
-  'fake logos, invented brand marks, watermarks, QR codes, unreadable tiny text, cluttered layouts, distorted faces, extra limbs, misspelled institution names';
+  'gibberish text, misspelled words, random letters, fake logos, invented brand marks, watermarks, QR codes, unreadable tiny text, cluttered layouts, distorted faces, extra limbs';
 
 const STYLE_PROMPT_GUIDANCE: Record<ImageGenerationStyle, string> = {
   marketing_poster:
-    'Institutional marketing flyer: bold hierarchy, one clear headline, short supporting line, strong CTA button area, balanced margins, print-ready, professional education brand aesthetic.',
+    'Institutional marketing flyer: bold hierarchy, one clear headline, short supporting line, strong CTA button area, balanced margins, print-ready.',
   social_media:
-    'Social feed creative: thumb-stopping composition, short readable text at safe margins, mobile-first contrast, single focal message.',
+    'Social feed creative: thumb-stopping composition, short readable text at safe margins, mobile-first contrast.',
   hero_banner:
-    'Wide website hero: cinematic but clean, left/right space for headline, restrained copy, premium institutional brand feel.',
+    'Wide website hero: clean composition with space for a headline, restrained copy, premium institutional feel.',
   infographic:
-    'Infographic poster: clear sections, readable labels, simple icons, structured layout, not photoreal clutter.',
+    'Infographic poster: clear sections, readable labels, simple icons, structured layout.',
   illustration:
-    'Styled illustration (not photo): cohesive color palette, intentional shapes, polished editorial look.',
+    'Styled illustration (not photo): cohesive colors, intentional shapes, polished editorial look.',
   photo_realistic:
-    'Photoreal scene: natural lighting, sharp focus, realistic materials, no cartoon styling, no fake UI overlays.',
+    'Photoreal scene: natural lighting, sharp focus; keep any overlay text minimal and crisp.',
   logo:
-    'Simple logo mark or wordmark: flat vector look, centered, high contrast, minimal detail, no busy background.',
+    'Simple logo mark or wordmark: flat vector look, centered, high contrast, minimal detail.',
   product_mockup:
-    'Clean product mockup: accurate proportions, soft studio lighting, uncluttered surface, premium catalog look.',
+    'Clean product mockup: accurate proportions, soft studio lighting, uncluttered surface.',
   other:
-    'Clean professional creative: clear subject, deliberate composition, high visual quality.',
+    'Clean professional creative: clear subject, deliberate composition.',
 };
+
+function hasExactText(precision?: PromptPrecision): boolean {
+  return Boolean(
+    precision?.mustIncludeText?.trim() ||
+      precision?.headline?.trim() ||
+      precision?.cta?.trim(),
+  );
+}
 
 function ideogramStyleType(
   style: ImageGenerationStyle,
@@ -210,29 +221,15 @@ function resolveMagicPrompt(
   userPrompt: string,
   precision?: PromptPrecision,
 ): 'ON' | 'OFF' | 'AUTO' {
-  const hasExactCopy = Boolean(
-    precision?.mustIncludeText?.trim() ||
-      precision?.headline?.trim() ||
-      precision?.cta?.trim(),
-  );
-  // When the user already specified exact text, keep Magic Prompt from rewriting copy.
-  if (hasExactCopy || userPrompt.length >= 420) return 'OFF';
-  // Short / vague briefs benefit from Ideogram Magic Prompt expansion.
+  // Exact copy must never be rewritten by Magic Prompt.
+  if (hasExactText(precision) || userPrompt.length >= 420) return 'OFF';
   if (userPrompt.length < 140) return 'ON';
   return 'AUTO';
 }
 
-function normalizeHexColor(value?: string | null): string | null {
-  if (!value) return null;
-  const raw = value.trim();
-  const withHash = raw.startsWith('#') ? raw : `#${raw}`;
-  if (!/^#[0-9A-Fa-f]{6}$/.test(withHash)) return null;
-  return withHash.toUpperCase();
-}
-
 /**
  * Build a provider-ready prompt from free text + optional structured brief.
- * Keeps user intent first; appends style guidance and hard constraints.
+ * Exact text is placed first (Ideogram typography is more reliable that way).
  */
 export function buildEnhancedPrompt(options: {
   prompt: string;
@@ -242,63 +239,67 @@ export function buildEnhancedPrompt(options: {
 }): { prompt: string; magicPrompt: 'ON' | 'OFF' | 'AUTO'; styleType: string | null; paletteHex: string[] } {
   const base = options.prompt.trim();
   const p = options.precision || {};
-  const parts: string[] = [base];
+  const parts: string[] = [];
+  const exact = hasExactText(p);
+
+  const headline = p.headline?.trim();
+  const cta = p.cta?.trim();
+  const must = p.mustIncludeText?.trim();
+
+  if (exact) {
+    parts.push(
+      'TYPOGRAPHY (critical): render ONLY the following strings, letter-perfect, large high-contrast sans-serif, correctly spelled, sharp edges. Do not invent extra words, dates, slogans, or captions.',
+    );
+    if (headline) parts.push(`Headline: "${headline}"`);
+    if (cta) parts.push(`CTA button label: "${cta}"`);
+    if (must && must !== headline) parts.push(`Also include exactly: "${must}"`);
+    parts.push('No gibberish. No misspellings. No placeholder text.');
+  }
+
+  // Visual brief after text — keeps Ideogram focused on the quoted copy
+  parts.push(base);
 
   const institution = p.institutionName?.trim();
-  if (institution && !base.toLowerCase().includes(institution.toLowerCase())) {
+  if (institution && !base.toLowerCase().includes(institution.toLowerCase()) && !exact) {
     parts.push(`Institution / program context: "${institution}".`);
   }
 
-  const headline = p.headline?.trim();
-  if (headline) {
-    parts.push(`Primary headline text (render exactly, correctly spelled): "${headline}".`);
-  }
-
-  const cta = p.cta?.trim();
-  if (cta) {
-    parts.push(`Call-to-action text (render exactly): "${cta}".`);
-  }
-
-  const must = p.mustIncludeText?.trim();
-  if (must) {
-    parts.push(`Must include this exact text in the design: ${must}`);
-  }
-
-  const paletteHex = [
-    normalizeHexColor(p.primaryColor),
-    normalizeHexColor(p.secondaryColor),
-    normalizeHexColor(p.accentColor),
-  ].filter(Boolean) as string[];
+  const paletteHex = resolvePaletteColors({
+    paletteType: p.paletteType,
+    primaryColor: p.primaryColor,
+    secondaryColor: p.secondaryColor,
+    accentColor: p.accentColor,
+  });
 
   if (paletteHex.length > 0) {
-    parts.push(
-      `Brand color palette (use these hex colors faithfully in the design; do not invent alternate brand colors): ${paletteHex.join(', ')}.`,
-    );
+    parts.push(`Brand colors: ${paletteHex.join(', ')}.`);
   }
 
   if (p.useLogoReference) {
     parts.push(
-      'Incorporate the official logo from the first reference image as a real brand mark (correct proportions, no invented seals or fake logos). Place it cleanly without distorting the mark.',
+      'Use the official logo from the first reference image as a real brand mark (correct proportions; do not invent seals).',
     );
   }
 
   const visual = p.referenceVisualContext?.trim();
   if (visual) {
-    parts.push(`Visual cues from reference analysis: ${visual}`);
+    // Keep vision cues short so they do not drown out typography instructions
+    parts.push(`Reference look: ${visual.slice(0, 500)}`);
   }
 
   parts.push(STYLE_PROMPT_GUIDANCE[options.style] || STYLE_PROMPT_GUIDANCE.other);
 
   if (options.transparentBackground) {
     parts.push(
-      'Transparent background PNG: subject only, clean cutout edges, no backdrop, no drop shadow unless essential.',
+      'Transparent background PNG: subject only, clean cutout edges, no backdrop.',
     );
   }
 
   const avoid = [p.avoid?.trim(), DEFAULT_AVOID].filter(Boolean).join('; ');
   parts.push(`Avoid: ${avoid}.`);
 
-  const enhanced = parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 3500);
+  // Shorter prompts = better text fidelity on Ideogram
+  const enhanced = parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, exact ? 2200 : 3500);
 
   return {
     prompt: enhanced,
@@ -688,6 +689,8 @@ async function pickProvider(
     hasReferences?: boolean;
     referenceMode?: 'style' | 'edit';
     transparentBackground?: boolean;
+    /** Prefer Ideogram when the brief has exact headline/CTA (better typography) */
+    preferLegibleText?: boolean;
   },
 ): Promise<{ provider: ExecutableProvider; apiKey: string; source: 'byok' | 'platform' }> {
   const candidates: ExecutableProvider[] = [];
@@ -704,6 +707,9 @@ async function pickProvider(
     candidates.push(override);
   } else if (options?.transparentBackground) {
     candidates.push('ideogram');
+  } else if (options?.preferLegibleText) {
+    // FLUX is weak at letter-perfect poster text — Ideogram first
+    candidates.push('ideogram', 'flux');
   } else if (options?.hasReferences) {
     // Style match → Ideogram; edit/remix → FLUX
     if (options.referenceMode === 'edit') {
@@ -772,18 +778,22 @@ export async function generateCreativeImages(
       const groqKey = byok.groq?.trim() || config.groqApiKey;
       visionNotes = await describeCreativeReferenceImages(references, { apiKey: groqKey });
       if (visionNotes.length > 0) {
+        const userHasExactText = hasExactText(input.precision);
         referenceVisualContext = visionNotes
           .map((note, index) => {
             const bits = [
-              `Ref ${index + 1} (${note.filename})${note.isLogoLike ? ' [logo-like]' : ''}: ${note.summary}`,
+              `Ref ${index + 1}${note.isLogoLike ? ' [logo]' : ''}: ${note.summary}`,
             ];
-            if (note.styleNotes.length) bits.push(`Style: ${note.styleNotes.join('; ')}`);
-            if (note.colors.length) bits.push(`Observed colors: ${note.colors.join(', ')}`);
-            if (note.detectedText) bits.push(`Visible text: ${note.detectedText}`);
-            return bits.join(' ');
+            if (note.styleNotes.length) bits.push(note.styleNotes.slice(0, 4).join('; '));
+            if (note.colors.length) bits.push(`colors ${note.colors.join(', ')}`);
+            // Competing OCR text hurts typography when the user already set headline/CTA
+            if (!userHasExactText && note.detectedText) {
+              bits.push(`seen text "${note.detectedText.slice(0, 80)}"`);
+            }
+            return bits.join(' — ');
           })
           .join(' | ')
-          .slice(0, 1200);
+          .slice(0, 600);
 
         inferredPalette = visionNotes.flatMap((n) => n.colors).slice(0, 5);
       }
@@ -798,18 +808,32 @@ export async function generateCreativeImages(
     input.precision?.useLogoReference === true ||
     (input.precision?.useLogoReference !== false && visionNotes[0]?.isLogoLike === true);
 
+  const paletteType = input.precision?.paletteType || 'auto';
+  const typedColors = resolvePaletteColors({ paletteType });
+  const preferLegibleText = hasExactText(input.precision);
+
   const precision: PromptPrecision = {
     ...(input.precision || {}),
+    paletteType,
     useLogoReference: useLogoReference || undefined,
     referenceVisualContext:
       referenceVisualContext || input.precision?.referenceVisualContext,
-    // Fill missing palette slots from vision when user didn't pick colors
+    // Typed palette wins; otherwise keep explicit hex; else vision-inferred
     primaryColor:
-      input.precision?.primaryColor || inferredPalette[0] || undefined,
+      typedColors[0] ||
+      input.precision?.primaryColor ||
+      (paletteType === 'auto' ? inferredPalette[0] : undefined) ||
+      undefined,
     secondaryColor:
-      input.precision?.secondaryColor || inferredPalette[1] || undefined,
+      typedColors[1] ||
+      input.precision?.secondaryColor ||
+      (paletteType === 'auto' ? inferredPalette[1] : undefined) ||
+      undefined,
     accentColor:
-      input.precision?.accentColor || inferredPalette[2] || undefined,
+      typedColors[2] ||
+      input.precision?.accentColor ||
+      (paletteType === 'auto' ? inferredPalette[2] : undefined) ||
+      undefined,
   };
 
   const enhanced = buildEnhancedPrompt({
@@ -829,6 +853,7 @@ export async function generateCreativeImages(
       hasReferences: references.length > 0,
       referenceMode,
       transparentBackground,
+      preferLegibleText,
     },
   );
 

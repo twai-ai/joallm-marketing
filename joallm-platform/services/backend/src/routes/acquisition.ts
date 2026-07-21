@@ -46,6 +46,7 @@ import {
   listProgramInterests,
   toPullItem,
 } from '../services/program-interest-service.js';
+import { generateCreativeImage } from '../services/creative-ai-generate-service.js';
 
 const MetaIngestSchema = z.object({
   payload: z.record(z.unknown()),
@@ -623,6 +624,133 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
       return reply.status(404).send({ success: false, error: 'Asset not found' });
     }
     return reply.send({ success: true });
+  });
+
+  // ── Generate creative via Creative AI → Marketing Asset ──
+  const GenerateAssetSchema = z.object({
+    prompt: z.string().min(3).max(4000),
+    title: z.string().min(1).max(200).optional(),
+    kind: AssetKindSchema.optional(),
+    body: z.string().max(20000).optional(),
+    style: z
+      .enum([
+        'marketing_poster',
+        'social_media',
+        'product_mockup',
+        'hero_banner',
+        'illustration',
+        'infographic',
+        'logo',
+        'photo_realistic',
+        'other',
+      ])
+      .optional(),
+    quality: z.enum(['draft', 'standard', 'premium']).optional(),
+    providerOverride: z.enum(['auto', 'ideogram', 'flux']).optional().nullable(),
+    aspectRatio: z.string().max(20).optional().nullable(),
+    creativeProjectId: z.string().uuid().optional(),
+  });
+
+  fastify.post('/programs/:programId/campaigns/:campaignId/assets/generate', {
+    preHandler: [authenticateToken],
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const { programId, campaignId } = request.params as { programId: string; campaignId: string };
+      const body = GenerateAssetSchema.parse(request.body || {});
+
+      let projectId = body.creativeProjectId;
+      if (!projectId) {
+        const project = await ensureDefaultCreativeProject({
+          ownerUserId: userId,
+          programId,
+          campaignId,
+        });
+        if (!project) {
+          return reply.status(404).send({ success: false, error: 'Campaign not found' });
+        }
+        projectId = project.id;
+      }
+
+      const style = body.style || 'marketing_poster';
+      const title =
+        body.title?.trim() ||
+        `${style.replace(/_/g, ' ')} · ${new Date().toLocaleDateString()}`;
+
+      const generated = await generateCreativeImage({
+        ownerUserId: userId,
+        prompt: body.prompt,
+        style,
+        quality: body.quality || 'standard',
+        providerOverride: body.providerOverride ?? 'auto',
+        aspectRatio: body.aspectRatio,
+        titleHint: title,
+        metadata: {
+          programId,
+          campaignId,
+          creativeProjectId: projectId,
+          studio: 'acquisition',
+        },
+      });
+
+      const kind =
+        body.kind ||
+        (style === 'marketing_poster' || style === 'infographic'
+          ? 'poster'
+          : style === 'hero_banner'
+            ? 'landing_hero'
+            : 'image');
+
+      const asset = await createMarketingAsset({
+        ownerUserId: userId,
+        programId,
+        campaignId,
+        creativeProjectId: projectId,
+        title,
+        kind,
+        status: 'draft',
+        body: body.body,
+        fileIds: [generated.fileId],
+        metadata: {
+          generatedBy: 'creative_ai',
+          provider: generated.provider,
+          modelId: generated.modelId,
+          style: generated.style,
+          quality: generated.quality,
+          prompt: generated.prompt,
+          latencyMs: generated.latencyMs,
+        },
+      });
+
+      if (!asset) {
+        return reply.status(404).send({ success: false, error: 'Creative project not found' });
+      }
+
+      return reply.status(201).send({
+        success: true,
+        data: {
+          asset,
+          fileId: generated.fileId,
+          provider: generated.provider,
+          modelId: generated.modelId,
+          downloadUrl: `/api/files/${generated.fileId}/download`,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({
+          success: false,
+          error: error.errors[0]?.message || 'Invalid request',
+        });
+      }
+      const message = error instanceof Error ? error.message : 'Failed to generate asset';
+      logger.error('Generate marketing asset failed', { message });
+      const status =
+        /no creative ai key|not wired yet|prompt is required|campaign not found/i.test(message)
+          ? 400
+          : 502;
+      return reply.status(status).send({ success: false, error: message });
+    }
   });
 
   // ── Publishing Jobs (Sprint 4) — draft/queue only; outbound is Sprint 5 ──

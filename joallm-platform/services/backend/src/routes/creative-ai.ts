@@ -1,6 +1,6 @@
 /**
- * Creative AI Platform routes — provider catalog + Auto style preferences.
- * Generation execution (adapters) lands in a later Creative-0/1 slice.
+ * Creative AI Platform routes — registry + image generation (Ideogram / FLUX).
+ * Studio owns Generation Profiles (style/quality); Platform owns adapters.
  */
 
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
@@ -11,6 +11,8 @@ import {
   preferredProvidersForStyle,
   type ImageGenerationStyle,
 } from '../services/creative-ai-registry.js';
+import { generateCreativeImage } from '../services/creative-ai-generate-service.js';
+import { logger } from '../utils/logger.js';
 
 const StyleSchema = z.enum([
   'marketing_poster',
@@ -23,6 +25,28 @@ const StyleSchema = z.enum([
   'photo_realistic',
   'other',
 ]);
+
+const QualitySchema = z.enum(['draft', 'standard', 'premium']);
+
+const ProviderOverrideSchema = z.enum([
+  'auto',
+  'ideogram',
+  'flux',
+  'openai',
+  'google_imagen',
+  'stability',
+  'adobe_firefly',
+]);
+
+const GenerateImageSchema = z.object({
+  prompt: z.string().min(3).max(4000),
+  style: StyleSchema.optional(),
+  quality: QualitySchema.optional(),
+  providerOverride: ProviderOverrideSchema.optional().nullable(),
+  aspectRatio: z.string().max(20).optional().nullable(),
+  titleHint: z.string().max(120).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
 
 export async function creativeAiRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
   fastify.get('/image-providers/registry', {
@@ -78,5 +102,55 @@ export async function creativeAiRoutes(fastify: FastifyInstance, _options: Fasti
     const { listConfiguredCreativeProviders } = await import('../services/creative-ai-keys.js');
     const data = await listConfiguredCreativeProviders(userId);
     return reply.send({ success: true, data });
+  });
+
+  fastify.post('/generate-image', {
+    preHandler: [authenticateToken],
+    schema: {
+      description:
+        'Generate an image via Creative AI (Ideogram / FLUX). Returns a Platform file id — Studio attaches it as a Marketing Asset.',
+      tags: ['creative-ai'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const body = GenerateImageSchema.parse(request.body || {});
+      const result = await generateCreativeImage({
+        ownerUserId: userId,
+        prompt: body.prompt,
+        style: body.style,
+        quality: body.quality,
+        providerOverride: body.providerOverride,
+        aspectRatio: body.aspectRatio,
+        titleHint: body.titleHint,
+        metadata: body.metadata,
+      });
+
+      return reply.status(201).send({
+        success: true,
+        data: {
+          fileId: result.fileId,
+          fileIds: [result.fileId],
+          provider: result.provider,
+          modelId: result.modelId,
+          style: result.style,
+          quality: result.quality,
+          latencyMs: result.latencyMs,
+          downloadUrl: `/api/files/${result.fileId}/download`,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({
+          success: false,
+          error: error.errors[0]?.message || 'Invalid request',
+        });
+      }
+      const message = error instanceof Error ? error.message : 'Image generation failed';
+      logger.error('POST /api/creative/generate-image failed', { message });
+      const status =
+        /no creative ai key|not wired yet|prompt is required/i.test(message) ? 400 : 502;
+      return reply.status(status).send({ success: false, error: message });
+    }
   });
 }

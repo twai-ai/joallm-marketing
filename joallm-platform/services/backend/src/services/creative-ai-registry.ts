@@ -39,6 +39,8 @@ export type ImageGenerationStyle =
   | 'photo_realistic'
   | 'other';
 
+export type ImageGenerationQuality = 'draft' | 'standard' | 'premium';
+
 export type ImageProviderRegistryEntry = {
   provider: ImageGenerationProviderId;
   displayName: string;

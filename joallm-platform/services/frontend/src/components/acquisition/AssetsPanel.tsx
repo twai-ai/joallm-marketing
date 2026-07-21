@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { FolderPlus, Loader2, Plus, Send, Trash2, Upload } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react';
+import { FolderPlus, Loader2, Plus, Send, Sparkles, Trash2, Upload } from 'lucide-react';
 import type {
   AcquisitionCampaign,
   ChannelKind,
   CreativeProject,
   GrowthAssetKind,
   GrowthMarketingAsset,
+  ImageGenerationQuality,
+  ImageGenerationStyle,
 } from '@joallm/shared';
 import { API_ENDPOINTS } from '../../config/api';
+import { getIntentById } from '../../constants/growthIntents';
 import { apiClient } from '../../utils/api-client';
 import { showError, showSuccess } from '../../utils/toast';
 import { CHANNEL_OPTIONS } from './PublishingPanel';
@@ -16,6 +19,45 @@ function kindFromFile(file: File): GrowthAssetKind {
   if (file.type.startsWith('image/')) return 'image';
   if (file.type.startsWith('video/')) return 'video';
   return 'other';
+}
+
+const STYLE_OPTIONS: { value: ImageGenerationStyle; label: string }[] = [
+  { value: 'marketing_poster', label: 'Marketing poster / flyer' },
+  { value: 'social_media', label: 'Social media card' },
+  { value: 'hero_banner', label: 'Hero banner' },
+  { value: 'infographic', label: 'Infographic' },
+  { value: 'illustration', label: 'Illustration' },
+  { value: 'photo_realistic', label: 'Photoreal' },
+  { value: 'logo', label: 'Logo mark' },
+  { value: 'other', label: 'Other' },
+];
+
+const QUALITY_OPTIONS: { value: ImageGenerationQuality; label: string }[] = [
+  { value: 'draft', label: 'Draft (fast)' },
+  { value: 'standard', label: 'Standard' },
+  { value: 'premium', label: 'Premium' },
+];
+
+type ProviderChoice = 'auto' | 'ideogram' | 'flux';
+
+function buildDefaultPrompt(
+  programId: string,
+  programName: string,
+  campaign?: AcquisitionCampaign | null,
+): string {
+  const intent = campaign?.intentId
+    ? getIntentById(programId, campaign.intentId)
+    : undefined;
+  const cta = intent?.cta || 'Learn more';
+  const purpose = intent?.purpose || 'Acquire program interest from the market';
+  const intentLabel = intent?.name || 'Registration';
+
+  return [
+    `Professional institutional marketing flyer for "${programName}".`,
+    `Growth intent: ${intentLabel} — ${purpose}.`,
+    `Clear headline area with program name, short supporting line, and CTA "${cta}".`,
+    'Clean modern design, high contrast, ample negative space, print-ready poster, no clutter, no fake logos.',
+  ].join(' ');
 }
 
 export function AssetsPanel({
@@ -44,6 +86,7 @@ export function AssetsPanel({
   const [projectId, setProjectId] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [projectName, setProjectName] = useState('');
@@ -52,6 +95,17 @@ export function AssetsPanel({
   const [publishChannel, setPublishChannel] = useState<ChannelKind>('linkedin_organic');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [messageBody, setMessageBody] = useState('');
+
+  const [genPrompt, setGenPrompt] = useState('');
+  const [genTitle, setGenTitle] = useState('');
+  const [genStyle, setGenStyle] = useState<ImageGenerationStyle>('marketing_poster');
+  const [genQuality, setGenQuality] = useState<ImageGenerationQuality>('standard');
+  const [genProvider, setGenProvider] = useState<ProviderChoice>('auto');
+
+  const selectedCampaign = useMemo(
+    () => campaigns.find((c) => c.id === campaignId) || null,
+    [campaigns, campaignId],
+  );
 
   useEffect(() => {
     if (preferredCampaignId && campaigns.some((c) => c.id === preferredCampaignId)) {
@@ -62,6 +116,25 @@ export function AssetsPanel({
       setCampaignId(campaigns[0].id);
     }
   }, [campaigns, campaignId, preferredCampaignId]);
+
+  useEffect(() => {
+    // Prefill prompt when campaign/program changes and user hasn't customized yet
+    setGenPrompt((current) => {
+      if (current.trim().length > 0 && !current.includes(programName)) {
+        return current;
+      }
+      return buildDefaultPrompt(programId, programName, selectedCampaign);
+    });
+    if (!genTitle.trim()) {
+      const intentName = selectedCampaign?.intentId
+        ? getIntentById(programId, selectedCampaign.intentId)?.name
+        : undefined;
+      setGenTitle(
+        intentName ? `${programName} · ${intentName} flyer` : `${programName} acquisition flyer`,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only refresh defaults when campaign/program shifts
+  }, [programId, programName, selectedCampaign?.id, selectedCampaign?.intentId]);
 
   const load = useCallback(async (targetCampaignId?: string) => {
     const id = targetCampaignId || campaignId;
@@ -142,6 +215,63 @@ export function AssetsPanel({
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Could not create creative project');
       return null;
+    }
+  };
+
+  const handleGenerate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!genPrompt.trim()) {
+      showError('Add a prompt for the creative');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const targetCampaignId = await ensureCampaignId();
+      if (!targetCampaignId) return;
+
+      let campaignProjects = projects;
+      if (targetCampaignId !== campaignId || projects.length === 0) {
+        const res = await apiClient.get<{ success: boolean; data: CreativeProject[] }>(
+          `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${targetCampaignId}/creative-projects`,
+        );
+        campaignProjects = res.data || [];
+        setProjects(campaignProjects);
+      }
+
+      const targetProjectId = await ensureProjectId(targetCampaignId, campaignProjects);
+
+      const res = await apiClient.post<{
+        success: boolean;
+        data: {
+          asset: GrowthMarketingAsset;
+          provider: string;
+          modelId: string;
+        };
+      }>(
+        `/api/acquisition/programs/${encodeURIComponent(programId)}/campaigns/${targetCampaignId}/assets/generate`,
+        {
+          prompt: genPrompt.trim(),
+          title: genTitle.trim() || undefined,
+          style: genStyle,
+          quality: genQuality,
+          providerOverride: genProvider,
+          creativeProjectId: targetProjectId || undefined,
+          kind:
+            genStyle === 'marketing_poster' || genStyle === 'infographic'
+              ? 'poster'
+              : genStyle === 'hero_banner'
+                ? 'landing_hero'
+                : 'image',
+        },
+      );
+
+      showSuccess(`Creative generated with ${res.data.provider} (${res.data.modelId})`);
+      await load(targetCampaignId);
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Generation failed');
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -301,10 +431,159 @@ export function AssetsPanel({
   return (
     <section className="space-y-4">
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">Generate creatives</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">
+              Creative AI builds a flyer/poster for this acquisition campaign (Ideogram for text-heavy
+              posters, FLUX for photoreal drafts). Result is saved as a draft Marketing Asset you can
+              publish.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-800 ring-1 ring-teal-200">
+            <Sparkles className="h-3.5 w-3.5" />
+            Ideogram · FLUX
+          </span>
+        </div>
+
+        <form onSubmit={handleGenerate} className="mt-5 space-y-4">
+          {campaigns.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="text-xs font-medium text-slate-600">Campaign</span>
+                <select
+                  value={campaignId}
+                  onChange={(e) => {
+                    setCampaignId(e.target.value);
+                    setProjectId('');
+                  }}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
+                >
+                  {campaigns.map((campaign) => (
+                    <option key={campaign.id} value={campaign.id}>
+                      {campaign.name}
+                      {campaign.intentId ? ` · ${campaign.intentId}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs font-medium text-slate-600">Creative project (optional)</span>
+                <select
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
+                >
+                  <option value="">Default creatives</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+
+          <label className="block text-sm">
+            <span className="text-xs font-medium text-slate-600">Prompt</span>
+            <textarea
+              value={genPrompt}
+              onChange={(e) => setGenPrompt(e.target.value)}
+              rows={4}
+              required
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
+              placeholder="Describe the flyer…"
+            />
+          </label>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="block text-sm sm:col-span-2 lg:col-span-1">
+              <span className="text-xs font-medium text-slate-600">Title</span>
+              <input
+                value={genTitle}
+                onChange={(e) => setGenTitle(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+                placeholder="Asset title"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-slate-600">Style</span>
+              <select
+                value={genStyle}
+                onChange={(e) => setGenStyle(e.target.value as ImageGenerationStyle)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+              >
+                {STYLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-slate-600">Quality</span>
+              <select
+                value={genQuality}
+                onChange={(e) => setGenQuality(e.target.value as ImageGenerationQuality)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+              >
+                {QUALITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-slate-600">Provider</span>
+              <select
+                value={genProvider}
+                onChange={(e) => setGenProvider(e.target.value as ProviderChoice)}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+              >
+                <option value="auto">Auto (poster → Ideogram)</option>
+                <option value="ideogram">Ideogram</option>
+                <option value="flux">FLUX (BFL)</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              disabled={generating || uploading}
+              className="inline-flex items-center gap-2 rounded-full bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
+            >
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {generating ? 'Generating…' : 'Generate creative'}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setGenPrompt(buildDefaultPrompt(programId, programName, selectedCampaign))
+              }
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300"
+            >
+              Reset prompt from intent
+            </button>
+            {campaigns.length === 0 && (
+              <p className="text-xs text-slate-500">
+                No campaign yet — first generate creates a Registration campaign for {programName}.
+              </p>
+            )}
+          </div>
+        </form>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-950">Upload creatives</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Program → Intent → Campaign → Creative Project → Assets. Drop files here to complete the
-          loop (posters, Canva/Figma exports, images, video).
+          Or drop Canva/Figma exports, images, and video under the same campaign.
         </p>
 
         {/* Always-visible dropzone — primary upload surface */}
@@ -317,7 +596,7 @@ export function AssetsPanel({
               fileInputRef.current?.click();
             }
           }}
-          onClick={() => !uploading && fileInputRef.current?.click()}
+          onClick={() => !uploading && !generating && fileInputRef.current?.click()}
           onDragEnter={(e) => {
             e.preventDefault();
             setDragOver(true);
@@ -331,30 +610,24 @@ export function AssetsPanel({
             setDragOver(false);
           }}
           onDrop={onDrop}
-          className={`mt-5 flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition ${
+          className={`mt-5 flex min-h-[140px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-8 text-center transition ${
             dragOver
               ? 'border-teal-500 bg-teal-50'
-              : 'border-teal-300 bg-teal-50/40 hover:border-teal-500 hover:bg-teal-50'
-          } ${uploading ? 'pointer-events-none opacity-70' : ''}`}
+              : 'border-slate-200 bg-slate-50/60 hover:border-teal-400 hover:bg-teal-50/40'
+          } ${uploading || generating ? 'pointer-events-none opacity-70' : ''}`}
         >
           {uploading ? (
             <>
-              <Loader2 className="h-10 w-10 animate-spin text-teal-700" />
+              <Loader2 className="h-8 w-8 animate-spin text-teal-700" />
               <p className="mt-3 text-sm font-semibold text-teal-900">Uploading…</p>
             </>
           ) : (
             <>
-              <Upload className="h-10 w-10 text-teal-700" />
-              <p className="mt-3 text-base font-semibold text-slate-950">
+              <Upload className="h-8 w-8 text-slate-500" />
+              <p className="mt-3 text-sm font-semibold text-slate-950">
                 Drop files here or click to upload
               </p>
-              <p className="mt-1 text-xs text-slate-500">
-                PNG, JPG, WebP, GIF, PDF, MP4 · attaches under a campaign automatically
-              </p>
-              <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm">
-                <Upload className="h-4 w-4" />
-                Choose files
-              </span>
+              <p className="mt-1 text-xs text-slate-500">PNG, JPG, WebP, GIF, PDF, MP4</p>
             </>
           )}
           <input
@@ -363,7 +636,7 @@ export function AssetsPanel({
             className="hidden"
             multiple
             accept="image/*,video/*,.pdf,.png,.jpg,.jpeg,.webp,.gif,.mp4,.mov"
-            disabled={uploading}
+            disabled={uploading || generating}
             onChange={(e) => {
               void handleUpload(e.target.files);
               e.target.value = '';
@@ -384,44 +657,6 @@ export function AssetsPanel({
           </p>
         )}
 
-        {campaigns.length > 0 && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm">
-              <span className="text-xs font-medium text-slate-600">Campaign</span>
-              <select
-                value={campaignId}
-                onChange={(e) => {
-                  setCampaignId(e.target.value);
-                  setProjectId('');
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
-              >
-                {campaigns.map((campaign) => (
-                  <option key={campaign.id} value={campaign.id}>
-                    {campaign.name}
-                    {campaign.intentId ? ` · ${campaign.intentId}` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm">
-              <span className="text-xs font-medium text-slate-600">Creative project (filter)</span>
-              <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
-              >
-                <option value="">All projects</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
-
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
@@ -434,8 +669,8 @@ export function AssetsPanel({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="inline-flex items-center gap-2 rounded-full bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-60"
+            disabled={uploading || generating}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300 disabled:opacity-60"
           >
             <Upload className="h-4 w-4" />
             Upload assets
@@ -562,7 +797,7 @@ export function AssetsPanel({
           </div>
         ) : visibleAssets.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">
-            Nothing uploaded yet — use the dropzone above.
+            No assets yet — generate a flyer above or upload a file.
           </p>
         ) : (
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -570,6 +805,9 @@ export function AssetsPanel({
               const project = projects.find((p) => p.id === asset.creativeProjectId);
               const fileId = asset.fileIds[0];
               const busy = publishingAssetId === asset.id;
+              const provider =
+                typeof asset.metadata?.provider === 'string' ? asset.metadata.provider : null;
+              const generated = asset.metadata?.generatedBy === 'creative_ai';
               return (
                 <div
                   key={asset.id}
@@ -581,6 +819,7 @@ export function AssetsPanel({
                       <div className="mt-0.5 text-xs text-slate-500">
                         {asset.kind}
                         {project ? ` · ${project.name}` : ''}
+                        {generated && provider ? ` · AI · ${provider}` : ''}
                       </div>
                     </div>
                     <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200">

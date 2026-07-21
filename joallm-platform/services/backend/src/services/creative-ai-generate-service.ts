@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { files } from '../database/schema.js';
 import { config } from '../config/config.js';
@@ -33,6 +33,13 @@ export type GenerateImageInput = {
   aspectRatio?: string | null;
   titleHint?: string;
   metadata?: Record<string, unknown>;
+  /** Platform file ids used as style / edit references */
+  referenceFileIds?: string[];
+  /**
+   * style — Ideogram style_reference_images (brand/look match)
+   * edit — FLUX input_image remix / composition
+   */
+  referenceMode?: 'style' | 'edit';
 };
 
 export type GeneratedImageFile = {
@@ -44,7 +51,18 @@ export type GeneratedImageFile = {
   quality: ImageGenerationQuality;
   latencyMs: number;
   sourceUrl?: string;
+  referenceFileIds?: string[];
+  referenceMode?: 'style' | 'edit';
 };
+
+export type ReferenceImageBlob = {
+  fileId: string;
+  filename: string;
+  contentType: string;
+  buffer: Buffer;
+};
+
+const MAX_REFERENCE_IMAGES = 4;
 
 function isExecutable(id: string): id is ExecutableProvider {
   return (EXECUTABLE_PROVIDERS as readonly string[]).includes(id);
@@ -154,22 +172,80 @@ async function downloadImage(url: string): Promise<{ buffer: Buffer; contentType
   return { buffer: Buffer.from(arrayBuffer), contentType };
 }
 
+/** Load owned image files from Platform storage for Creative AI reference inputs. */
+export async function loadReferenceImages(
+  ownerUserId: string,
+  referenceFileIds: string[] | undefined,
+): Promise<ReferenceImageBlob[]> {
+  const ids = [...new Set((referenceFileIds || []).filter(Boolean))].slice(0, MAX_REFERENCE_IMAGES);
+  if (ids.length === 0) return [];
+
+  const rows = await db
+    .select()
+    .from(files)
+    .where(and(eq(files.userId, ownerUserId), inArray(files.id, ids)));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const loaded: ReferenceImageBlob[] = [];
+
+  for (const fileId of ids) {
+    const row = byId.get(fileId);
+    if (!row) {
+      throw new Error(`Reference file not found: ${fileId}`);
+    }
+    if (!row.mimetype?.startsWith('image/')) {
+      throw new Error(`Reference must be an image (${row.originalName || fileId})`);
+    }
+    if (!row.storageKey) {
+      throw new Error(`Reference file has no stored bytes yet (${row.originalName || fileId})`);
+    }
+    const buffer = await storageProvider.downloadFile(row.storageKey);
+    loaded.push({
+      fileId: row.id,
+      filename: row.originalName || row.filename || `reference-${fileId}.png`,
+      contentType: row.mimetype || 'image/png',
+      buffer,
+    });
+  }
+
+  return loaded;
+}
+
+function toBase64DataUrl(blob: ReferenceImageBlob): string {
+  const mime = blob.contentType.startsWith('image/') ? blob.contentType : 'image/png';
+  return `data:${mime};base64,${blob.buffer.toString('base64')}`;
+}
+
 async function generateWithIdeogram(options: {
   apiKey: string;
   prompt: string;
   quality: ImageGenerationQuality;
   ideogramAspect: string;
+  references?: ReferenceImageBlob[];
 }): Promise<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }> {
   const form = new FormData();
   form.append('prompt', options.prompt);
   form.append('aspect_ratio', options.ideogramAspect);
   form.append('num_images', '1');
   form.append('magic_prompt', 'AUTO');
-  form.append('style_type', 'DESIGN');
   form.append(
     'rendering_speed',
     options.quality === 'draft' ? 'TURBO' : options.quality === 'premium' ? 'QUALITY' : 'DEFAULT',
   );
+
+  const refs = options.references || [];
+  if (refs.length > 0) {
+    // style_reference_images cannot be combined with style_type / style_codes
+    for (const ref of refs) {
+      const bytes = new Uint8Array(ref.buffer);
+      form.append(
+        'style_reference_images',
+        new Blob([bytes], { type: ref.contentType }),
+        ref.filename,
+      );
+    }
+  } else {
+    form.append('style_type', 'DESIGN');
+  }
 
   const res = await fetch('https://api.ideogram.ai/v1/ideogram-v3/generate', {
     method: 'POST',
@@ -200,7 +276,7 @@ async function generateWithIdeogram(options: {
   const downloaded = await downloadImage(url);
   return {
     ...downloaded,
-    modelId: 'ideogram-v3',
+    modelId: refs.length > 0 ? 'ideogram-v3+style-ref' : 'ideogram-v3',
     sourceUrl: url,
   };
 }
@@ -211,10 +287,29 @@ async function generateWithFlux(options: {
   quality: ImageGenerationQuality;
   width: number;
   height: number;
+  references?: ReferenceImageBlob[];
 }): Promise<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }> {
-  // Cheaper/faster for drafts; pinned pro for standard/premium dogfood
+  // Image-conditioned edit works best on FLUX.2 pro family
+  const refs = options.references || [];
   const modelId =
-    options.quality === 'draft' ? 'flux-2-klein-4b' : 'flux-2-pro';
+    refs.length > 0
+      ? options.quality === 'draft'
+        ? 'flux-2-pro'
+        : 'flux-2-pro'
+      : options.quality === 'draft'
+        ? 'flux-2-klein-4b'
+        : 'flux-2-pro';
+
+  const body: Record<string, unknown> = {
+    prompt: options.prompt,
+    width: options.width,
+    height: options.height,
+  };
+
+  refs.slice(0, 8).forEach((ref, index) => {
+    const key = index === 0 ? 'input_image' : `input_image_${index + 1}`;
+    body[key] = toBase64DataUrl(ref);
+  });
 
   const submit = await fetch(`https://api.bfl.ai/v1/${modelId}`, {
     method: 'POST',
@@ -223,11 +318,7 @@ async function generateWithFlux(options: {
       'Content-Type': 'application/json',
       'x-key': options.apiKey,
     },
-    body: JSON.stringify({
-      prompt: options.prompt,
-      width: options.width,
-      height: options.height,
-    }),
+    body: JSON.stringify(body),
   });
 
   const submitted = (await submit.json().catch(() => ({}))) as {
@@ -276,7 +367,7 @@ async function generateWithFlux(options: {
       const downloaded = await downloadImage(sampleUrl);
       return {
         ...downloaded,
-        modelId,
+        modelId: refs.length > 0 ? `${modelId}+ref` : modelId,
         sourceUrl: sampleUrl,
       };
     }
@@ -298,6 +389,7 @@ async function pickProvider(
   userId: string,
   style: ImageGenerationStyle,
   override?: ImageGenerationProviderId | null,
+  options?: { hasReferences?: boolean; referenceMode?: 'style' | 'edit' },
 ): Promise<{ provider: ExecutableProvider; apiKey: string; source: 'byok' | 'platform' }> {
   const candidates: ExecutableProvider[] = [];
 
@@ -308,6 +400,13 @@ async function pickProvider(
       );
     }
     candidates.push(override);
+  } else if (options?.hasReferences) {
+    // Style match → Ideogram; edit/remix → FLUX
+    if (options.referenceMode === 'edit') {
+      candidates.push('flux', 'ideogram');
+    } else {
+      candidates.push('ideogram', 'flux');
+    }
   } else {
     for (const id of preferredProvidersForStyle(style)) {
       if (isExecutable(id) && !candidates.includes(id)) candidates.push(id);
@@ -344,11 +443,14 @@ export async function generateCreativeImage(
 
   const style: ImageGenerationStyle = input.style || 'marketing_poster';
   const quality: ImageGenerationQuality = input.quality || 'standard';
+  const referenceMode = input.referenceMode || 'style';
+  const references = await loadReferenceImages(input.ownerUserId, input.referenceFileIds);
   const dims = resolveDimensions(style, input.aspectRatio);
   const { provider, apiKey, source } = await pickProvider(
     input.ownerUserId,
     style,
     input.providerOverride,
+    { hasReferences: references.length > 0, referenceMode },
   );
 
   const started = Date.now();
@@ -359,6 +461,8 @@ export async function generateCreativeImage(
     style,
     quality,
     aspect: dims.label,
+    referenceCount: references.length,
+    referenceMode: references.length ? referenceMode : undefined,
   });
 
   let generated: { buffer: Buffer; contentType: string; modelId: string; sourceUrl: string };
@@ -370,6 +474,7 @@ export async function generateCreativeImage(
         prompt,
         quality,
         ideogramAspect: dims.ideogramAspect,
+        references,
       });
     } else {
       generated = await generateWithFlux({
@@ -378,6 +483,7 @@ export async function generateCreativeImage(
         quality,
         width: dims.width,
         height: dims.height,
+        references,
       });
     }
   } catch (error) {
@@ -407,6 +513,8 @@ export async function generateCreativeImage(
       prompt,
       aspectRatio: dims.label,
       keySource: source,
+      referenceFileIds: references.map((r) => r.fileId),
+      referenceMode: references.length ? referenceMode : undefined,
       ...(input.metadata || {}),
     },
   });
@@ -417,6 +525,7 @@ export async function generateCreativeImage(
     provider,
     fileId,
     latencyMs,
+    referenceCount: references.length,
   });
 
   return {
@@ -428,5 +537,7 @@ export async function generateCreativeImage(
     quality,
     latencyMs,
     sourceUrl: generated.sourceUrl,
+    referenceFileIds: references.map((r) => r.fileId),
+    referenceMode: references.length ? referenceMode : undefined,
   };
 }

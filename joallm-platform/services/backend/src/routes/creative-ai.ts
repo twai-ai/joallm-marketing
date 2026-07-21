@@ -46,6 +46,8 @@ const GenerateImageSchema = z.object({
   aspectRatio: z.string().max(20).optional().nullable(),
   titleHint: z.string().max(120).optional(),
   metadata: z.record(z.unknown()).optional(),
+  referenceFileIds: z.array(z.string().uuid()).max(4).optional(),
+  referenceMode: z.enum(['style', 'edit']).optional(),
 });
 
 export async function creativeAiRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
@@ -124,6 +126,8 @@ export async function creativeAiRoutes(fastify: FastifyInstance, _options: Fasti
         aspectRatio: body.aspectRatio,
         titleHint: body.titleHint,
         metadata: body.metadata,
+        referenceFileIds: body.referenceFileIds,
+        referenceMode: body.referenceMode || 'style',
       });
 
       return reply.status(201).send({
@@ -136,6 +140,8 @@ export async function creativeAiRoutes(fastify: FastifyInstance, _options: Fasti
           style: result.style,
           quality: result.quality,
           latencyMs: result.latencyMs,
+          referenceFileIds: result.referenceFileIds,
+          referenceMode: result.referenceMode,
           downloadUrl: `/api/files/${result.fileId}/download`,
         },
       });

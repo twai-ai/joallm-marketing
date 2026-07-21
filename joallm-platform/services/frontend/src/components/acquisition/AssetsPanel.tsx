@@ -101,6 +101,10 @@ export function AssetsPanel({
   const [genStyle, setGenStyle] = useState<ImageGenerationStyle>('marketing_poster');
   const [genQuality, setGenQuality] = useState<ImageGenerationQuality>('standard');
   const [genProvider, setGenProvider] = useState<ProviderChoice>('auto');
+  const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
+  const [referenceMode, setReferenceMode] = useState<'style' | 'edit'>('style');
+  const [uploadingRefs, setUploadingRefs] = useState(false);
+  const refInputRef = useRef<HTMLInputElement>(null);
 
   const selectedCampaign = useMemo(
     () => campaigns.find((c) => c.id === campaignId) || null,
@@ -257,6 +261,8 @@ export function AssetsPanel({
           quality: genQuality,
           providerOverride: genProvider,
           creativeProjectId: targetProjectId || undefined,
+          referenceFileIds: referenceFileIds.length ? referenceFileIds : undefined,
+          referenceMode: referenceFileIds.length ? referenceMode : undefined,
           kind:
             genStyle === 'marketing_poster' || genStyle === 'infographic'
               ? 'poster'
@@ -272,6 +278,57 @@ export function AssetsPanel({
       showError(error instanceof Error ? error.message : 'Generation failed');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const toggleReferenceFile = (fileId: string) => {
+    setReferenceFileIds((current) => {
+      if (current.includes(fileId)) {
+        return current.filter((id) => id !== fileId);
+      }
+      if (current.length >= 4) {
+        showError('You can attach up to 4 reference images');
+        return current;
+      }
+      return [...current, fileId];
+    });
+  };
+
+  const handleUploadReferences = async (fileList: FileList | File[] | null) => {
+    const files = fileList ? Array.from(fileList) : [];
+    if (!files.length) return;
+    const room = 4 - referenceFileIds.length;
+    if (room <= 0) {
+      showError('You can attach up to 4 reference images');
+      return;
+    }
+
+    setUploadingRefs(true);
+    try {
+      const nextIds = [...referenceFileIds];
+      for (const file of files.slice(0, room)) {
+        if (!file.type.startsWith('image/')) {
+          showError(`${file.name} is not an image`);
+          continue;
+        }
+        const uploaded = await apiClient.uploadFile<{ fileId?: string; id?: string }>(
+          API_ENDPOINTS.files.upload,
+          file,
+        );
+        const fileId = uploaded.fileId || uploaded.id;
+        if (!fileId) throw new Error(`Upload failed for ${file.name}`);
+        if (!nextIds.includes(fileId)) nextIds.push(fileId);
+      }
+      setReferenceFileIds(nextIds.slice(0, 4));
+      showSuccess(
+        nextIds.length === referenceFileIds.length
+          ? 'No new references added'
+          : `Added ${nextIds.length - referenceFileIds.length} reference image(s)`,
+      );
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Reference upload failed');
+    } finally {
+      setUploadingRefs(false);
     }
   };
 
@@ -496,6 +553,126 @@ export function AssetsPanel({
               placeholder="Describe the flyer…"
             />
           </label>
+
+          <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/30 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">Reference images</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Optional. Match brand look (Ideogram style refs) or remix composition (FLUX edit).
+                  Up to 4 images.
+                </p>
+              </div>
+              <label className="block text-xs">
+                <span className="font-medium text-slate-600">Reference mode</span>
+                <select
+                  value={referenceMode}
+                  onChange={(e) => setReferenceMode(e.target.value as 'style' | 'edit')}
+                  className="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+                >
+                  <option value="style">Match style (Ideogram)</option>
+                  <option value="edit">Remix / edit (FLUX)</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={uploadingRefs || generating || referenceFileIds.length >= 4}
+                onClick={() => refInputRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-4 py-2 text-sm font-medium text-teal-900 hover:border-teal-400 disabled:opacity-60"
+              >
+                {uploadingRefs ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                Upload references
+              </button>
+              {referenceFileIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setReferenceFileIds([])}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+                >
+                  Clear references
+                </button>
+              )}
+              <input
+                ref={refInputRef}
+                type="file"
+                className="hidden"
+                multiple
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                disabled={uploadingRefs || generating}
+                onChange={(e) => {
+                  void handleUploadReferences(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+
+            {referenceFileIds.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {referenceFileIds.map((fileId, index) => (
+                  <a
+                    key={fileId}
+                    href={API_ENDPOINTS.files.download(fileId)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-900"
+                  >
+                    Ref {index + 1}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleReferenceFile(fileId);
+                      }}
+                      className="text-slate-400 hover:text-rose-600"
+                      aria-label="Remove reference"
+                    >
+                      ×
+                    </button>
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {assets.some((a) => a.fileIds[0]) && (
+              <div className="mt-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Or pick from campaign assets
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {assets
+                    .filter((a) => a.fileIds[0])
+                    .slice(0, 12)
+                    .map((asset) => {
+                      const fileId = asset.fileIds[0];
+                      const selected = referenceFileIds.includes(fileId);
+                      return (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          onClick={() => toggleReferenceFile(fileId)}
+                          className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+                            selected
+                              ? 'bg-teal-600 text-white ring-teal-600'
+                              : 'bg-white text-slate-700 ring-slate-200 hover:ring-teal-300'
+                          }`}
+                        >
+                          {selected ? '✓ ' : ''}
+                          {asset.title.slice(0, 28)}
+                          {asset.title.length > 28 ? '…' : ''}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block text-sm sm:col-span-2 lg:col-span-1">
@@ -846,6 +1023,20 @@ export function AssetsPanel({
                       {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                       Publish
                     </button>
+                    {fileId && (
+                      <button
+                        type="button"
+                        onClick={() => toggleReferenceFile(fileId)}
+                        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium ${
+                          referenceFileIds.includes(fileId)
+                            ? 'border-teal-300 bg-teal-50 text-teal-900'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300'
+                        }`}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        {referenceFileIds.includes(fileId) ? 'Reference on' : 'Use as reference'}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => void handleDeleteAsset(asset)}

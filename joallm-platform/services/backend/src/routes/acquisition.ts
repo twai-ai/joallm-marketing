@@ -649,6 +649,8 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
     providerOverride: z.enum(['auto', 'ideogram', 'flux']).optional().nullable(),
     aspectRatio: z.string().max(20).optional().nullable(),
     creativeProjectId: z.string().uuid().optional(),
+    referenceFileIds: z.array(z.string().uuid()).max(4).optional(),
+    referenceMode: z.enum(['style', 'edit']).optional(),
   });
 
   fastify.post('/programs/:programId/campaigns/:campaignId/assets/generate', {
@@ -685,6 +687,8 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         providerOverride: body.providerOverride ?? 'auto',
         aspectRatio: body.aspectRatio,
         titleHint: title,
+        referenceFileIds: body.referenceFileIds,
+        referenceMode: body.referenceMode || 'style',
         metadata: {
           programId,
           campaignId,
@@ -719,6 +723,8 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
           quality: generated.quality,
           prompt: generated.prompt,
           latencyMs: generated.latencyMs,
+          referenceFileIds: generated.referenceFileIds,
+          referenceMode: generated.referenceMode,
         },
       });
 

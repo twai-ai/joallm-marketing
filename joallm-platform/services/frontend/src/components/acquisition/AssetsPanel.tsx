@@ -158,6 +158,7 @@ function buildDefaultPrompt(
   programId: string,
   programName: string,
   campaign?: AcquisitionCampaign | null,
+  style: ImageGenerationStyle = 'marketing_poster',
 ): string {
   const intent = campaign?.intentId
     ? getIntentById(programId, campaign.intentId)
@@ -166,12 +167,46 @@ function buildDefaultPrompt(
   const purpose = intent?.purpose || 'Acquire program interest from the market';
   const intentLabel = intent?.name || 'Registration';
 
+  const styleLine: Record<ImageGenerationStyle, string> = {
+    marketing_poster:
+      'Clean modern institutional flyer, high contrast, ample negative space, print-ready, no clutter, no fake logos.',
+    social_media:
+      'Mobile-first social card, bold short copy, high contrast, safe margins, single clear message.',
+    hero_banner:
+      'Wide cinematic hero banner with space for headline, premium institutional brand feel, restrained copy.',
+    infographic:
+      'Structured infographic layout with clear sections and readable labels, not photoreal clutter.',
+    illustration:
+      'Cohesive illustrated style (not photo), intentional shapes, polished editorial palette.',
+    photo_realistic:
+      'Photoreal scene with natural lighting and sharp focus; no cartoon styling or fake UI overlays.',
+    logo: 'Simple flat logo mark or wordmark, centered, high contrast, minimal detail, empty background.',
+    product_mockup: 'Clean product mockup, soft studio lighting, uncluttered surface.',
+    other: 'Clean professional creative, deliberate composition, high visual quality.',
+  };
+
   return [
-    `Professional institutional marketing flyer for "${programName}".`,
+    `Professional ${style.replace(/_/g, ' ')} creative for "${programName}".`,
     `Growth intent: ${intentLabel} — ${purpose}.`,
-    `Clear headline area with program name, short supporting line, and CTA "${cta}".`,
-    'Clean modern design, high contrast, ample negative space, print-ready poster, no clutter, no fake logos.',
+    `Clear headline with program name, short supporting line, and CTA "${cta}".`,
+    styleLine[style] || styleLine.marketing_poster,
   ].join(' ');
+}
+
+function briefDefaults(
+  programId: string,
+  programName: string,
+  campaign?: AcquisitionCampaign | null,
+): { headline: string; cta: string; mustIncludeText: string; avoid: string } {
+  const intent = campaign?.intentId
+    ? getIntentById(programId, campaign.intentId)
+    : undefined;
+  return {
+    headline: programName,
+    cta: intent?.cta || 'Learn more',
+    mustIncludeText: programName,
+    avoid: 'fake logos, watermarks, unreadable text, clutter',
+  };
 }
 
 export function AssetsPanel({
@@ -213,12 +248,16 @@ export function AssetsPanel({
   const [genPrompt, setGenPrompt] = useState('');
   const [genTitle, setGenTitle] = useState('');
   const [genStyle, setGenStyle] = useState<ImageGenerationStyle>('marketing_poster');
-  const [genQuality, setGenQuality] = useState<ImageGenerationQuality>('standard');
+  const [genQuality, setGenQuality] = useState<ImageGenerationQuality>('premium');
   const [genProvider, setGenProvider] = useState<ProviderChoice>('auto');
   const [genSize, setGenSize] = useState<CreativeSizeId>('3x4');
   const [genMedia, setGenMedia] = useState<'image' | 'video'>('image');
   const [transparentBackground, setTransparentBackground] = useState(false);
   const [variantCount, setVariantCount] = useState(1);
+  const [briefHeadline, setBriefHeadline] = useState('');
+  const [briefCta, setBriefCta] = useState('');
+  const [briefMustInclude, setBriefMustInclude] = useState('');
+  const [briefAvoid, setBriefAvoid] = useState('fake logos, watermarks, unreadable text, clutter');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
@@ -243,13 +282,18 @@ export function AssetsPanel({
   }, [campaigns, campaignId, preferredCampaignId]);
 
   useEffect(() => {
-    // Prefill prompt when campaign/program changes and user hasn't customized yet
+    // Prefill prompt + brief when campaign/program changes and user hasn't customized yet
     setGenPrompt((current) => {
       if (current.trim().length > 0 && !current.includes(programName)) {
         return current;
       }
-      return buildDefaultPrompt(programId, programName, selectedCampaign);
+      return buildDefaultPrompt(programId, programName, selectedCampaign, genStyle);
     });
+    const defaults = briefDefaults(programId, programName, selectedCampaign);
+    setBriefHeadline((current) => (current.trim() ? current : defaults.headline));
+    setBriefCta((current) => (current.trim() ? current : defaults.cta));
+    setBriefMustInclude((current) => (current.trim() ? current : defaults.mustIncludeText));
+    setBriefAvoid((current) => (current.trim() ? current : defaults.avoid));
     if (!genTitle.trim()) {
       const intentName = selectedCampaign?.intentId
         ? getIntentById(programId, selectedCampaign.intentId)?.name
@@ -399,6 +443,13 @@ export function AssetsPanel({
           referenceMode: sessionRefs.length ? referenceMode : undefined,
           transparentBackground: transparentBackground || undefined,
           variantCount,
+          precision: {
+            institutionName: programName,
+            headline: briefHeadline.trim() || undefined,
+            cta: briefCta.trim() || undefined,
+            mustIncludeText: briefMustInclude.trim() || undefined,
+            avoid: briefAvoid.trim() || undefined,
+          },
           kind:
             transparentBackground
               ? 'image'
@@ -806,7 +857,76 @@ export function AssetsPanel({
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
               placeholder="Describe the flyer…"
             />
+            <span className="mt-1 block text-[11px] text-slate-500">
+              Tip: fill the brief below so exact headline / CTA text stays sharp. Backend also
+              adds style guidance and avoid-rules automatically.
+            </span>
           </label>
+
+          <div className="rounded-2xl border border-teal-200 bg-teal-50/40 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-950">Creative brief (precision)</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Exact copy the model must render. Leave blank to rely on the free-form prompt only.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const defaults = briefDefaults(programId, programName, selectedCampaign);
+                  setBriefHeadline(defaults.headline);
+                  setBriefCta(defaults.cta);
+                  setBriefMustInclude(defaults.mustIncludeText);
+                  setBriefAvoid(defaults.avoid);
+                }}
+                className="rounded-full border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-900 hover:border-teal-400"
+              >
+                Prefill from program
+              </button>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="text-xs font-medium text-slate-600">Headline (exact)</span>
+                <input
+                  value={briefHeadline}
+                  onChange={(e) => setBriefHeadline(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+                  placeholder={programName}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs font-medium text-slate-600">CTA (exact)</span>
+                <input
+                  value={briefCta}
+                  onChange={(e) => setBriefCta(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+                  placeholder="Apply now"
+                />
+              </label>
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-xs font-medium text-slate-600">
+                  Must include (exact text, dates, city…)
+                </span>
+                <textarea
+                  value={briefMustInclude}
+                  onChange={(e) => setBriefMustInclude(e.target.value)}
+                  rows={2}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+                  placeholder="Program name, intake date, campus…"
+                />
+              </label>
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-xs font-medium text-slate-600">Avoid</span>
+                <input
+                  value={briefAvoid}
+                  onChange={(e) => setBriefAvoid(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+                  placeholder="fake logos, watermarks…"
+                />
+              </label>
+            </div>
+          </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1007,6 +1127,7 @@ export function AssetsPanel({
                   const next = e.target.value as ImageGenerationStyle;
                   setGenStyle(next);
                   setGenSize(defaultSizeForStyle(next));
+                  setGenPrompt(buildDefaultPrompt(programId, programName, selectedCampaign, next));
                 }}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
               >
@@ -1030,6 +1151,9 @@ export function AssetsPanel({
                   </option>
                 ))}
               </select>
+              <span className="mt-1 block text-[11px] text-slate-500">
+                Premium uses Ideogram QUALITY / larger FLUX size.
+              </span>
             </label>
             <label className="block text-sm">
               <span className="text-xs font-medium text-slate-600">Provider</span>
@@ -1091,9 +1215,16 @@ export function AssetsPanel({
             </button>
             <button
               type="button"
-              onClick={() =>
-                setGenPrompt(buildDefaultPrompt(programId, programName, selectedCampaign))
-              }
+              onClick={() => {
+                setGenPrompt(
+                  buildDefaultPrompt(programId, programName, selectedCampaign, genStyle),
+                );
+                const defaults = briefDefaults(programId, programName, selectedCampaign);
+                setBriefHeadline(defaults.headline);
+                setBriefCta(defaults.cta);
+                setBriefMustInclude(defaults.mustIncludeText);
+                setBriefAvoid(defaults.avoid);
+              }}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300"
             >
               Reset prompt from intent

@@ -24,6 +24,17 @@ import { resolveCreativeProviderApiKey } from './creative-ai-keys.js';
 const EXECUTABLE_PROVIDERS = ['ideogram', 'flux'] as const;
 type ExecutableProvider = (typeof EXECUTABLE_PROVIDERS)[number];
 
+/** Optional structured brief — makes typography / CTA / exclusions precise */
+export type PromptPrecision = {
+  headline?: string;
+  cta?: string;
+  /** Exact copy that must appear in the creative (program name, dates, etc.) */
+  mustIncludeText?: string;
+  /** Things to avoid (wrong logos, watermarks, clutter…) */
+  avoid?: string;
+  institutionName?: string;
+};
+
 export type GenerateImageInput = {
   ownerUserId: string;
   prompt: string;
@@ -33,6 +44,8 @@ export type GenerateImageInput = {
   aspectRatio?: string | null;
   titleHint?: string;
   metadata?: Record<string, unknown>;
+  /** Structured fields merged into a provider-ready prompt */
+  precision?: PromptPrecision;
   /** Platform file ids used as style / edit references */
   referenceFileIds?: string[];
   /**
@@ -133,6 +146,133 @@ export function resolveDimensions(
     default:
       return presets['3x4'];
   }
+}
+
+const DEFAULT_AVOID =
+  'fake logos, invented brand marks, watermarks, QR codes, unreadable tiny text, cluttered layouts, distorted faces, extra limbs, misspelled institution names';
+
+const STYLE_PROMPT_GUIDANCE: Record<ImageGenerationStyle, string> = {
+  marketing_poster:
+    'Institutional marketing flyer: bold hierarchy, one clear headline, short supporting line, strong CTA button area, balanced margins, print-ready, professional education brand aesthetic.',
+  social_media:
+    'Social feed creative: thumb-stopping composition, short readable text at safe margins, mobile-first contrast, single focal message.',
+  hero_banner:
+    'Wide website hero: cinematic but clean, left/right space for headline, restrained copy, premium institutional brand feel.',
+  infographic:
+    'Infographic poster: clear sections, readable labels, simple icons, structured layout, not photoreal clutter.',
+  illustration:
+    'Styled illustration (not photo): cohesive color palette, intentional shapes, polished editorial look.',
+  photo_realistic:
+    'Photoreal scene: natural lighting, sharp focus, realistic materials, no cartoon styling, no fake UI overlays.',
+  logo:
+    'Simple logo mark or wordmark: flat vector look, centered, high contrast, minimal detail, no busy background.',
+  product_mockup:
+    'Clean product mockup: accurate proportions, soft studio lighting, uncluttered surface, premium catalog look.',
+  other:
+    'Clean professional creative: clear subject, deliberate composition, high visual quality.',
+};
+
+function ideogramStyleType(
+  style: ImageGenerationStyle,
+  transparentBackground?: boolean,
+): string | null {
+  if (transparentBackground) return null;
+  switch (style) {
+    case 'photo_realistic':
+    case 'product_mockup':
+      return 'REALISTIC';
+    case 'illustration':
+      return 'RENDER_3D';
+    case 'logo':
+    case 'marketing_poster':
+    case 'social_media':
+    case 'hero_banner':
+    case 'infographic':
+    case 'other':
+    default:
+      return 'DESIGN';
+  }
+}
+
+function resolveMagicPrompt(
+  userPrompt: string,
+  precision?: PromptPrecision,
+): 'ON' | 'OFF' | 'AUTO' {
+  const hasExactCopy = Boolean(
+    precision?.mustIncludeText?.trim() ||
+      precision?.headline?.trim() ||
+      precision?.cta?.trim(),
+  );
+  // When the user already specified exact text, keep Magic Prompt from rewriting copy.
+  if (hasExactCopy || userPrompt.length >= 420) return 'OFF';
+  // Short / vague briefs benefit from Ideogram Magic Prompt expansion.
+  if (userPrompt.length < 140) return 'ON';
+  return 'AUTO';
+}
+
+/**
+ * Build a provider-ready prompt from free text + optional structured brief.
+ * Keeps user intent first; appends style guidance and hard constraints.
+ */
+export function buildEnhancedPrompt(options: {
+  prompt: string;
+  style: ImageGenerationStyle;
+  precision?: PromptPrecision;
+  transparentBackground?: boolean;
+}): { prompt: string; magicPrompt: 'ON' | 'OFF' | 'AUTO'; styleType: string | null } {
+  const base = options.prompt.trim();
+  const p = options.precision || {};
+  const parts: string[] = [base];
+
+  const institution = p.institutionName?.trim();
+  if (institution && !base.toLowerCase().includes(institution.toLowerCase())) {
+    parts.push(`Institution / program context: "${institution}".`);
+  }
+
+  const headline = p.headline?.trim();
+  if (headline) {
+    parts.push(`Primary headline text (render exactly, correctly spelled): "${headline}".`);
+  }
+
+  const cta = p.cta?.trim();
+  if (cta) {
+    parts.push(`Call-to-action text (render exactly): "${cta}".`);
+  }
+
+  const must = p.mustIncludeText?.trim();
+  if (must) {
+    parts.push(`Must include this exact text in the design: ${must}`);
+  }
+
+  parts.push(STYLE_PROMPT_GUIDANCE[options.style] || STYLE_PROMPT_GUIDANCE.other);
+
+  if (options.transparentBackground) {
+    parts.push(
+      'Transparent background PNG: subject only, clean cutout edges, no backdrop, no drop shadow unless essential.',
+    );
+  }
+
+  const avoid = [p.avoid?.trim(), DEFAULT_AVOID].filter(Boolean).join('; ');
+  parts.push(`Avoid: ${avoid}.`);
+
+  const enhanced = parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 3500);
+
+  return {
+    prompt: enhanced,
+    magicPrompt: resolveMagicPrompt(base, options.precision),
+    styleType: ideogramStyleType(options.style, options.transparentBackground),
+  };
+}
+
+function scaleFluxSize(
+  width: number,
+  height: number,
+  quality: ImageGenerationQuality,
+): { width: number; height: number } {
+  if (quality !== 'premium') return { width, height };
+  const scale = 1.35;
+  const round32 = (n: number) => Math.max(512, Math.min(1440, Math.round((n * scale) / 32) * 32));
+  return { width: round32(width), height: round32(height) };
 }
 
 /** Studio-facing size catalog (shared with frontend via mirrored constants). */
@@ -303,6 +443,8 @@ async function generateWithIdeogram(options: {
   prompt: string;
   quality: ImageGenerationQuality;
   ideogramAspect: string;
+  magicPrompt?: 'ON' | 'OFF' | 'AUTO';
+  styleType?: string | null;
   references?: ReferenceImageBlob[];
   transparentBackground?: boolean;
   variantCount?: number;
@@ -311,7 +453,7 @@ async function generateWithIdeogram(options: {
   form.append('prompt', options.prompt);
   form.append('aspect_ratio', options.ideogramAspect);
   form.append('num_images', String(Math.min(4, Math.max(1, options.variantCount || 1))));
-  form.append('magic_prompt', 'AUTO');
+  form.append('magic_prompt', options.magicPrompt || 'AUTO');
   form.append(
     'rendering_speed',
     options.quality === 'draft' ? 'TURBO' : options.quality === 'premium' ? 'QUALITY' : 'DEFAULT',
@@ -328,8 +470,8 @@ async function generateWithIdeogram(options: {
         ref.filename,
       );
     }
-  } else if (!options.transparentBackground) {
-    form.append('style_type', 'DESIGN');
+  } else if (options.styleType) {
+    form.append('style_type', options.styleType);
   }
 
   const endpoint = options.transparentBackground
@@ -395,18 +537,13 @@ async function generateWithFlux(options: {
   // Image-conditioned edit works best on FLUX.2 pro family
   const refs = options.references || [];
   const modelId =
-    refs.length > 0
-      ? options.quality === 'draft'
-        ? 'flux-2-pro'
-        : 'flux-2-pro'
-      : options.quality === 'draft'
-        ? 'flux-2-klein-4b'
-        : 'flux-2-pro';
+    refs.length > 0 || options.quality !== 'draft' ? 'flux-2-pro' : 'flux-2-klein-4b';
+  const sized = scaleFluxSize(options.width, options.height, options.quality);
 
   const body: Record<string, unknown> = {
     prompt: options.prompt,
-    width: options.width,
-    height: options.height,
+    width: sized.width,
+    height: sized.height,
   };
 
   refs.slice(0, 8).forEach((ref, index) => {
@@ -548,8 +685,8 @@ async function pickProvider(
 export async function generateCreativeImages(
   input: GenerateImageInput,
 ): Promise<GenerateCreativeBatchResult> {
-  const prompt = input.prompt.trim();
-  if (prompt.length < 3) {
+  const userPrompt = input.prompt.trim();
+  if (userPrompt.length < 3) {
     throw new Error('Prompt is required');
   }
 
@@ -558,6 +695,13 @@ export async function generateCreativeImages(
   const referenceMode = input.referenceMode || 'style';
   const transparentBackground = Boolean(input.transparentBackground);
   const variantCount = Math.min(4, Math.max(1, input.variantCount || 1));
+  const enhanced = buildEnhancedPrompt({
+    prompt: userPrompt,
+    style,
+    precision: input.precision,
+    transparentBackground,
+  });
+  const prompt = enhanced.prompt;
   const inlineReferences = decodeInlineReferenceImages(input.referenceImages);
   let fileReferences: ReferenceImageBlob[] = [];
   if (inlineReferences.length === 0 && input.referenceFileIds?.length) {
@@ -587,6 +731,8 @@ export async function generateCreativeImages(
     style,
     quality,
     aspect: dims.label,
+    magicPrompt: enhanced.magicPrompt,
+    styleType: enhanced.styleType,
     referenceCount: references.length,
     referenceMode: references.length ? referenceMode : undefined,
     transparentBackground,
@@ -602,6 +748,8 @@ export async function generateCreativeImages(
         prompt,
         quality,
         ideogramAspect: dims.ideogramAspect,
+        magicPrompt: enhanced.magicPrompt,
+        styleType: enhanced.styleType,
         references,
         transparentBackground,
         variantCount,
@@ -651,7 +799,11 @@ export async function generateCreativeImages(
         modelId: generated.modelId,
         style,
         quality,
-        prompt,
+        prompt: userPrompt,
+        enhancedPrompt: prompt,
+        magicPrompt: enhanced.magicPrompt,
+        styleType: enhanced.styleType || undefined,
+        precision: input.precision || undefined,
         aspectRatio: dims.label,
         keySource: source,
         referenceFileIds: references.map((r) => r.fileId),
@@ -667,7 +819,7 @@ export async function generateCreativeImages(
       fileId,
       provider,
       modelId: generated.modelId,
-      prompt,
+      prompt: userPrompt,
       style,
       quality,
       latencyMs: Date.now() - started,

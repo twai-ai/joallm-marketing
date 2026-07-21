@@ -663,6 +663,15 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
     referenceMode: z.enum(['style', 'edit']).optional(),
     transparentBackground: z.boolean().optional(),
     variantCount: z.number().int().min(1).max(4).optional(),
+    precision: z
+      .object({
+        headline: z.string().max(200).optional(),
+        cta: z.string().max(120).optional(),
+        mustIncludeText: z.string().max(800).optional(),
+        avoid: z.string().max(800).optional(),
+        institutionName: z.string().max(200).optional(),
+      })
+      .optional(),
   });
 
   fastify.post('/programs/:programId/campaigns/:campaignId/assets/generate', {
@@ -699,6 +708,7 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         providerOverride: body.providerOverride ?? 'auto',
         aspectRatio: body.aspectRatio,
         titleHint: title,
+        precision: body.precision,
         referenceFileIds: body.referenceFileIds,
         referenceImages: body.referenceImages,
         referenceMode: body.referenceMode || 'style',

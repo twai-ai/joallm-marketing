@@ -223,3 +223,151 @@ export async function analyseVideoFrames(
   logger.info(`Vision analysis complete: ${results.length}/${cappedFrames.length} frames analysed`);
   return results;
 }
+
+export type CreativeReferenceVision = {
+  filename: string;
+  summary: string;
+  colors: string[];
+  styleNotes: string[];
+  detectedText: string | null;
+  isLogoLike: boolean;
+  model: string;
+};
+
+const CREATIVE_REF_PROMPT = `You are helping an AI image generator match a brand reference.
+Analyse this still image and respond with JSON only:
+{
+  "summary": "2-3 sentences: composition, subject, overall look",
+  "colors": ["#RRGGBB hex codes for dominant brand/design colors, up to 5"],
+  "style_notes": ["short phrases: typography feel, layout, photo vs flat design, mood"],
+  "detected_text": "readable text in the image, or null",
+  "is_logo_like": true
+}
+is_logo_like should be true for logos, seals, wordmarks, or icon marks.
+Prefer real hex codes when colors are clear; otherwise approximate closely.
+Do not invent institution names that are not visible.`;
+
+/**
+ * Describe creative reference stills (logos / brand boards) for prompt enrichment.
+ * Uses the same Groq Llama-4 vision stack as video frame analysis.
+ * Returns [] when no Groq key is available (generate continues without vision).
+ */
+export async function describeCreativeReferenceImages(
+  images: Array<{ filename: string; contentType: string; buffer: Buffer }>,
+  options?: { apiKey?: string | null; maxImages?: number },
+): Promise<CreativeReferenceVision[]> {
+  const apiKey = options?.apiKey;
+  if (!isUsableKey(apiKey)) {
+    logger.info('Creative vision skip — no Groq API key');
+    return [];
+  }
+
+  const capped = images.slice(0, Math.min(2, options?.maxImages ?? 2));
+  if (capped.length === 0) return [];
+
+  const client = new Groq({ apiKey });
+  const results: CreativeReferenceVision[] = [];
+  let activeModel: string = VISION_MODELS[0];
+  let modelResolved = false;
+
+  for (const [index, image] of capped.entries()) {
+    const mime = image.contentType.startsWith('image/') ? image.contentType : 'image/png';
+    const dataUrl = `data:${mime};base64,${image.buffer.toString('base64')}`;
+    let succeeded = false;
+
+    for (
+      let mi = modelResolved ? (VISION_MODELS as readonly string[]).indexOf(activeModel) : 0;
+      mi < VISION_MODELS.length;
+      mi += 1
+    ) {
+      const model = VISION_MODELS[mi];
+      try {
+        const response = await client.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: dataUrl } },
+                { type: 'text', text: CREATIVE_REF_PROMPT },
+              ],
+            },
+          ],
+          response_format: { type: 'json_object' },
+          max_tokens: 450,
+          temperature: 0.1,
+        });
+
+        const raw = response.choices[0]?.message?.content ?? '{}';
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          logger.warn(`Creative vision returned non-JSON for ${image.filename}`);
+        }
+
+        const summary =
+          typeof parsed.summary === 'string' && parsed.summary.trim()
+            ? parsed.summary.trim()
+            : '';
+        if (!summary) {
+          throw new Error('Empty vision summary');
+        }
+
+        const colors = Array.isArray(parsed.colors)
+          ? parsed.colors
+              .map((c) => (typeof c === 'string' ? c.trim() : ''))
+              .filter((c) => /^#[0-9A-Fa-f]{6}$/.test(c))
+              .slice(0, 5)
+          : [];
+        const styleNotes = Array.isArray(parsed.style_notes)
+          ? parsed.style_notes
+              .map((n) => (typeof n === 'string' ? n.trim() : ''))
+              .filter(Boolean)
+              .slice(0, 8)
+          : [];
+        const detectedText =
+          typeof parsed.detected_text === 'string' && parsed.detected_text.trim()
+            ? parsed.detected_text.trim()
+            : null;
+
+        results.push({
+          filename: image.filename,
+          summary,
+          colors,
+          styleNotes,
+          detectedText,
+          isLogoLike: parsed.is_logo_like === true,
+          model,
+        });
+
+        activeModel = model;
+        modelResolved = true;
+        succeeded = true;
+        break;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isDecommissioned = message.includes('decommissioned');
+        const isRateLimited = isRateLimitedVisionError(error);
+        if ((isDecommissioned || isRateLimited) && mi < VISION_MODELS.length - 1) {
+          logger.warn(
+            `Creative vision ${isDecommissioned ? 'model decommissioned' : 'rate-limited'} for ${model} — trying next`,
+          );
+          continue;
+        }
+        logger.warn(`Creative vision failed for ${image.filename}: ${message}`);
+        break;
+      }
+    }
+
+    if (!succeeded) {
+      // skip image
+    }
+    if (index < capped.length - 1) {
+      await delay(BATCH_DELAY_MS);
+    }
+  }
+
+  logger.info(`Creative vision complete: ${results.length}/${capped.length} references`);
+  return results;
+}

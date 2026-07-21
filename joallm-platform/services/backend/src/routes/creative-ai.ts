@@ -67,8 +67,13 @@ const GenerateImageSchema = z.object({
       mustIncludeText: z.string().max(800).optional(),
       avoid: z.string().max(800).optional(),
       institutionName: z.string().max(200).optional(),
+      primaryColor: z.string().max(20).optional(),
+      secondaryColor: z.string().max(20).optional(),
+      accentColor: z.string().max(20).optional(),
+      useLogoReference: z.boolean().optional(),
     })
     .optional(),
+  analyzeReferences: z.boolean().optional(),
 });
 
 export async function creativeAiRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
@@ -148,6 +153,7 @@ export async function creativeAiRoutes(fastify: FastifyInstance, _options: Fasti
         titleHint: body.titleHint,
         metadata: body.metadata,
         precision: body.precision,
+        analyzeReferences: body.analyzeReferences,
         referenceFileIds: body.referenceFileIds,
         referenceImages: body.referenceImages,
         referenceMode: body.referenceMode || 'style',

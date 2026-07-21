@@ -193,6 +193,45 @@ function buildDefaultPrompt(
   ].join(' ');
 }
 
+const PALETTE_PRESETS: { id: string; label: string; primary: string; secondary: string; accent: string }[] = [
+  { id: 'navy-gold', label: 'Navy & gold', primary: '#0B2C5E', secondary: '#C4A35A', accent: '#F5F7FA' },
+  { id: 'teal-slate', label: 'Teal & slate', primary: '#0F766E', secondary: '#334155', accent: '#E2E8F0' },
+  { id: 'forest-cream', label: 'Forest & cream', primary: '#1B4332', secondary: '#D8E2DC', accent: '#F8F1E7' },
+  { id: 'burgundy-sand', label: 'Burgundy & sand', primary: '#7A1F2B', secondary: '#E6D5B8', accent: '#F7F3EE' },
+];
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const hex = /^#[0-9A-Fa-f]{6}$/.test(value) ? value : '#64748B';
+  return (
+    <label className="block text-sm">
+      <span className="text-xs font-medium text-slate-600">{label}</span>
+      <div className="mt-1 flex items-center gap-2">
+        <input
+          type="color"
+          value={hex}
+          onChange={(e) => onChange(e.target.value.toUpperCase())}
+          className="h-9 w-10 cursor-pointer rounded border border-slate-200 bg-white p-1"
+          aria-label={label}
+        />
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="#0B2C5E"
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
+        />
+      </div>
+    </label>
+  );
+}
+
 function briefDefaults(
   programId: string,
   programName: string,
@@ -258,6 +297,11 @@ export function AssetsPanel({
   const [briefCta, setBriefCta] = useState('');
   const [briefMustInclude, setBriefMustInclude] = useState('');
   const [briefAvoid, setBriefAvoid] = useState('fake logos, watermarks, unreadable text, clutter');
+  const [primaryColor, setPrimaryColor] = useState('');
+  const [secondaryColor, setSecondaryColor] = useState('');
+  const [accentColor, setAccentColor] = useState('');
+  const [useLogoReference, setUseLogoReference] = useState(true);
+  const [analyzeReferences, setAnalyzeReferences] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(null);
@@ -449,7 +493,13 @@ export function AssetsPanel({
             cta: briefCta.trim() || undefined,
             mustIncludeText: briefMustInclude.trim() || undefined,
             avoid: briefAvoid.trim() || undefined,
+            primaryColor: primaryColor.trim() || undefined,
+            secondaryColor: secondaryColor.trim() || undefined,
+            accentColor: accentColor.trim() || undefined,
+            useLogoReference: sessionRefs.length > 0 ? useLogoReference : undefined,
           },
+          analyzeReferences:
+            sessionRefs.length > 0 ? analyzeReferences : undefined,
           kind:
             transparentBackground
               ? 'image'
@@ -926,6 +976,58 @@ export function AssetsPanel({
                 />
               </label>
             </div>
+
+            <div className="mt-4 border-t border-teal-100 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Brand palette & logo
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrimaryColor('');
+                    setSecondaryColor('');
+                    setAccentColor('');
+                  }}
+                  className="text-[11px] font-medium text-slate-500 hover:text-teal-800"
+                >
+                  Clear colors
+                </button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {PALETTE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setPrimaryColor(preset.primary);
+                      setSecondaryColor(preset.secondary);
+                      setAccentColor(preset.accent);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-teal-300"
+                  >
+                    <span
+                      className="inline-flex h-3.5 overflow-hidden rounded-full ring-1 ring-slate-200"
+                      aria-hidden
+                    >
+                      <span className="h-3.5 w-3.5" style={{ background: preset.primary }} />
+                      <span className="h-3.5 w-3.5" style={{ background: preset.secondary }} />
+                      <span className="h-3.5 w-3.5" style={{ background: preset.accent }} />
+                    </span>
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <ColorField label="Primary" value={primaryColor} onChange={setPrimaryColor} />
+                <ColorField label="Secondary" value={secondaryColor} onChange={setSecondaryColor} />
+                <ColorField label="Accent" value={accentColor} onChange={setAccentColor} />
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Colors go into the prompt and Ideogram’s color palette. Leave empty to let vision
+                infer colors from references when available.
+              </p>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -1052,6 +1154,44 @@ export function AssetsPanel({
               Tip: always use <strong>Upload references</strong> for logos. Older campaign assets may
               not have stored image bytes.
             </p>
+
+            {sessionRefs.length > 0 && (
+              <div className="mt-3 space-y-2 rounded-xl border border-teal-100 bg-white/80 px-3 py-3">
+                <label className="flex items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={analyzeReferences}
+                    onChange={(e) => setAnalyzeReferences(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-slate-950">
+                      Analyze references with vision
+                    </span>
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      Uses Groq vision to describe colors, style, and logo cues, then updates the
+                      generate prompt behind the scenes.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={useLogoReference}
+                    onChange={(e) => setUseLogoReference(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-slate-950">
+                      Treat first reference as official logo
+                    </span>
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      Instructs the model to place the real mark instead of inventing a seal.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
 
             {sessionRefs.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">

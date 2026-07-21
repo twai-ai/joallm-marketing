@@ -20,6 +20,8 @@ import {
   type ImageGenerationStyle,
 } from './creative-ai-registry.js';
 import { resolveCreativeProviderApiKey } from './creative-ai-keys.js';
+import { describeCreativeReferenceImages } from './vision-analysis-service.js';
+import { userApiKeyRepository } from '../repositories/user-api-key-repository.js';
 
 const EXECUTABLE_PROVIDERS = ['ideogram', 'flux'] as const;
 type ExecutableProvider = (typeof EXECUTABLE_PROVIDERS)[number];
@@ -33,6 +35,14 @@ export type PromptPrecision = {
   /** Things to avoid (wrong logos, watermarks, clutter…) */
   avoid?: string;
   institutionName?: string;
+  /** Brand palette hex colors (#RRGGBB) */
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  /** Treat first reference as the official logo mark to incorporate */
+  useLogoReference?: boolean;
+  /** Filled server-side from vision analysis of reference images */
+  referenceVisualContext?: string;
 };
 
 export type GenerateImageInput = {
@@ -46,6 +56,8 @@ export type GenerateImageInput = {
   metadata?: Record<string, unknown>;
   /** Structured fields merged into a provider-ready prompt */
   precision?: PromptPrecision;
+  /** When true (default) and refs exist, Groq vision describes refs into the prompt */
+  analyzeReferences?: boolean;
   /** Platform file ids used as style / edit references */
   referenceFileIds?: string[];
   /**
@@ -210,6 +222,14 @@ function resolveMagicPrompt(
   return 'AUTO';
 }
 
+function normalizeHexColor(value?: string | null): string | null {
+  if (!value) return null;
+  const raw = value.trim();
+  const withHash = raw.startsWith('#') ? raw : `#${raw}`;
+  if (!/^#[0-9A-Fa-f]{6}$/.test(withHash)) return null;
+  return withHash.toUpperCase();
+}
+
 /**
  * Build a provider-ready prompt from free text + optional structured brief.
  * Keeps user intent first; appends style guidance and hard constraints.
@@ -219,7 +239,7 @@ export function buildEnhancedPrompt(options: {
   style: ImageGenerationStyle;
   precision?: PromptPrecision;
   transparentBackground?: boolean;
-}): { prompt: string; magicPrompt: 'ON' | 'OFF' | 'AUTO'; styleType: string | null } {
+}): { prompt: string; magicPrompt: 'ON' | 'OFF' | 'AUTO'; styleType: string | null; paletteHex: string[] } {
   const base = options.prompt.trim();
   const p = options.precision || {};
   const parts: string[] = [base];
@@ -244,6 +264,29 @@ export function buildEnhancedPrompt(options: {
     parts.push(`Must include this exact text in the design: ${must}`);
   }
 
+  const paletteHex = [
+    normalizeHexColor(p.primaryColor),
+    normalizeHexColor(p.secondaryColor),
+    normalizeHexColor(p.accentColor),
+  ].filter(Boolean) as string[];
+
+  if (paletteHex.length > 0) {
+    parts.push(
+      `Brand color palette (use these hex colors faithfully in the design; do not invent alternate brand colors): ${paletteHex.join(', ')}.`,
+    );
+  }
+
+  if (p.useLogoReference) {
+    parts.push(
+      'Incorporate the official logo from the first reference image as a real brand mark (correct proportions, no invented seals or fake logos). Place it cleanly without distorting the mark.',
+    );
+  }
+
+  const visual = p.referenceVisualContext?.trim();
+  if (visual) {
+    parts.push(`Visual cues from reference analysis: ${visual}`);
+  }
+
   parts.push(STYLE_PROMPT_GUIDANCE[options.style] || STYLE_PROMPT_GUIDANCE.other);
 
   if (options.transparentBackground) {
@@ -261,6 +304,7 @@ export function buildEnhancedPrompt(options: {
     prompt: enhanced,
     magicPrompt: resolveMagicPrompt(base, options.precision),
     styleType: ideogramStyleType(options.style, options.transparentBackground),
+    paletteHex,
   };
 }
 
@@ -445,6 +489,7 @@ async function generateWithIdeogram(options: {
   ideogramAspect: string;
   magicPrompt?: 'ON' | 'OFF' | 'AUTO';
   styleType?: string | null;
+  paletteHex?: string[];
   references?: ReferenceImageBlob[];
   transparentBackground?: boolean;
   variantCount?: number;
@@ -472,6 +517,16 @@ async function generateWithIdeogram(options: {
     }
   } else if (options.styleType) {
     form.append('style_type', options.styleType);
+  }
+
+  const palette = (options.paletteHex || []).filter(Boolean).slice(0, 5);
+  if (palette.length > 0) {
+    form.append(
+      'color_palette',
+      JSON.stringify({
+        members: palette.map((color_hex) => ({ color_hex })),
+      }),
+    );
   }
 
   const endpoint = options.transparentBackground
@@ -695,13 +750,8 @@ export async function generateCreativeImages(
   const referenceMode = input.referenceMode || 'style';
   const transparentBackground = Boolean(input.transparentBackground);
   const variantCount = Math.min(4, Math.max(1, input.variantCount || 1));
-  const enhanced = buildEnhancedPrompt({
-    prompt: userPrompt,
-    style,
-    precision: input.precision,
-    transparentBackground,
-  });
-  const prompt = enhanced.prompt;
+  const analyzeReferences = input.analyzeReferences !== false;
+
   const inlineReferences = decodeInlineReferenceImages(input.referenceImages);
   let fileReferences: ReferenceImageBlob[] = [];
   if (inlineReferences.length === 0 && input.referenceFileIds?.length) {
@@ -711,6 +761,65 @@ export async function generateCreativeImages(
     0,
     MAX_REFERENCE_IMAGES,
   );
+
+  let visionNotes: Awaited<ReturnType<typeof describeCreativeReferenceImages>> = [];
+  let referenceVisualContext: string | undefined;
+  let inferredPalette: string[] = [];
+
+  if (analyzeReferences && references.length > 0) {
+    try {
+      const byok = await userApiKeyRepository.getDecryptedApiKeys(input.ownerUserId);
+      const groqKey = byok.groq?.trim() || config.groqApiKey;
+      visionNotes = await describeCreativeReferenceImages(references, { apiKey: groqKey });
+      if (visionNotes.length > 0) {
+        referenceVisualContext = visionNotes
+          .map((note, index) => {
+            const bits = [
+              `Ref ${index + 1} (${note.filename})${note.isLogoLike ? ' [logo-like]' : ''}: ${note.summary}`,
+            ];
+            if (note.styleNotes.length) bits.push(`Style: ${note.styleNotes.join('; ')}`);
+            if (note.colors.length) bits.push(`Observed colors: ${note.colors.join(', ')}`);
+            if (note.detectedText) bits.push(`Visible text: ${note.detectedText}`);
+            return bits.join(' ');
+          })
+          .join(' | ')
+          .slice(0, 1200);
+
+        inferredPalette = visionNotes.flatMap((n) => n.colors).slice(0, 5);
+      }
+    } catch (error) {
+      logger.warn('Creative reference vision skipped', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const useLogoReference =
+    input.precision?.useLogoReference === true ||
+    (input.precision?.useLogoReference !== false && visionNotes[0]?.isLogoLike === true);
+
+  const precision: PromptPrecision = {
+    ...(input.precision || {}),
+    useLogoReference: useLogoReference || undefined,
+    referenceVisualContext:
+      referenceVisualContext || input.precision?.referenceVisualContext,
+    // Fill missing palette slots from vision when user didn't pick colors
+    primaryColor:
+      input.precision?.primaryColor || inferredPalette[0] || undefined,
+    secondaryColor:
+      input.precision?.secondaryColor || inferredPalette[1] || undefined,
+    accentColor:
+      input.precision?.accentColor || inferredPalette[2] || undefined,
+  };
+
+  const enhanced = buildEnhancedPrompt({
+    prompt: userPrompt,
+    style,
+    precision,
+    transparentBackground,
+  });
+  const prompt = enhanced.prompt;
+
   const dims = resolveDimensions(style, input.aspectRatio);
   const { provider, apiKey, source } = await pickProvider(
     input.ownerUserId,
@@ -733,6 +842,8 @@ export async function generateCreativeImages(
     aspect: dims.label,
     magicPrompt: enhanced.magicPrompt,
     styleType: enhanced.styleType,
+    palette: enhanced.paletteHex,
+    visionRefs: visionNotes.length,
     referenceCount: references.length,
     referenceMode: references.length ? referenceMode : undefined,
     transparentBackground,
@@ -750,6 +861,7 @@ export async function generateCreativeImages(
         ideogramAspect: dims.ideogramAspect,
         magicPrompt: enhanced.magicPrompt,
         styleType: enhanced.styleType,
+        paletteHex: enhanced.paletteHex,
         references,
         transparentBackground,
         variantCount,
@@ -803,7 +915,17 @@ export async function generateCreativeImages(
         enhancedPrompt: prompt,
         magicPrompt: enhanced.magicPrompt,
         styleType: enhanced.styleType || undefined,
-        precision: input.precision || undefined,
+        precision,
+        palette: enhanced.paletteHex,
+        referenceVision: visionNotes.length
+          ? visionNotes.map((n) => ({
+              filename: n.filename,
+              summary: n.summary,
+              colors: n.colors,
+              isLogoLike: n.isLogoLike,
+              model: n.model,
+            }))
+          : undefined,
         aspectRatio: dims.label,
         keySource: source,
         referenceFileIds: references.map((r) => r.fileId),

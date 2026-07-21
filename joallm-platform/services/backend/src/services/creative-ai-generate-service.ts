@@ -234,7 +234,9 @@ export async function loadReferenceImages(
       throw new Error(`Reference must be an image (${row.originalName || fileId})`);
     }
     if (!row.storageKey) {
-      throw new Error(`Reference file has no stored bytes yet (${row.originalName || fileId})`);
+      throw new Error(
+        `Reference “${row.originalName || fileId}” has no stored image bytes. Re-upload it as a reference (older uploads did not retain image files).`,
+      );
     }
     const buffer = await storageProvider.downloadFile(row.storageKey);
     loaded.push({

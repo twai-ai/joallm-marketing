@@ -834,8 +834,12 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
         'mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v', 'flv', 'wmv',
         'mp3', 'wav', 'flac', 'm4a', 'aac', 'ogg', 'opus', 'wma',
       ]);
+      const IMAGE_EXTENSIONS = new Set([
+        'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'svg',
+      ]);
       const fileExt = filename.split('.').pop() ?? '';
       const isMediaFile = MEDIA_MIME_TYPES.has(mimetype) || MEDIA_EXTENSIONS.has(fileExt);
+      const isImageFile = mimetype.startsWith('image/') || IMAGE_EXTENSIONS.has(fileExt);
       const isMarkdownByExtension = filename.endsWith('.md') || filename.endsWith('.markdown');
       const isAllowedMimeType = allowedTypes.some(type => type.toLowerCase() === mimetype);
       
@@ -906,29 +910,48 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
         request,
       });
 
+      // Always retain original bytes for media/images (Creative AI refs, previews, downloads).
+      // Document uploads only keep originals when storeOriginal=true.
+      const shouldPersistOriginal = isMediaFile || isImageFile || storeOriginal;
+      let persistedStorageKey: string | undefined;
+      if (shouldPersistOriginal) {
+        const ext = data.filename.split('.').pop() || (isImageFile ? 'png' : 'bin');
+        const folder = isMediaFile ? 'media' : isImageFile ? 'images' : 'originals';
+        persistedStorageKey = `${folder}/${userId}/${fileId}/original.${ext}`;
+        const objectMeta: Record<string, string> = {
+          'user-id': userId,
+          'file-id': fileId,
+          'original-filename': encodeURIComponent(data.filename),
+          'uploaded-at': new Date().toISOString(),
+        };
+        const storageUrl = await storageProvider.uploadFile(
+          buffer,
+          persistedStorageKey,
+          data.mimetype,
+          objectMeta,
+        );
+        await db.update(files)
+          .set({
+            storageKey: persistedStorageKey,
+            storageUrl,
+            storageProvider: config.storageProvider as 'volume' | 'cloudflare-r2' | 'aws-s3',
+            metadata: {
+              storeOriginal: true,
+              retainedFor: isImageFile ? 'creative_ai_or_preview' : isMediaFile ? 'media' : 'original',
+            } as any,
+          })
+          .where(eq(files.id, fileId));
+        logger.info(`Persisted original bytes for file ${fileId} at ${persistedStorageKey}`);
+      }
+
       // Queue file for background processing if queue is available
       if (isQueueAvailable() && (documentProcessingQueue || mediaProcessingQueue)) {
         try {
           if (isMediaFile) {
-            // Media pipeline: always store the original, then enqueue metadata extraction.
-            // The worker downloads from storage — no buffer in Redis.
-            logger.info(`Storing and queuing media file ${fileId} for metadata extraction`);
-            const ext = data.filename.split('.').pop() || 'bin';
-            const storageKey = `media/${userId}/${fileId}/original.${ext}`;
-            const objectMeta: Record<string, string> = {
-              'user-id': userId,
-              'file-id': fileId,
-              'original-filename': encodeURIComponent(data.filename),
-              'uploaded-at': new Date().toISOString(),
-            };
-            const storageUrl = await storageProvider.uploadFile(buffer, storageKey, data.mimetype, objectMeta);
+            // Media pipeline: original already stored above; enqueue metadata extraction.
+            logger.info(`Queuing media file ${fileId} for metadata extraction`);
             await db.update(files)
-              .set({
-                storageKey,
-                storageUrl,
-                storageProvider: config.storageProvider as 'volume' | 'cloudflare-r2' | 'aws-s3',
-                status: 'processing',
-              })
+              .set({ status: 'processing' })
               .where(eq(files.id, fileId));
 
             if (mediaProcessingQueue) {
@@ -938,6 +961,11 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
                 jobType: 'extract_metadata',
               });
             }
+          } else if (isImageFile) {
+            // Images are retained for Creative AI / assets — no RAG pipeline required.
+            await db.update(files)
+              .set({ status: 'processed' })
+              .where(eq(files.id, fileId));
           } else {
             logger.info(`Queuing file ${fileId} for background processing`);
             await documentProcessingQueue!.add('process-document' as any, {
@@ -947,7 +975,7 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
               filename: data.filename,
               mimetype: data.mimetype,
               size: data.file.bytesRead,
-              storeOriginal,
+              storeOriginal: shouldPersistOriginal,
             });
           }
           
@@ -959,12 +987,15 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
             filename: data.filename,
             name: data.filename, // For compatibility
             size: data.file.bytesRead,
-            status: 'processing',
+            status: isImageFile ? 'processed' : 'processing',
             url: `/api/files/${fileId}/download`, // URL for attachment reference
-            message: 'File uploaded and queued for processing',
+            message: isImageFile
+              ? 'Image uploaded and retained for creatives'
+              : 'File uploaded and queued for processing',
             // Include format support information
             supported: extensionCheck.status || 'supported',
-            warning: extensionCheck.warning
+            warning: extensionCheck.warning,
+            storageKey: persistedStorageKey,
           };
 
           reply.send(response);
@@ -992,7 +1023,12 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
           reply.send(response);
         }
       } else {
-        // Queue not available - return success but indicate synchronous processing needed
+        // Queue not available — originals for images/media already persisted above.
+        if (isImageFile && persistedStorageKey) {
+          await db.update(files)
+            .set({ status: 'processed' })
+            .where(eq(files.id, fileId));
+        }
         logger.warn(`Queue not available for file ${fileId} - document will need manual processing`);
         
         const response = {
@@ -1000,9 +1036,12 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
           id: fileId, // For compatibility with frontend
           filename: data.filename,
           size: data.file.bytesRead,
-          status: 'uploaded',
+          status: isImageFile && persistedStorageKey ? 'processed' : 'uploaded',
           url: `/api/files/${fileId}/download`, // URL for attachment reference
-          message: 'File uploaded successfully. Background processing unavailable - use reprocess endpoint.'
+          message: isImageFile && persistedStorageKey
+            ? 'Image uploaded and retained for creatives'
+            : 'File uploaded successfully. Background processing unavailable - use reprocess endpoint.',
+          storageKey: persistedStorageKey,
         };
 
         reply.send(response);
@@ -1983,9 +2022,9 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
         return reply.status(500).send({ error: 'Clip created but output record was not found' });
       }
 
-      const downloadUrl = typeof storageProvider.getPresignedUrl === 'function'
-        ? await storageProvider.getPresignedUrl(renderOutput.storageKey, 900)
-        : storageProvider.getFileUrl(renderOutput.storageKey);
+      // Always return an authenticated API path so volume + cloud storage both work
+      // from the frontend (Open clip uses an auth-bearing fetch, not a bare /storage URL).
+      const downloadUrl = `/api/files/${fileId}/clips/${renderOutputId}/download`;
 
       return reply.send({
         renderOutputId,
@@ -1996,6 +2035,7 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
         duration,
         status: renderOutput.status,
         downloadUrl,
+        sourceInsightId: sourceInsightId ?? null,
       });
     } catch (error) {
       await db.update(editPlans)
@@ -2016,6 +2056,147 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
         message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
+  });
+
+  // List rendered clips for a media file
+  fastify.get('/:fileId/clips', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'List rendered clips for a media file',
+      tags: ['files'],
+      params: { type: 'object', properties: { fileId: { type: 'string' } }, required: ['fileId'] },
+    },
+  }, async (request, reply) => {
+    const { fileId } = request.params as { fileId: string };
+    const user = (request as any).user;
+    const userId = user?.id;
+
+    const [file] = await db.select().from(files).where(eq(files.id, fileId)).limit(1);
+    if (!file) return reply.status(404).send({ error: 'File not found' });
+    if (file.userId && file.userId !== userId && user?.role !== 'admin') {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
+
+    const rows = await db
+      .select({
+        renderOutputId: renderOutputs.id,
+        editPlanId: renderOutputs.editPlanId,
+        format: renderOutputs.format,
+        duration: renderOutputs.duration,
+        sizeBytes: renderOutputs.sizeBytes,
+        status: renderOutputs.status,
+        createdAt: renderOutputs.createdAt,
+        completedAt: renderOutputs.completedAt,
+        title: editPlans.title,
+        steps: editPlans.steps,
+        metadata: editPlans.metadata,
+      })
+      .from(renderOutputs)
+      .innerJoin(editPlans, eq(renderOutputs.editPlanId, editPlans.id))
+      .where(and(
+        eq(renderOutputs.fileId, fileId),
+        eq(renderOutputs.format, 'mp4'),
+        eq(renderOutputs.status, 'done'),
+      ))
+      .orderBy(desc(renderOutputs.createdAt));
+
+    const clips = rows.map((row) => {
+      const clipStep = Array.isArray(row.steps)
+        ? row.steps.find((step) => step?.stepType === 'clip')
+        : undefined;
+      const startTime = typeof clipStep?.config?.startTime === 'number' ? clipStep.config.startTime : null;
+      const endTime = typeof clipStep?.config?.endTime === 'number' ? clipStep.config.endTime : null;
+      const sourceInsightId =
+        (typeof clipStep?.config?.sourceInsightId === 'string' && clipStep.config.sourceInsightId)
+        || (typeof row.metadata?.sourceInsightId === 'string' ? row.metadata.sourceInsightId : null);
+
+      return {
+        renderOutputId: row.renderOutputId,
+        editPlanId: row.editPlanId,
+        title: row.title,
+        startTime,
+        endTime,
+        duration: row.duration ?? (startTime !== null && endTime !== null ? endTime - startTime : null),
+        sizeBytes: row.sizeBytes,
+        status: row.status,
+        sourceInsightId,
+        createdAt: row.createdAt,
+        completedAt: row.completedAt,
+        downloadUrl: `/api/files/${fileId}/clips/${row.renderOutputId}/download`,
+      };
+    });
+
+    return reply.send({ clips, total: clips.length });
+  });
+
+  // Authenticated clip download (volume streams; R2/S3 redirect to presigned URL)
+  fastify.get('/:fileId/clips/:renderOutputId/download', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Download a rendered media clip',
+      tags: ['files'],
+      params: {
+        type: 'object',
+        properties: {
+          fileId: { type: 'string' },
+          renderOutputId: { type: 'string' },
+        },
+        required: ['fileId', 'renderOutputId'],
+      },
+    },
+  }, async (request, reply) => {
+    const { fileId, renderOutputId } = request.params as { fileId: string; renderOutputId: string };
+    const user = (request as any).user;
+    const userId = user?.id;
+
+    const [file] = await db.select().from(files).where(eq(files.id, fileId)).limit(1);
+    if (!file) return reply.status(404).send({ error: 'File not found' });
+    if (file.userId && file.userId !== userId && user?.role !== 'admin') {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
+
+    const [renderOutput] = await db
+      .select()
+      .from(renderOutputs)
+      .where(and(
+        eq(renderOutputs.id, renderOutputId),
+        eq(renderOutputs.fileId, fileId),
+      ))
+      .limit(1);
+
+    if (!renderOutput) {
+      return reply.status(404).send({ error: 'Clip not found' });
+    }
+    if (renderOutput.status !== 'done' || !renderOutput.storageKey) {
+      return reply.status(409).send({
+        error: 'Clip not ready',
+        message: renderOutput.error || `Clip status is ${renderOutput.status}`,
+      });
+    }
+
+    const [plan] = await db
+      .select({ title: editPlans.title })
+      .from(editPlans)
+      .where(eq(editPlans.id, renderOutput.editPlanId))
+      .limit(1);
+
+    const safeTitle = (plan?.title || 'clip')
+      .replace(/[^\w.\- ]+/g, '')
+      .trim()
+      .slice(0, 80) || 'clip';
+    const filename = `${safeTitle}.mp4`;
+    const disposition = (request.query as { disposition?: string })?.disposition === 'inline'
+      ? 'inline'
+      : 'attachment';
+
+    // Always stream through the API so browser auth-fetch works for volume and R2/S3
+    // (presigned redirects break CORS when opened via fetch + Authorization).
+    const fileBuffer = await storageProvider.downloadFile(renderOutput.storageKey);
+    return reply
+      .header('Content-Type', 'video/mp4')
+      .header('Content-Disposition', `${disposition}; filename="${encodeURIComponent(filename)}"`)
+      .header('Content-Length', String(fileBuffer.length))
+      .send(fileBuffer);
   });
 
 }

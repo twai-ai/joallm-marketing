@@ -403,6 +403,7 @@ export function AssetsPanel({
         const uploaded = await apiClient.uploadFile<{ fileId?: string; id?: string }>(
           API_ENDPOINTS.files.upload,
           file,
+          { storeOriginal: true },
         );
         const fileId = uploaded.fileId || uploaded.id;
         if (!fileId) throw new Error(`Upload failed for ${file.name}`);
@@ -447,6 +448,7 @@ export function AssetsPanel({
         const uploaded = await apiClient.uploadFile<{ fileId?: string; id?: string }>(
           API_ENDPOINTS.files.upload,
           file,
+          { storeOriginal: true },
         );
         const fileId = uploaded.fileId || uploaded.id;
         if (!fileId) {

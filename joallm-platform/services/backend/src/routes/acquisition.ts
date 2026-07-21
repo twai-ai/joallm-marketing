@@ -650,6 +650,16 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
     aspectRatio: z.string().max(20).optional().nullable(),
     creativeProjectId: z.string().uuid().optional(),
     referenceFileIds: z.array(z.string().uuid()).max(4).optional(),
+    referenceImages: z
+      .array(
+        z.object({
+          filename: z.string().min(1).max(200),
+          contentType: z.string().min(3).max(100),
+          base64: z.string().min(32).max(12_000_000),
+        }),
+      )
+      .max(4)
+      .optional(),
     referenceMode: z.enum(['style', 'edit']).optional(),
     transparentBackground: z.boolean().optional(),
     variantCount: z.number().int().min(1).max(4).optional(),
@@ -690,6 +700,7 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         aspectRatio: body.aspectRatio,
         titleHint: title,
         referenceFileIds: body.referenceFileIds,
+        referenceImages: body.referenceImages,
         referenceMode: body.referenceMode || 'style',
         transparentBackground: body.transparentBackground,
         variantCount: body.variantCount || 1,

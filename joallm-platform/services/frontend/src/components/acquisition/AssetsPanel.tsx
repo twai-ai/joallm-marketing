@@ -106,6 +106,28 @@ const QUALITY_OPTIONS: { value: ImageGenerationQuality; label: string }[] = [
 
 type ProviderChoice = 'auto' | 'ideogram' | 'flux';
 
+type SessionReference = {
+  localId: string;
+  name: string;
+  contentType: string;
+  base64: string;
+  fileId?: string;
+};
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const base64 = result.includes(',') ? result.split(',')[1] || '' : result;
+      if (!base64) reject(new Error(`Could not read ${file.name}`));
+      else resolve(base64);
+    };
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
 function buildDefaultPrompt(
   programId: string,
   programName: string,
@@ -172,7 +194,7 @@ export function AssetsPanel({
   const [transparentBackground, setTransparentBackground] = useState(false);
   const [variantCount, setVariantCount] = useState(1);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
+  const [sessionRefs, setSessionRefs] = useState<SessionReference[]>([]);
   const [referenceMode, setReferenceMode] = useState<'style' | 'edit'>('style');
   const [uploadingRefs, setUploadingRefs] = useState(false);
   const refInputRef = useRef<HTMLInputElement>(null);
@@ -339,8 +361,14 @@ export function AssetsPanel({
           providerOverride: genProvider,
           aspectRatio: genSize,
           creativeProjectId: targetProjectId || undefined,
-          referenceFileIds: referenceFileIds.length ? referenceFileIds : undefined,
-          referenceMode: referenceFileIds.length ? referenceMode : undefined,
+          referenceImages: sessionRefs.length
+            ? sessionRefs.map((ref) => ({
+                filename: ref.name,
+                contentType: ref.contentType,
+                base64: ref.base64,
+              }))
+            : undefined,
+          referenceMode: sessionRefs.length ? referenceMode : undefined,
           transparentBackground: transparentBackground || undefined,
           variantCount,
           kind:
@@ -370,23 +398,42 @@ export function AssetsPanel({
     }
   };
 
-  const toggleReferenceFile = (fileId: string) => {
-    setReferenceFileIds((current) => {
-      if (current.includes(fileId)) {
-        return current.filter((id) => id !== fileId);
-      }
-      if (current.length >= 4) {
-        showError('You can attach up to 4 reference images');
-        return current;
-      }
-      return [...current, fileId];
+  const removeSessionRef = (localId: string) => {
+    setSessionRefs((current) => current.filter((ref) => ref.localId !== localId));
+  };
+
+  const addSessionRefFromFile = async (file: File) => {
+    const base64 = await readFileAsBase64(file);
+    let fileId: string | undefined;
+    try {
+      const uploaded = await apiClient.uploadFile<{
+        fileId?: string;
+        id?: string;
+        storageKey?: string;
+      }>(API_ENDPOINTS.files.upload, file, { storeOriginal: true });
+      fileId = uploaded.fileId || uploaded.id;
+    } catch {
+      // Inline base64 is enough for generate; upload is best-effort persistence.
+    }
+    setSessionRefs((current) => {
+      if (current.length >= 4) return current;
+      return [
+        ...current,
+        {
+          localId: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: file.name,
+          contentType: file.type || 'image/png',
+          base64,
+          fileId,
+        },
+      ];
     });
   };
 
   const handleUploadReferences = async (fileList: FileList | File[] | null) => {
     const files = fileList ? Array.from(fileList) : [];
     if (!files.length) return;
-    const room = 4 - referenceFileIds.length;
+    const room = 4 - sessionRefs.length;
     if (room <= 0) {
       showError('You can attach up to 4 reference images');
       return;
@@ -394,29 +441,60 @@ export function AssetsPanel({
 
     setUploadingRefs(true);
     try {
-      const nextIds = [...referenceFileIds];
+      let added = 0;
       for (const file of files.slice(0, room)) {
         if (!file.type.startsWith('image/')) {
           showError(`${file.name} is not an image`);
           continue;
         }
-        const uploaded = await apiClient.uploadFile<{ fileId?: string; id?: string }>(
-          API_ENDPOINTS.files.upload,
-          file,
-          { storeOriginal: true },
-        );
-        const fileId = uploaded.fileId || uploaded.id;
-        if (!fileId) throw new Error(`Upload failed for ${file.name}`);
-        if (!nextIds.includes(fileId)) nextIds.push(fileId);
+        await addSessionRefFromFile(file);
+        added += 1;
       }
-      setReferenceFileIds(nextIds.slice(0, 4));
-      showSuccess(
-        nextIds.length === referenceFileIds.length
-          ? 'No new references added'
-          : `Added ${nextIds.length - referenceFileIds.length} reference image(s)`,
-      );
+      showSuccess(added ? `Added ${added} reference image(s)` : 'No new references added');
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Reference upload failed');
+    } finally {
+      setUploadingRefs(false);
+    }
+  };
+
+  const handleUseAssetAsReference = async (asset: GrowthMarketingAsset) => {
+    const fileId = asset.fileIds[0];
+    if (!fileId) return;
+    if (sessionRefs.length >= 4) {
+      showError('You can attach up to 4 reference images');
+      return;
+    }
+    if (sessionRefs.some((ref) => ref.fileId === fileId)) {
+      setSessionRefs((current) => current.filter((ref) => ref.fileId !== fileId));
+      return;
+    }
+    setUploadingRefs(true);
+    try {
+      const blob = await fetchAuthenticatedBlob(API_ENDPOINTS.files.download(fileId));
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('Asset is not an image');
+      }
+      const buffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+      setSessionRefs((current) => [
+        ...current,
+        {
+          localId: `asset-${fileId}`,
+          name: asset.title || 'reference.png',
+          contentType: blob.type || 'image/png',
+          base64,
+          fileId,
+        },
+      ]);
+      showSuccess('Reference attached');
+    } catch {
+      showError(
+        'This asset has no stored image bytes. Clear references and use Upload references with your logo file instead.',
+      );
     } finally {
       setUploadingRefs(false);
     }
@@ -764,7 +842,7 @@ export function AssetsPanel({
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={uploadingRefs || generating || referenceFileIds.length >= 4}
+                disabled={uploadingRefs || generating || sessionRefs.length >= 4}
                 onClick={() => refInputRef.current?.click()}
                 className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-4 py-2 text-sm font-medium text-teal-900 hover:border-teal-400 disabled:opacity-60"
               >
@@ -775,10 +853,10 @@ export function AssetsPanel({
                 )}
                 Upload references
               </button>
-              {referenceFileIds.length > 0 && (
+              {sessionRefs.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setReferenceFileIds([])}
+                  onClick={() => setSessionRefs([])}
                   className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
                 >
                   Clear references
@@ -798,29 +876,29 @@ export function AssetsPanel({
               />
             </div>
 
-            {referenceFileIds.length > 0 && (
+            <p className="mt-2 text-[11px] text-slate-500">
+              Tip: always use <strong>Upload references</strong> for logos. Older campaign assets may
+              not have stored image bytes.
+            </p>
+
+            {sessionRefs.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {referenceFileIds.map((fileId, index) => (
-                  <a
-                    key={fileId}
-                    href={API_ENDPOINTS.files.download(fileId)}
-                    target="_blank"
-                    rel="noreferrer"
+                {sessionRefs.map((ref, index) => (
+                  <span
+                    key={ref.localId}
                     className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-900"
                   >
-                    Ref {index + 1}
+                    Ref {index + 1}: {ref.name.slice(0, 24)}
+                    {ref.name.length > 24 ? '…' : ''}
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        toggleReferenceFile(fileId);
-                      }}
+                      onClick={() => removeSessionRef(ref.localId)}
                       className="text-slate-400 hover:text-rose-600"
                       aria-label="Remove reference"
                     >
                       ×
                     </button>
-                  </a>
+                  </span>
                 ))}
               </div>
             )}
@@ -828,7 +906,7 @@ export function AssetsPanel({
             {assets.some((a) => a.fileIds[0]) && (
               <div className="mt-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Or pick from campaign assets
+                  Or try campaign assets (only if bytes are stored)
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {assets
@@ -836,12 +914,12 @@ export function AssetsPanel({
                     .slice(0, 12)
                     .map((asset) => {
                       const fileId = asset.fileIds[0];
-                      const selected = referenceFileIds.includes(fileId);
+                      const selected = sessionRefs.some((ref) => ref.fileId === fileId);
                       return (
                         <button
                           key={asset.id}
                           type="button"
-                          onClick={() => toggleReferenceFile(fileId)}
+                          onClick={() => void handleUseAssetAsReference(asset)}
                           className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
                             selected
                               ? 'bg-teal-600 text-white ring-teal-600'
@@ -1278,15 +1356,17 @@ export function AssetsPanel({
                     {fileId && (
                       <button
                         type="button"
-                        onClick={() => toggleReferenceFile(fileId)}
+                        onClick={() => void handleUseAssetAsReference(asset)}
                         className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium ${
-                          referenceFileIds.includes(fileId)
+                          sessionRefs.some((ref) => ref.fileId === fileId)
                             ? 'border-teal-300 bg-teal-50 text-teal-900'
                             : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300'
                         }`}
                       >
                         <Sparkles className="h-3 w-3" />
-                        {referenceFileIds.includes(fileId) ? 'Reference on' : 'Use as reference'}
+                        {sessionRefs.some((ref) => ref.fileId === fileId)
+                          ? 'Reference on'
+                          : 'Use as reference'}
                       </button>
                     )}
                     <button

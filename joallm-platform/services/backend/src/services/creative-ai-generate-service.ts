@@ -36,6 +36,15 @@ export type GenerateImageInput = {
   /** Platform file ids used as style / edit references */
   referenceFileIds?: string[];
   /**
+   * Inline reference images (base64) — preferred for Creative AI when
+   * Platform file retention is unavailable or still deploying.
+   */
+  referenceImages?: Array<{
+    filename: string;
+    contentType: string;
+    base64: string;
+  }>;
+  /**
    * style — Ideogram style_reference_images (brand/look match)
    * edit — FLUX input_image remix / composition
    */
@@ -224,19 +233,20 @@ export async function loadReferenceImages(
     .where(and(eq(files.userId, ownerUserId), inArray(files.id, ids)));
   const byId = new Map(rows.map((row) => [row.id, row]));
   const loaded: ReferenceImageBlob[] = [];
+  const missing: string[] = [];
 
   for (const fileId of ids) {
     const row = byId.get(fileId);
     if (!row) {
-      throw new Error(`Reference file not found: ${fileId}`);
+      missing.push(fileId);
+      continue;
     }
     if (!row.mimetype?.startsWith('image/')) {
       throw new Error(`Reference must be an image (${row.originalName || fileId})`);
     }
     if (!row.storageKey) {
-      throw new Error(
-        `Reference “${row.originalName || fileId}” has no stored image bytes. Re-upload it as a reference (older uploads did not retain image files).`,
-      );
+      missing.push(row.originalName || fileId);
+      continue;
     }
     const buffer = await storageProvider.downloadFile(row.storageKey);
     loaded.push({
@@ -247,7 +257,40 @@ export async function loadReferenceImages(
     });
   }
 
+  if (loaded.length === 0 && missing.length > 0) {
+    throw new Error(
+      `Reference “${missing[0]}” has no stored image bytes. Clear references and re-upload the logo via Upload references (do not reuse older campaign assets).`,
+    );
+  }
+
   return loaded;
+}
+
+export function decodeInlineReferenceImages(
+  images:
+    | Array<{
+        filename: string;
+        contentType: string;
+        base64: string;
+      }>
+    | undefined,
+): ReferenceImageBlob[] {
+  if (!images?.length) return [];
+  return images.slice(0, MAX_REFERENCE_IMAGES).map((image, index) => {
+    const raw = image.base64.includes(',')
+      ? image.base64.split(',').pop() || ''
+      : image.base64;
+    const buffer = Buffer.from(raw, 'base64');
+    if (!buffer.length) {
+      throw new Error(`Inline reference “${image.filename || index + 1}” is empty`);
+    }
+    return {
+      fileId: `inline-${index + 1}`,
+      filename: image.filename || `reference-${index + 1}.png`,
+      contentType: image.contentType || 'image/png',
+      buffer,
+    };
+  });
 }
 
 function toBase64DataUrl(blob: ReferenceImageBlob): string {
@@ -515,7 +558,15 @@ export async function generateCreativeImages(
   const referenceMode = input.referenceMode || 'style';
   const transparentBackground = Boolean(input.transparentBackground);
   const variantCount = Math.min(4, Math.max(1, input.variantCount || 1));
-  const references = await loadReferenceImages(input.ownerUserId, input.referenceFileIds);
+  const inlineReferences = decodeInlineReferenceImages(input.referenceImages);
+  let fileReferences: ReferenceImageBlob[] = [];
+  if (inlineReferences.length === 0 && input.referenceFileIds?.length) {
+    fileReferences = await loadReferenceImages(input.ownerUserId, input.referenceFileIds);
+  }
+  const references = (inlineReferences.length ? inlineReferences : fileReferences).slice(
+    0,
+    MAX_REFERENCE_IMAGES,
+  );
   const dims = resolveDimensions(style, input.aspectRatio);
   const { provider, apiKey, source } = await pickProvider(
     input.ownerUserId,

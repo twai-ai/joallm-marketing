@@ -73,7 +73,34 @@ function toDateFromUnixSeconds(value?: string): Date {
   return new Date(parsed * 1000);
 }
 
-async function resolveOwnerUserId(preferredOwnerUserId?: string): Promise<string> {
+/**
+ * Resolve which JoaLLM user owns inbound Meta events at runtime.
+ * Prefer the Studio-connected source for this phone_number_id so
+ * ACQUISITION_DEFAULT_OWNER_USER_ID is optional.
+ */
+async function resolveOwnerUserId(options?: {
+  preferredOwnerUserId?: string;
+  phoneNumberId?: string;
+}): Promise<string> {
+  const preferredOwnerUserId = options?.preferredOwnerUserId;
+  const phoneNumberId = options?.phoneNumberId || config.metaPhoneNumberId;
+
+  if (phoneNumberId) {
+    const [boundSource] = await db
+      .select({ ownerUserId: acquisitionSourceConnections.ownerUserId })
+      .from(acquisitionSourceConnections)
+      .where(
+        and(
+          eq(acquisitionSourceConnections.provider, META_PROVIDER),
+          eq(acquisitionSourceConnections.externalAccountId, phoneNumberId),
+        ),
+      )
+      .limit(1);
+    if (boundSource?.ownerUserId) {
+      return boundSource.ownerUserId;
+    }
+  }
+
   if (preferredOwnerUserId) {
     const [existing] = await db
       .select({ id: users.id })
@@ -91,6 +118,17 @@ async function resolveOwnerUserId(preferredOwnerUserId?: string): Promise<string
       .where(eq(users.id, envOwner))
       .limit(1);
     if (existing) return existing.id;
+  }
+
+  // Any previously connected Meta WhatsApp source (most recently updated)
+  const [recentSource] = await db
+    .select({ ownerUserId: acquisitionSourceConnections.ownerUserId })
+    .from(acquisitionSourceConnections)
+    .where(eq(acquisitionSourceConnections.provider, META_PROVIDER))
+    .orderBy(desc(acquisitionSourceConnections.updatedAt))
+    .limit(1);
+  if (recentSource?.ownerUserId) {
+    return recentSource.ownerUserId;
   }
 
   const [admin] = await db
@@ -111,8 +149,10 @@ export async function ensureMetaSourceConnection(options: {
   ownerUserId: string;
   phoneNumberId?: string;
   displayPhoneNumber?: string;
+  /** When true (Studio Connect), reassign source ownership to the logged-in user. */
+  claimOwnership?: boolean;
 }) {
-  const { ownerUserId, phoneNumberId, displayPhoneNumber } = options;
+  const { ownerUserId, phoneNumberId, displayPhoneNumber, claimOwnership = false } = options;
 
   // Studio-1: Platform Connector → Studio Channel → Publishing Profile
   let connectorId: string | null = null;
@@ -147,12 +187,27 @@ export async function ensureMetaSourceConnection(options: {
       )
       .limit(1);
     if (byExternal) {
-      if (connectorId || channelId) {
+      const shouldClaim = claimOwnership && byExternal.ownerUserId !== ownerUserId;
+      if (connectorId || channelId || shouldClaim || displayPhoneNumber) {
         const [linked] = await db
           .update(acquisitionSourceConnections)
           .set({
+            ownerUserId: shouldClaim ? ownerUserId : byExternal.ownerUserId,
             connectorId: connectorId || byExternal.connectorId,
             channelId: channelId || byExternal.channelId,
+            name: displayPhoneNumber
+              ? `WhatsApp (${displayPhoneNumber})`
+              : byExternal.name,
+            status: 'active',
+            config: {
+              ...((byExternal.config as Record<string, unknown>) || {}),
+              displayPhoneNumber:
+                displayPhoneNumber ||
+                (byExternal.config as { displayPhoneNumber?: string } | null)?.displayPhoneNumber ||
+                null,
+              connectorId: connectorId || byExternal.connectorId,
+              channelId: channelId || byExternal.channelId,
+            },
             updatedAt: new Date(),
           })
           .where(eq(acquisitionSourceConnections.id, byExternal.id))
@@ -317,16 +372,22 @@ export async function ingestMetaWhatsAppWebhook(options: {
   ownerUserId?: string;
 }) {
   const { payload, headers, ownerUserId: preferredOwner } = options;
-  const ownerUserId = await resolveOwnerUserId(preferredOwner);
 
   const firstChange = payload.entry?.[0]?.changes?.[0]?.value;
   const phoneNumberId = firstChange?.metadata?.phone_number_id || config.metaPhoneNumberId;
   const displayPhoneNumber = firstChange?.metadata?.display_phone_number;
 
+  // Runtime owner: bound Meta source for this phone_number_id → preferred → env → fallbacks
+  const ownerUserId = await resolveOwnerUserId({
+    preferredOwnerUserId: preferredOwner,
+    phoneNumberId,
+  });
+
   const sourceConnection = await ensureMetaSourceConnection({
     ownerUserId,
     phoneNumberId,
     displayPhoneNumber,
+    claimOwnership: false,
   });
 
   const payloadHash = hashPayload(payload);

@@ -142,6 +142,7 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
       ownerUserId: userId,
       phoneNumberId: body.phoneNumberId || config.metaPhoneNumberId,
       displayPhoneNumber: body.displayPhoneNumber,
+      claimOwnership: true,
     });
     return reply.status(201).send({ success: true, data: source });
   });
@@ -1128,6 +1129,8 @@ export async function metaWebhookRoutes(fastify: FastifyInstance, _options: Fast
 
       logger.info('Meta webhook event received on Railway backend');
 
+      // Owner is resolved at runtime from the Studio-connected Meta source
+      // (phone_number_id). Env ACQUISITION_DEFAULT_OWNER_USER_ID is only a soft fallback.
       const result = await enqueueOrIngestMetaWebhook({
         payload,
         headers: {

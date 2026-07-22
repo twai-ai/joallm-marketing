@@ -145,7 +145,7 @@ export function AcquisitionIntelligencePage() {
     setConnecting(true);
     try {
       await apiClient.post('/api/studio/channels/whatsapp', {});
-      showSuccess('WhatsApp Channel + Meta Connector + acquisition source ready');
+      showSuccess('WhatsApp bound to your account — inbound messages will appear here');
       await load();
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to connect WhatsApp channel');
@@ -157,20 +157,20 @@ export function AcquisitionIntelligencePage() {
   const setupSteps = [
     {
       n: '1',
-      title: 'Ensure Channel stack',
-      body: 'Creates WhatsApp Channel → Meta Connector → acquisition source on the Platform.',
+      title: 'Connect WhatsApp to your account',
+      body: 'One click binds Meta WhatsApp to your logged-in user. Inbound messages then land on your Acquisition timeline — no UUID env var required.',
       done: Boolean(whatsappChannel || metaSource),
     },
     {
       n: '2',
-      title: 'Connect Meta credentials',
-      body: 'Add WhatsApp Business / Meta tokens in your environment or connector secrets so ingest can authenticate.',
+      title: 'Meta webhook + tokens',
+      body: 'Point Meta at /api/meta/webhook and set META_ACCESS_TOKEN + META_PHONE_NUMBER_ID on the Railway backend.',
       done: metaSource?.status === 'active',
     },
     {
       n: '3',
-      title: 'Forward inbound events',
-      body: 'Point Meta webhooks at the ATRISI ingest endpoint so messages become Acquisition Events.',
+      title: 'Send a live WhatsApp message',
+      body: 'New messages (not old history) become Acquisition Events under your account at runtime.',
       done: (overview?.events ?? 0) > 0,
     },
     {
@@ -214,7 +214,7 @@ export function AcquisitionIntelligencePage() {
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm disabled:cursor-not-allowed"
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            {whatsappChannel || metaSource ? 'Ensure WhatsApp channel stack' : 'Connect WhatsApp channel'}
+            {whatsappChannel || metaSource ? 'Re-bind WhatsApp to my account' : 'Connect WhatsApp to my account'}
           </button>
         </>
       }
@@ -242,7 +242,8 @@ export function AcquisitionIntelligencePage() {
       <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-950">Getting started</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Follow the Channel → Connector → Event → Person path. Step 1 is one click; steps 2–3 need Meta wiring.
+          Connect while logged in to bind Meta to your user at runtime. Then verify the webhook and
+          send a test WhatsApp message — ownership follows the connected source, not a static UUID.
         </p>
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {setupSteps.map((step) => (

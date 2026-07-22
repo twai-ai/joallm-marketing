@@ -60,6 +60,7 @@ export async function studioRoutes(fastify: FastifyInstance, _options: FastifyPl
         ownerUserId: userId,
         phoneNumberId: body.phoneNumberId || config.metaPhoneNumberId,
         displayPhoneNumber: body.displayPhoneNumber,
+        claimOwnership: true,
       });
 
       return reply.status(201).send({

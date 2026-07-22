@@ -65,6 +65,7 @@ const configSchema = z.object({
   metaPhoneNumberId: z.string().optional(),
   metaAppSecret: z.string().optional(),
   metaEnableAutoReply: z.boolean().default(true),
+  // Soft fallback only — prefer Studio-connected Meta source (phone_number_id) at runtime.
   acquisitionDefaultOwnerUserId: z.preprocess(
     (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
     z.string().uuid().optional(),

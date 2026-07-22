@@ -17,13 +17,10 @@ import {
   type CreativeSizeId,
 } from '../../constants/creativeSizes';
 import {
-  CREATIVE_PALETTE_TYPES,
-  getPaletteType,
-  type CreativePaletteTypeId,
-} from '../../constants/creativePalettes';
-import {
-  BRAND_THEME_JSON_EXAMPLE,
+  buildBrandThemeFromForm,
+  DEFAULT_BRAND_THEME_FORM,
   parseBrandThemeJson,
+  type BrandThemeFormState,
   type BrandThemeInput,
 } from '../../constants/creativeBrandTheme';
 import { apiClient } from '../../utils/api-client';
@@ -36,6 +33,7 @@ import {
 } from '../../utils/downloadFile';
 import { showError, showSuccess } from '../../utils/toast';
 import { CHANNEL_OPTIONS } from './PublishingPanel';
+import { OptimizedGenerationPanel } from './OptimizedGenerationPanel';
 
 function kindFromFile(file: File): GrowthAssetKind {
   if (file.type.startsWith('image/')) return 'image';
@@ -134,12 +132,6 @@ const STYLE_OPTIONS: { value: ImageGenerationStyle; label: string }[] = [
   { value: 'photo_realistic', label: 'Photoreal' },
   { value: 'logo', label: 'Logo mark' },
   { value: 'other', label: 'Other' },
-];
-
-const QUALITY_OPTIONS: { value: ImageGenerationQuality; label: string }[] = [
-  { value: 'draft', label: 'Draft (fast, lower res)' },
-  { value: 'standard', label: 'Standard (high res)' },
-  { value: 'premium', label: 'Premium (max res)' },
 ];
 
 type ProviderChoice = 'auto' | 'ideogram' | 'flux';
@@ -268,7 +260,8 @@ export function AssetsPanel({
   const [variantCount, setVariantCount] = useState(1);
   const [briefHeadline, setBriefHeadline] = useState('');
   const [briefCta, setBriefCta] = useState('');
-  const [paletteType, setPaletteType] = useState<CreativePaletteTypeId>('institutional_navy');
+  const [brandThemeForm, setBrandThemeForm] = useState<BrandThemeFormState>(DEFAULT_BRAND_THEME_FORM);
+  const [optimizedGenerationEnabled, setOptimizedGenerationEnabled] = useState(true);
   const [brandThemeJson, setBrandThemeJson] = useState('');
   const [brandThemeError, setBrandThemeError] = useState<string | null>(null);
   const [useLogoReference, setUseLogoReference] = useState(true);
@@ -414,6 +407,8 @@ export function AssetsPanel({
     }
 
     let brandTheme: BrandThemeInput | undefined;
+    let paletteType = brandThemeForm.paletteType;
+
     if (brandThemeJson.trim()) {
       const parsed = parseBrandThemeJson(brandThemeJson);
       if (parsed.error || !parsed.theme) {
@@ -422,6 +417,19 @@ export function AssetsPanel({
         return;
       }
       brandTheme = parsed.theme;
+      paletteType = 'auto';
+      setBrandThemeError(null);
+    } else {
+      const built = buildBrandThemeFromForm(brandThemeForm, {
+        useOptimized: optimizedGenerationEnabled,
+      });
+      if (built.error) {
+        setBrandThemeError(built.error);
+        showError(built.error);
+        return;
+      }
+      brandTheme = built.brandTheme;
+      paletteType = built.paletteType;
       setBrandThemeError(null);
     }
 
@@ -893,118 +901,46 @@ export function AssetsPanel({
             </span>
           </label>
 
-          <div className="rounded-2xl border border-teal-200 bg-teal-50/40 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-950">Exact text & palette</h3>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Headline/CTA for exact text. Optional brand theme JSON overrides the palette
-                  dropdown and steers mood, layout, and imagery.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const defaults = briefDefaults(programId, programName, selectedCampaign);
-                  setBriefHeadline(defaults.headline);
-                  setBriefCta(defaults.cta);
-                }}
-                className="rounded-full border border-teal-200 bg-white px-3 py-1.5 text-xs font-medium text-teal-900 hover:border-teal-400"
-              >
-                Prefill from program
-              </button>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="block text-sm">
-                <span className="text-xs font-medium text-slate-600">Headline (exact)</span>
-                <input
-                  value={briefHeadline}
-                  onChange={(e) => setBriefHeadline(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-                  placeholder={programName}
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-xs font-medium text-slate-600">CTA (exact)</span>
-                <input
-                  value={briefCta}
-                  onChange={(e) => setBriefCta(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-                  placeholder="Apply now"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-xs font-medium text-slate-600">Palette type</span>
-                <select
-                  value={paletteType}
-                  onChange={(e) => setPaletteType(e.target.value as CreativePaletteTypeId)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-                >
-                  {CREATIVE_PALETTE_TYPES.map((palette) => (
-                    <option key={palette.id} value={palette.id}>
-                      {palette.label}
-                    </option>
-                  ))}
-                </select>
-                {(() => {
-                  const selected = getPaletteType(paletteType);
-                  if (!selected.colors.length) {
-                    return (
-                      <span className="mt-1 block text-[11px] text-slate-500">{selected.hint}</span>
-                    );
-                  }
-                  return (
-                    <span className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500">
-                      <span className="inline-flex overflow-hidden rounded-full ring-1 ring-slate-200">
-                        {selected.colors.map((color) => (
-                          <span
-                            key={color}
-                            className="h-3.5 w-3.5"
-                            style={{ background: color }}
-                            title={color}
-                          />
-                        ))}
-                      </span>
-                      {selected.hint}
-                    </span>
-                  );
-                })()}
-              </label>
-            </div>
-            <label className="mt-3 block text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-medium text-slate-600">Brand theme JSON (optional)</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBrandThemeJson(BRAND_THEME_JSON_EXAMPLE);
-                    setBrandThemeError(null);
-                  }}
-                  className="text-[11px] font-medium text-teal-800 hover:underline"
-                >
-                  Insert example
-                </button>
-              </div>
-              <textarea
-                value={brandThemeJson}
-                onChange={(e) => {
-                  setBrandThemeJson(e.target.value);
-                  if (!e.target.value.trim()) setBrandThemeError(null);
-                }}
-                rows={7}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-teal-400"
-                placeholder='{ "palette": { "primary": "#0B2C5E" }, "theme": { "mood": "..." } }'
-              />
-              {brandThemeError ? (
-                <span className="mt-1 block text-[11px] text-rose-600">{brandThemeError}</span>
-              ) : (
-                <span className="mt-1 block text-[11px] text-slate-500">
-                  Palette hex → Ideogram color_palette + prompt. Theme fields → layout/mood/imagery
-                  in the prompt. Overrides the palette dropdown when set.
-                </span>
-              )}
-            </label>
-          </div>
+          <OptimizedGenerationPanel
+            programName={programName}
+            headline={briefHeadline}
+            cta={briefCta}
+            onHeadlineChange={setBriefHeadline}
+            onCtaChange={setBriefCta}
+            onPrefillFromProgram={() => {
+              const defaults = briefDefaults(programId, programName, selectedCampaign);
+              setBriefHeadline(defaults.headline);
+              setBriefCta(defaults.cta);
+            }}
+            brandForm={brandThemeForm}
+            onBrandFormChange={(patch) => setBrandThemeForm((current) => ({ ...current, ...patch }))}
+            optimizedEnabled={optimizedGenerationEnabled}
+            onOptimizedEnabledChange={setOptimizedGenerationEnabled}
+            advancedJson={brandThemeJson}
+            onAdvancedJsonChange={setBrandThemeJson}
+            brandThemeError={brandThemeError}
+            onBrandThemeErrorChange={setBrandThemeError}
+            quality={genQuality}
+            onQualityChange={setGenQuality}
+            provider={genProvider}
+            onProviderChange={setGenProvider}
+            variantCount={variantCount}
+            onVariantCountChange={setVariantCount}
+            onApplyOptimizedDefaults={() => {
+              const defaults = briefDefaults(programId, programName, selectedCampaign);
+              setBriefHeadline(defaults.headline);
+              setBriefCta(defaults.cta);
+              setBrandThemeForm({ ...DEFAULT_BRAND_THEME_FORM });
+              setOptimizedGenerationEnabled(true);
+              setGenQuality('premium');
+              setGenProvider('ideogram');
+              setVariantCount(1);
+              setAnalyzeReferences(true);
+              setUseLogoReference(true);
+              setBrandThemeJson('');
+              setBrandThemeError(null);
+            }}
+          />
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1225,7 +1161,7 @@ export function AssetsPanel({
             )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm sm:col-span-2 lg:col-span-1">
               <span className="text-xs font-medium text-slate-600">Title</span>
               <input
@@ -1252,48 +1188,6 @@ export function AssetsPanel({
                     {option.label}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="block text-sm">
-              <span className="text-xs font-medium text-slate-600">Quality</span>
-              <select
-                value={genQuality}
-                onChange={(e) => setGenQuality(e.target.value as ImageGenerationQuality)}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-              >
-                {QUALITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block text-[11px] text-slate-500">
-                Premium = Ideogram QUALITY + max resolution (~1MP+). Use Ideogram for flyers with text.
-              </span>
-            </label>
-            <label className="block text-sm">
-              <span className="text-xs font-medium text-slate-600">Provider</span>
-              <select
-                value={genProvider}
-                onChange={(e) => setGenProvider(e.target.value as ProviderChoice)}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-              >
-                <option value="auto">Auto (text → Ideogram)</option>
-                <option value="ideogram">Ideogram (best for text)</option>
-                <option value="flux">FLUX (BFL)</option>
-              </select>
-            </label>
-            <label className="block text-sm">
-              <span className="text-xs font-medium text-slate-600">Variants</span>
-              <select
-                value={variantCount}
-                onChange={(e) => setVariantCount(Number(e.target.value))}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-400"
-              >
-                <option value={1}>1 image</option>
-                <option value={2}>2 variants</option>
-                <option value={3}>3 variants</option>
-                <option value={4}>4 variants</option>
               </select>
             </label>
           </div>

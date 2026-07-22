@@ -128,19 +128,19 @@ export function resolveDimensions(
   aspectRatio?: string | null,
 ): { ideogramAspect: string; width: number; height: number; label: string } {
   const raw = (aspectRatio || '').trim().toLowerCase().replace(':', 'x');
-  // Ideogram AspectRatioV3 + FLUX sizes (width/height multiples of 32)
+  // Ideogram ResolutionV3 (premium) + FLUX 2 sizes (multiples of 16, ~1–2MP base)
   const presets: Record<string, { ideogramAspect: string; width: number; height: number; label: string }> = {
-    '1x1': { ideogramAspect: '1x1', width: 1024, height: 1024, label: '1:1' },
-    '2x3': { ideogramAspect: '2x3', width: 832, height: 1216, label: '2:3' },
-    '3x2': { ideogramAspect: '3x2', width: 1216, height: 832, label: '3:2' },
-    '3x4': { ideogramAspect: '3x4', width: 896, height: 1152, label: '3:4' },
-    '4x3': { ideogramAspect: '4x3', width: 1152, height: 896, label: '4:3' },
-    '4x5': { ideogramAspect: '4x5', width: 896, height: 1120, label: '4:5' },
-    '5x4': { ideogramAspect: '5x4', width: 1120, height: 896, label: '5:4' },
-    '9x16': { ideogramAspect: '9x16', width: 768, height: 1344, label: '9:16' },
-    '16x9': { ideogramAspect: '16x9', width: 1344, height: 768, label: '16:9' },
-    '10x16': { ideogramAspect: '10x16', width: 800, height: 1280, label: '10:16' },
-    '16x10': { ideogramAspect: '16x10', width: 1280, height: 800, label: '16:10' },
+    '1x1': { ideogramAspect: '1x1', width: 1280, height: 1280, label: '1:1' },
+    '2x3': { ideogramAspect: '2x3', width: 1088, height: 1632, label: '2:3' },
+    '3x2': { ideogramAspect: '3x2', width: 1632, height: 1088, label: '3:2' },
+    '3x4': { ideogramAspect: '3x4', width: 1088, height: 1440, label: '3:4' },
+    '4x3': { ideogramAspect: '4x3', width: 1440, height: 1088, label: '4:3' },
+    '4x5': { ideogramAspect: '4x5', width: 1088, height: 1360, label: '4:5' },
+    '5x4': { ideogramAspect: '5x4', width: 1360, height: 1088, label: '5:4' },
+    '9x16': { ideogramAspect: '9x16', width: 1088, height: 1920, label: '9:16' },
+    '16x9': { ideogramAspect: '16x9', width: 1920, height: 1088, label: '16:9' },
+    '10x16': { ideogramAspect: '10x16', width: 1120, height: 1792, label: '10:16' },
+    '16x10': { ideogramAspect: '16x10', width: 1792, height: 1120, label: '16:10' },
   };
 
   if (raw && presets[raw]) return presets[raw];
@@ -161,6 +161,36 @@ export function resolveDimensions(
     default:
       return presets['3x4'];
   }
+}
+
+const IDEOGRAM_NEGATIVE_PROMPT =
+  'blurry, low resolution, pixelated, jpeg artifacts, noisy, muddy colors, amateur layout, distorted typography';
+
+/** Highest Ideogram 3 ResolutionV3 per aspect (used for standard/premium). */
+const IDEOGRAM_RESOLUTION_BY_ASPECT: Record<string, string> = {
+  '1x1': '1024x1024',
+  '2x3': '832x1216',
+  '3x2': '1216x832',
+  '3x4': '896x1152',
+  '4x3': '1152x896',
+  '4x5': '896x1120',
+  '5x4': '1120x896',
+  '9x16': '768x1344',
+  '16x9': '1344x768',
+  '10x16': '800x1280',
+  '16x10': '1280x800',
+  '1x3': '512x1536',
+  '3x1': '1536x512',
+  '1x2': '704x1408',
+  '2x1': '1408x704',
+};
+
+function ideogramResolutionForAspect(
+  aspect: string,
+  quality: ImageGenerationQuality,
+): string | null {
+  if (quality === 'draft') return null;
+  return IDEOGRAM_RESOLUTION_BY_ASPECT[aspect] || IDEOGRAM_RESOLUTION_BY_ASPECT['3x4'];
 }
 
 const DEFAULT_AVOID =
@@ -186,6 +216,11 @@ const STYLE_PROMPT_GUIDANCE: Record<ImageGenerationStyle, string> = {
   other:
     'Clean professional creative: clear subject, deliberate composition.',
 };
+
+function ideogramRenderingSpeed(quality: ImageGenerationQuality): string {
+  if (quality === 'draft') return 'TURBO';
+  return 'QUALITY';
+}
 
 function hasExactText(precision?: PromptPrecision): boolean {
   return Boolean(
@@ -288,6 +323,7 @@ export function buildEnhancedPrompt(options: {
   }
 
   parts.push(STYLE_PROMPT_GUIDANCE[options.style] || STYLE_PROMPT_GUIDANCE.other);
+  parts.push('Sharp, high-resolution, professional marketing quality, clean edges and lighting.');
 
   if (options.transparentBackground) {
     parts.push(
@@ -314,10 +350,32 @@ function scaleFluxSize(
   height: number,
   quality: ImageGenerationQuality,
 ): { width: number; height: number } {
-  if (quality !== 'premium') return { width, height };
-  const scale = 1.35;
-  const round32 = (n: number) => Math.max(512, Math.min(1440, Math.round((n * scale) / 32) * 32));
-  return { width: round32(width), height: round32(height) };
+  const round16 = (n: number) => Math.max(512, Math.round(n / 16) * 16);
+  if (quality === 'draft') return { width: round16(width), height: round16(height) };
+
+  const targetMp =
+    quality === 'premium' ? 2_000_000 : 1_400_000;
+  const currentMp = width * height;
+  const scale = Math.min(2.2, Math.max(1, Math.sqrt(targetMp / currentMp)));
+  let w = round16(width * scale);
+  let h = round16(height * scale);
+  while (w * h > 4_000_000) {
+    w = round16(w * 0.92);
+    h = round16(h * 0.92);
+  }
+  return { width: w, height: h };
+}
+
+function fluxModelForQuality(
+  quality: ImageGenerationQuality,
+  hasRefs: boolean,
+  style: ImageGenerationStyle,
+): string {
+  if (quality === 'draft' && !hasRefs) return 'flux-2-klein-4b';
+  if (quality === 'premium' && !hasRefs && style === 'photo_realistic') {
+    return 'flux-2-max';
+  }
+  return 'flux-2-pro';
 }
 
 /** Studio-facing size catalog (shared with frontend via mirrored constants). */
@@ -497,13 +555,18 @@ async function generateWithIdeogram(options: {
 }): Promise<Array<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }>> {
   const form = new FormData();
   form.append('prompt', options.prompt);
-  form.append('aspect_ratio', options.ideogramAspect);
+  const resolution = ideogramResolutionForAspect(options.ideogramAspect, options.quality);
+  if (resolution) {
+    form.append('resolution', resolution);
+  } else {
+    form.append('aspect_ratio', options.ideogramAspect);
+  }
   form.append('num_images', String(Math.min(4, Math.max(1, options.variantCount || 1))));
   form.append('magic_prompt', options.magicPrompt || 'AUTO');
-  form.append(
-    'rendering_speed',
-    options.quality === 'draft' ? 'TURBO' : options.quality === 'premium' ? 'QUALITY' : 'DEFAULT',
-  );
+  form.append('rendering_speed', ideogramRenderingSpeed(options.quality));
+  if (options.quality !== 'draft') {
+    form.append('negative_prompt', IDEOGRAM_NEGATIVE_PROMPT);
+  }
 
   const refs = options.references || [];
   if (refs.length > 0) {
@@ -565,8 +628,10 @@ async function generateWithIdeogram(options: {
       ? 'ideogram-v3-transparent+style-ref'
       : 'ideogram-v3-transparent'
     : refs.length > 0
-      ? 'ideogram-v3+style-ref'
-      : 'ideogram-v3';
+      ? `ideogram-v3+style-ref`
+      : resolution
+        ? `ideogram-v3@${resolution}`
+        : 'ideogram-v3';
 
   const outputs = [];
   for (const url of urls) {
@@ -588,18 +653,19 @@ async function generateWithFlux(options: {
   quality: ImageGenerationQuality;
   width: number;
   height: number;
+  style: ImageGenerationStyle;
   references?: ReferenceImageBlob[];
 }): Promise<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }> {
-  // Image-conditioned edit works best on FLUX.2 pro family
   const refs = options.references || [];
-  const modelId =
-    refs.length > 0 || options.quality !== 'draft' ? 'flux-2-pro' : 'flux-2-klein-4b';
+  const modelId = fluxModelForQuality(options.quality, refs.length > 0, options.style);
   const sized = scaleFluxSize(options.width, options.height, options.quality);
 
   const body: Record<string, unknown> = {
     prompt: options.prompt,
     width: sized.width,
     height: sized.height,
+    output_format: 'png',
+    safety_tolerance: 2,
   };
 
   refs.slice(0, 8).forEach((ref, index) => {
@@ -607,15 +673,23 @@ async function generateWithFlux(options: {
     body[key] = toBase64DataUrl(ref);
   });
 
-  const submit = await fetch(`https://api.bfl.ai/v1/${modelId}`, {
-    method: 'POST',
-    headers: {
-      accept: 'application/json',
-      'Content-Type': 'application/json',
-      'x-key': options.apiKey,
-    },
-    body: JSON.stringify(body),
-  });
+  const submitFlux = async (activeModel: string) =>
+    fetch(`https://api.bfl.ai/v1/${activeModel}`, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'Content-Type': 'application/json',
+        'x-key': options.apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+  let activeModel = modelId;
+  let submit = await submitFlux(activeModel);
+  if (!submit.ok && activeModel === 'flux-2-max') {
+    activeModel = 'flux-2-pro';
+    submit = await submitFlux(activeModel);
+  }
 
   const submitted = (await submit.json().catch(() => ({}))) as {
     id?: string;
@@ -663,7 +737,7 @@ async function generateWithFlux(options: {
       const downloaded = await downloadImage(sampleUrl);
       return {
         ...downloaded,
-        modelId: refs.length > 0 ? `${modelId}+ref` : modelId,
+        modelId: refs.length > 0 ? `${activeModel}+ref` : activeModel,
         sourceUrl: sampleUrl,
       };
     }
@@ -857,6 +931,9 @@ export async function generateCreativeImages(
     },
   );
 
+  const ideogramResolution = ideogramResolutionForAspect(dims.ideogramAspect, quality);
+  const fluxSized = scaleFluxSize(dims.width, dims.height, quality);
+
   const started = Date.now();
   logger.info('Creative AI generate start', {
     userId: input.ownerUserId,
@@ -865,6 +942,8 @@ export async function generateCreativeImages(
     style,
     quality,
     aspect: dims.label,
+    ideogramResolution: ideogramResolution || dims.ideogramAspect,
+    fluxSize: provider === 'flux' ? `${fluxSized.width}x${fluxSized.height}` : undefined,
     magicPrompt: enhanced.magicPrompt,
     styleType: enhanced.styleType,
     palette: enhanced.paletteHex,
@@ -900,6 +979,7 @@ export async function generateCreativeImages(
           quality,
           width: dims.width,
           height: dims.height,
+          style,
           references,
         });
         outputs.push(one);

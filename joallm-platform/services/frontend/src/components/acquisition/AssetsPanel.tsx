@@ -132,9 +132,9 @@ const STYLE_OPTIONS: { value: ImageGenerationStyle; label: string }[] = [
 ];
 
 const QUALITY_OPTIONS: { value: ImageGenerationQuality; label: string }[] = [
-  { value: 'draft', label: 'Draft (fast)' },
-  { value: 'standard', label: 'Standard' },
-  { value: 'premium', label: 'Premium' },
+  { value: 'draft', label: 'Draft (fast, lower res)' },
+  { value: 'standard', label: 'Standard (high res)' },
+  { value: 'premium', label: 'Premium (max res)' },
 ];
 
 type ProviderChoice = 'auto' | 'ideogram' | 'flux';
@@ -256,7 +256,7 @@ export function AssetsPanel({
   const [genTitle, setGenTitle] = useState('');
   const [genStyle, setGenStyle] = useState<ImageGenerationStyle>('marketing_poster');
   const [genQuality, setGenQuality] = useState<ImageGenerationQuality>('premium');
-  const [genProvider, setGenProvider] = useState<ProviderChoice>('auto');
+  const [genProvider, setGenProvider] = useState<ProviderChoice>('ideogram');
   const [genSize, setGenSize] = useState<CreativeSizeId>('3x4');
   const [genMedia, setGenMedia] = useState<'image' | 'video'>('image');
   const [transparentBackground, setTransparentBackground] = useState(false);
@@ -1215,7 +1215,7 @@ export function AssetsPanel({
                 ))}
               </select>
               <span className="mt-1 block text-[11px] text-slate-500">
-                Premium uses Ideogram QUALITY / larger FLUX size.
+                Premium = Ideogram QUALITY + max resolution (~1MP+). Use Ideogram for flyers with text.
               </span>
             </label>
             <label className="block text-sm">

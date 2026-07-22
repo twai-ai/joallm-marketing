@@ -1108,12 +1108,22 @@ function createAcquisitionIngestWorker(): Worker<AcquisitionIngestJob> | null {
     async (job: Job<AcquisitionIngestJob>) => {
       const startedAt = Date.now();
       try {
-        const { ingestMetaWhatsAppWebhook } = await import('./acquisition-ingest-service.js');
-        const result = await ingestMetaWhatsAppWebhook({
-          payload: job.data.payload as any,
-          headers: job.data.headers,
-          ownerUserId: job.data.ownerUserId,
-        });
+        const { ingestMetaWhatsAppWebhook, ingestMetaPageWebhook } = await import(
+          './acquisition-ingest-service.js'
+        );
+        const objectType = (job.data.payload as { object?: string } | undefined)?.object;
+        const result =
+          objectType === 'page' || objectType === 'instagram'
+            ? await ingestMetaPageWebhook({
+                payload: job.data.payload as any,
+                headers: job.data.headers,
+                ownerUserId: job.data.ownerUserId,
+              })
+            : await ingestMetaWhatsAppWebhook({
+                payload: job.data.payload as any,
+                headers: job.data.headers,
+                ownerUserId: job.data.ownerUserId,
+              });
         queueProcessingTime.observe(
           { queue_name: 'acquisition-ingest', status: 'success' },
           (Date.now() - startedAt) / 1000,

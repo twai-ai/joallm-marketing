@@ -47,6 +47,28 @@ interface MetaConnectionHealth {
   people: number;
 }
 
+interface PageConnectionHealth {
+  boundToUser: boolean;
+  facebookSourceStatus: string | null;
+  instagramSourceStatus: string | null;
+  connectorStatus: string | null;
+  tokenConfigured: boolean;
+  pageIdConfigured: boolean;
+  verifyTokenConfigured: boolean;
+  pageId: string | null;
+  pageName: string | null;
+  igAccountId: string | null;
+  igUsername: string | null;
+  graphOk: boolean;
+  graphError: string | null;
+  webhookPath: string;
+  lastWebhookSuccessAt: string | null;
+  lastWebhookErrorAt: string | null;
+  lastWebhookError: string | null;
+  inboundEvents: number;
+  people: number;
+}
+
 interface OverviewData {
   people: number;
   events: number;
@@ -55,6 +77,7 @@ interface OverviewData {
   channels?: Channel[];
   connectors?: Connector[];
   metaHealth?: MetaConnectionHealth;
+  pageHealth?: PageConnectionHealth;
 }
 
 function formatWhen(value?: string | null) {
@@ -94,6 +117,7 @@ export function AcquisitionIntelligencePage() {
   const [selectedPerson, setSelectedPerson] = useState<AcquisitionPerson | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [connectingPage, setConnectingPage] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,7 +187,27 @@ export function AcquisitionIntelligencePage() {
     () => overview?.channels?.find((channel) => channel.kind === 'whatsapp'),
     [overview],
   );
+  const facebookChannel = useMemo(
+    () => overview?.channels?.find((channel) => channel.kind === 'facebook_organic'),
+    [overview],
+  );
+  const instagramChannel = useMemo(
+    () => overview?.channels?.find((channel) => channel.kind === 'instagram_organic'),
+    [overview],
+  );
+  const pageBound = useMemo(
+    () =>
+      Boolean(
+        facebookChannel ||
+          instagramChannel ||
+          overview?.sources?.some(
+            (s) => s.provider === 'meta_facebook_page' || s.provider === 'meta_instagram',
+          ),
+      ),
+    [facebookChannel, instagramChannel, overview?.sources],
+  );
   const health = overview?.metaHealth;
+  const pageHealth = overview?.pageHealth;
 
   const ensureMetaSource = async () => {
     setConnecting(true);
@@ -175,6 +219,21 @@ export function AcquisitionIntelligencePage() {
       showError(error instanceof Error ? error.message : 'Failed to connect WhatsApp channel');
     } finally {
       setConnecting(false);
+    }
+  };
+
+  const ensureMetaPage = async () => {
+    setConnectingPage(true);
+    try {
+      await apiClient.post('/api/studio/channels/meta-page', {});
+      showSuccess('Facebook + Instagram bound — live Page probe runs on refresh');
+      await load();
+    } catch (error) {
+      showError(
+        error instanceof Error ? error.message : 'Failed to connect Facebook + Instagram',
+      );
+    } finally {
+      setConnectingPage(false);
     }
   };
 
@@ -203,7 +262,36 @@ export function AcquisitionIntelligencePage() {
       n: '4',
       title: 'Inbound webhook traffic',
       body: 'At least one WhatsApp event ingested after Meta webhook fires.',
-      done: (health?.inboundEvents ?? overview?.events ?? 0) > 0,
+      done: (health?.inboundEvents ?? 0) > 0,
+    },
+  ];
+
+  const pageSetupSteps = [
+    {
+      n: '1',
+      title: 'Bound to your JoaLLM account',
+      body: 'Facebook / Instagram channels + sources exist for your user.',
+      done: Boolean(pageHealth?.boundToUser ?? pageBound),
+    },
+    {
+      n: '2',
+      title: 'Backend env configured',
+      body: 'META_ACCESS_TOKEN + META_PAGE_ID present on Railway backend.',
+      done: Boolean(pageHealth?.tokenConfigured && pageHealth?.pageIdConfigured),
+    },
+    {
+      n: '3',
+      title: 'Meta Page Graph reachable',
+      body: pageHealth?.graphError
+        ? `Live probe failed: ${pageHealth.graphError}`
+        : 'Token can read this Facebook Page (and linked IG) from Meta.',
+      done: Boolean(pageHealth?.graphOk),
+    },
+    {
+      n: '4',
+      title: 'Inbound Messenger / IG traffic',
+      body: 'At least one Facebook or Instagram DM ingested after Page webhook fires.',
+      done: (pageHealth?.inboundEvents ?? 0) > 0,
     },
   ];
 
@@ -236,11 +324,24 @@ export function AcquisitionIntelligencePage() {
           <button
             type="button"
             onClick={() => void ensureMetaSource()}
-            disabled={connecting}
+            disabled={connecting || connectingPage}
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm disabled:cursor-not-allowed"
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            {whatsappChannel || metaSource ? 'Re-bind WhatsApp to my account' : 'Connect WhatsApp to my account'}
+            {whatsappChannel || metaSource ? 'Re-bind WhatsApp' : 'Connect WhatsApp'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void ensureMetaPage()}
+            disabled={connecting || connectingPage}
+            className="inline-flex items-center gap-2 rounded-full border border-teal-300 bg-white px-4 py-2 text-sm font-medium text-teal-900 hover:bg-teal-50 disabled:cursor-not-allowed"
+          >
+            {connectingPage ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Link2 className="h-4 w-4" />
+            )}
+            {pageBound ? 'Re-bind Facebook + Instagram' : 'Connect Facebook + Instagram'}
           </button>
         </>
       }
@@ -268,10 +369,9 @@ export function AcquisitionIntelligencePage() {
       <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold text-slate-950">Live Meta connection health</h2>
+            <h2 className="text-xl font-semibold text-slate-950">WhatsApp connection health</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Values below come from a live Graph probe + your DB — not just an optimistic “connected”
-              flag after clicking Connect.
+              Live Graph probe for phone number ID — not just an optimistic “connected” flag.
             </p>
           </div>
           {health && (
@@ -339,6 +439,116 @@ export function AcquisitionIntelligencePage() {
           {setupSteps.map((step) => (
             <div
               key={step.n}
+              className={`rounded-2xl border p-4 ${
+                step.done
+                  ? 'border-teal-200 bg-teal-50/70'
+                  : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Step {step.n}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                    step.done
+                      ? 'bg-teal-100 text-teal-800'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {step.done ? 'True' : 'False'}
+                </span>
+              </div>
+              <div className="mt-2 font-medium text-slate-950">{step.title}</div>
+              <p className="mt-1 text-xs leading-5 text-slate-600">{step.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">
+              Facebook + Instagram connection health
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Page ID based — no WhatsApp phone number required. Webhook:{' '}
+              <code className="text-[11px]">/api/meta/page/webhook</code>
+            </p>
+          </div>
+          {pageHealth && (
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                pageHealth.graphOk && pageHealth.boundToUser
+                  ? 'bg-teal-50 text-teal-800 ring-1 ring-teal-200'
+                  : pageHealth.boundToUser
+                    ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+              }`}
+            >
+              {pageHealth.graphOk && pageHealth.boundToUser
+                ? 'Graph OK · bound'
+                : pageHealth.boundToUser
+                  ? 'Bound · Graph not OK'
+                  : 'Not bound yet'}
+            </span>
+          )}
+        </div>
+
+        {pageHealth ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              ['Bound to your account', pageHealth.boundToUser ? 'Yes' : 'No'],
+              ['Access token on backend', pageHealth.tokenConfigured ? 'Yes' : 'Missing'],
+              ['Page ID on backend', pageHealth.pageIdConfigured ? 'Yes' : 'Missing'],
+              ['Verify token set', pageHealth.verifyTokenConfigured ? 'Yes' : 'Missing'],
+              [
+                'Meta Page Graph probe',
+                pageHealth.graphOk ? 'OK' : pageHealth.graphError || 'Failed',
+              ],
+              ['Page', pageHealth.pageName || pageHealth.pageId || '—'],
+              [
+                'Instagram',
+                pageHealth.igUsername
+                  ? `@${pageHealth.igUsername}`
+                  : pageHealth.igAccountId || '—',
+              ],
+              ['Webhook path', pageHealth.webhookPath],
+              ['Last webhook success', formatWhen(pageHealth.lastWebhookSuccessAt)],
+              ['Inbound FB/IG events', String(pageHealth.inboundEvents)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {label}
+                </div>
+                <div className="mt-1 break-all text-sm font-medium text-slate-900">{value}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-500">
+            {loading
+              ? 'Probing Meta Page…'
+              : 'Refresh after Connect Facebook + Instagram to run a live Page probe.'}
+          </p>
+        )}
+
+        {pageHealth?.graphError && !pageHealth.graphOk && (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            Page Graph error: {pageHealth.graphError}. Set META_PAGE_ID and a token with Page
+            permissions, then re-bind.
+          </p>
+        )}
+
+        <h3 className="mt-6 text-sm font-semibold text-slate-950">Setup checklist</h3>
+        <p className="mt-1 text-sm text-slate-600">
+          Point Meta Page webhooks at the path above, then DM the Page or IG account.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {pageSetupSteps.map((step) => (
+            <div
+              key={`page-${step.n}`}
               className={`rounded-2xl border p-4 ${
                 step.done
                   ? 'border-teal-200 bg-teal-50/70'
@@ -483,7 +693,9 @@ export function AcquisitionIntelligencePage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold text-slate-950">People</h2>
-              <p className="mt-1 text-sm text-slate-600">Canonical persons resolved from WhatsApp identities.</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Canonical persons resolved from WhatsApp, Facebook, and Instagram identities.
+              </p>
             </div>
             <Users className="h-5 w-5 text-teal-600" />
           </div>

@@ -17,7 +17,10 @@ import {
   listCampaignPublishingJobs,
 } from '../services/publishing-job-service.js';
 import { config } from '../config/config.js';
-import { ensureMetaSourceConnection } from '../services/acquisition-ingest-service.js';
+import {
+  ensureMetaPageSourceConnections,
+  ensureMetaSourceConnection,
+} from '../services/acquisition-ingest-service.js';
 import { logger } from '../utils/logger.js';
 
 export async function studioRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
@@ -77,6 +80,36 @@ export async function studioRoutes(fastify: FastifyInstance, _options: FastifyPl
       return reply.status(500).send({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to ensure WhatsApp channel',
+      });
+    }
+  });
+
+  fastify.post('/channels/meta-page', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Ensure Facebook + Instagram channels, Meta Page connector, and acquisition sources',
+      tags: ['studio'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const body = (request.body || {}) as { pageId?: string };
+
+      const stack = await ensureMetaPageSourceConnections({
+        ownerUserId: userId,
+        pageId: body.pageId || config.metaPageId,
+        claimOwnership: true,
+      });
+
+      return reply.status(201).send({
+        success: true,
+        data: stack,
+      });
+    } catch (error) {
+      logger.error('Ensure Meta Page channels failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to ensure Meta Page channels',
       });
     }
   });

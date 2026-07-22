@@ -75,6 +75,17 @@ async function enqueueOrIngestMetaWebhook(options: {
     return { mode: 'queued', jobId: job.id };
   }
 
+  const objectType = options.payload?.object;
+  if (objectType === 'page' || objectType === 'instagram') {
+    const { ingestMetaPageWebhook } = await import('../services/acquisition-ingest-service.js');
+    const result = await ingestMetaPageWebhook({
+      payload: options.payload as any,
+      headers: options.headers,
+      ownerUserId: options.ownerUserId,
+    });
+    return { mode: 'sync', result };
+  }
+
   const result = await ingestMetaWhatsAppWebhook({
     payload: options.payload as any,
     headers: options.headers,
@@ -1102,11 +1113,13 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
 
 /**
  * Native Meta webhook endpoints hosted on Railway backend.
- * Point Meta Developer Console callback URL to:
+ * WhatsApp Cloud API:
  *   https://<backend>.up.railway.app/api/meta/webhook
+ * Facebook Page + Instagram messaging:
+ *   https://<backend>.up.railway.app/api/meta/page/webhook
  */
 export async function metaWebhookRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {
-  fastify.get('/webhook', async (request, reply) => {
+  const verifyHandler = async (request: any, reply: any) => {
     const query = request.query as Record<string, string | undefined>;
     const mode = query['hub.mode'];
     const token = query['hub.verify_token'];
@@ -1121,16 +1134,17 @@ export async function metaWebhookRoutes(fastify: FastifyInstance, _options: Fast
 
     logger.warn('Meta webhook verification failed');
     return reply.code(403).send();
-  });
+  };
+
+  fastify.get('/webhook', verifyHandler);
+  fastify.get('/page/webhook', verifyHandler);
 
   fastify.post('/webhook', async (request, reply) => {
     try {
       const payload = request.body as Record<string, unknown>;
 
-      logger.info('Meta webhook event received on Railway backend');
+      logger.info('Meta WhatsApp webhook event received on Railway backend');
 
-      // Owner is resolved at runtime from the Studio-connected Meta source
-      // (phone_number_id). Env ACQUISITION_DEFAULT_OWNER_USER_ID is only a soft fallback.
       const result = await enqueueOrIngestMetaWebhook({
         payload,
         headers: {
@@ -1149,6 +1163,28 @@ export async function metaWebhookRoutes(fastify: FastifyInstance, _options: Fast
       return reply.status(200).send({ success: true, mode: result.mode });
     } catch (error) {
       logger.error('Meta webhook handling failed', error);
+      return reply.code(200).send();
+    }
+  });
+
+  fastify.post('/page/webhook', async (request, reply) => {
+    try {
+      const payload = request.body as Record<string, unknown>;
+
+      logger.info('Meta Page/Instagram webhook event received on Railway backend');
+
+      const result = await enqueueOrIngestMetaWebhook({
+        payload,
+        headers: {
+          'user-agent': request.headers['user-agent'],
+          'x-hub-signature-256': request.headers['x-hub-signature-256'],
+        },
+        ownerUserId: config.acquisitionDefaultOwnerUserId,
+      });
+
+      return reply.status(200).send({ success: true, mode: result.mode });
+    } catch (error) {
+      logger.error('Meta Page webhook handling failed', error);
       return reply.code(200).send();
     }
   });

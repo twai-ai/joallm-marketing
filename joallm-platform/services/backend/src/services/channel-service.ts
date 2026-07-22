@@ -6,7 +6,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { publishingProfiles, studioChannels } from '../database/schema.js';
-import { ensureMetaWhatsAppConnector, mapConnector } from './connector-service.js';
+import { ensureMetaWhatsAppConnector, ensureMetaPageConnector, mapConnector } from './connector-service.js';
 import type { ConnectorProvider } from './connector-registry.js';
 
 type ChannelKind =
@@ -138,6 +138,116 @@ export async function ensureMetaWhatsAppChannelStack(options: {
     displayPhoneNumber: options.displayPhoneNumber,
   });
   return { connector, channel };
+}
+
+async function ensureOrganicChannel(options: {
+  ownerUserId: string;
+  kind: 'facebook_organic' | 'instagram_organic';
+  connectorId: string;
+  pageId?: string | null;
+  pageName?: string | null;
+  igAccountId?: string | null;
+  igUsername?: string | null;
+}) {
+  const { ownerUserId, kind, connectorId, pageId, pageName, igAccountId, igUsername } = options;
+  const defaultName =
+    kind === 'facebook_organic'
+      ? pageName
+        ? `Facebook (${pageName})`
+        : 'Facebook Organic'
+      : igUsername
+        ? `Instagram (@${igUsername})`
+        : 'Instagram Organic';
+
+  const [existing] = await db
+    .select()
+    .from(studioChannels)
+    .where(
+      and(
+        eq(studioChannels.ownerUserId, ownerUserId),
+        eq(studioChannels.kind, kind),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    const [updated] = await db
+      .update(studioChannels)
+      .set({
+        status: 'active',
+        connectorId,
+        connectorProvider: 'meta',
+        name: defaultName,
+        metadata: {
+          ...((existing.metadata as Record<string, unknown>) || {}),
+          pageId: pageId || null,
+          pageName: pageName || null,
+          igAccountId: igAccountId || null,
+          igUsername: igUsername || null,
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(studioChannels.id, existing.id))
+      .returning();
+    return mapChannel(updated);
+  }
+
+  const [created] = await db
+    .insert(studioChannels)
+    .values({
+      ownerUserId,
+      kind,
+      name: defaultName,
+      status: 'active',
+      connectorId,
+      connectorProvider: 'meta',
+      metadata: {
+        pageId: pageId || null,
+        pageName: pageName || null,
+        igAccountId: igAccountId || null,
+        igUsername: igUsername || null,
+      },
+    })
+    .returning();
+
+  return mapChannel(created);
+}
+
+/** Ensure Meta Page connector + Facebook + Instagram Studio channels. */
+export async function ensureMetaPageChannelStack(options: {
+  ownerUserId: string;
+  pageId?: string;
+}) {
+  const connector = await ensureMetaPageConnector(options);
+  const cfg = connector.config || {};
+  const pageId =
+    options.pageId ||
+    connector.externalAccountId ||
+    (typeof cfg.pageId === 'string' ? cfg.pageId : null);
+  const pageName = typeof cfg.pageName === 'string' ? cfg.pageName : null;
+  const igAccountId = typeof cfg.igAccountId === 'string' ? cfg.igAccountId : null;
+  const igUsername = typeof cfg.igUsername === 'string' ? cfg.igUsername : null;
+
+  const facebookChannel = await ensureOrganicChannel({
+    ownerUserId: options.ownerUserId,
+    kind: 'facebook_organic',
+    connectorId: connector.id,
+    pageId,
+    pageName,
+    igAccountId,
+    igUsername,
+  });
+  const instagramChannel = await ensureOrganicChannel({
+    ownerUserId: options.ownerUserId,
+    kind: 'instagram_organic',
+    connectorId: connector.id,
+    pageId,
+    pageName,
+    igAccountId,
+    igUsername,
+  });
+
+  return { connector, facebookChannel, instagramChannel, pageId, pageName, igAccountId, igUsername };
 }
 
 export async function listPublishingProfiles(ownerUserId: string) {

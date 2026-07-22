@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import {
   acquisitionEvents,
@@ -22,12 +22,16 @@ import {
 } from './relationship-maturity.js';
 import {
   ensureDefaultWhatsAppPublishingProfile,
+  ensureMetaPageChannelStack,
   ensureMetaWhatsAppChannelStack,
   listStudioChannels,
 } from './channel-service.js';
 import { listPlatformConnectors } from './connector-service.js';
 
 const META_PROVIDER = 'meta_whatsapp';
+const META_FB_PROVIDER = 'meta_facebook_page';
+const META_IG_PROVIDER = 'meta_instagram';
+const PAGE_SOURCE_PROVIDERS = [META_FB_PROVIDER, META_IG_PROVIDER] as const;
 
 export type MetaWebhookPayload = {
   object?: string;
@@ -76,15 +80,17 @@ function toDateFromUnixSeconds(value?: string): Date {
 
 /**
  * Resolve which JoaLLM user owns inbound Meta events at runtime.
- * Prefer the Studio-connected source for this phone_number_id so
+ * Prefer the Studio-connected source for this phone_number_id / page_id so
  * ACQUISITION_DEFAULT_OWNER_USER_ID is optional.
  */
 async function resolveOwnerUserId(options?: {
   preferredOwnerUserId?: string;
   phoneNumberId?: string;
+  pageId?: string;
 }): Promise<string> {
   const preferredOwnerUserId = options?.preferredOwnerUserId;
   const phoneNumberId = options?.phoneNumberId || config.metaPhoneNumberId;
+  const pageId = options?.pageId || config.metaPageId;
 
   if (phoneNumberId) {
     const [boundSource] = await db
@@ -99,6 +105,39 @@ async function resolveOwnerUserId(options?: {
       .limit(1);
     if (boundSource?.ownerUserId) {
       return boundSource.ownerUserId;
+    }
+  }
+
+  if (pageId) {
+    for (const provider of PAGE_SOURCE_PROVIDERS) {
+      const [boundSource] = await db
+        .select({ ownerUserId: acquisitionSourceConnections.ownerUserId })
+        .from(acquisitionSourceConnections)
+        .where(
+          and(
+            eq(acquisitionSourceConnections.provider, provider),
+            eq(acquisitionSourceConnections.externalAccountId, pageId),
+          ),
+        )
+        .limit(1);
+      if (boundSource?.ownerUserId) {
+        return boundSource.ownerUserId;
+      }
+    }
+    // IG source may use IG account id as externalAccountId
+    const igId = config.metaInstagramAccountId;
+    if (igId) {
+      const [igSource] = await db
+        .select({ ownerUserId: acquisitionSourceConnections.ownerUserId })
+        .from(acquisitionSourceConnections)
+        .where(
+          and(
+            eq(acquisitionSourceConnections.provider, META_IG_PROVIDER),
+            eq(acquisitionSourceConnections.externalAccountId, igId),
+          ),
+        )
+        .limit(1);
+      if (igSource?.ownerUserId) return igSource.ownerUserId;
     }
   }
 
@@ -121,11 +160,16 @@ async function resolveOwnerUserId(options?: {
     if (existing) return existing.id;
   }
 
-  // Any previously connected Meta WhatsApp source (most recently updated)
   const [recentSource] = await db
     .select({ ownerUserId: acquisitionSourceConnections.ownerUserId })
     .from(acquisitionSourceConnections)
-    .where(eq(acquisitionSourceConnections.provider, META_PROVIDER))
+    .where(
+      inArray(acquisitionSourceConnections.provider, [
+        META_PROVIDER,
+        META_FB_PROVIDER,
+        META_IG_PROVIDER,
+      ]),
+    )
     .orderBy(desc(acquisitionSourceConnections.updatedAt))
     .limit(1);
   if (recentSource?.ownerUserId) {
@@ -269,11 +313,178 @@ export async function ensureMetaSourceConnection(options: {
   return created;
 }
 
+async function upsertPageSourceConnection(options: {
+  ownerUserId: string;
+  provider: typeof META_FB_PROVIDER | typeof META_IG_PROVIDER;
+  externalAccountId: string;
+  name: string;
+  connectorId?: string | null;
+  channelId?: string | null;
+  claimOwnership?: boolean;
+  config?: Record<string, unknown>;
+}) {
+  const {
+    ownerUserId,
+    provider,
+    externalAccountId,
+    name,
+    connectorId,
+    channelId,
+    claimOwnership = false,
+    config: extraConfig,
+  } = options;
+
+  const [byExternal] = await db
+    .select()
+    .from(acquisitionSourceConnections)
+    .where(
+      and(
+        eq(acquisitionSourceConnections.provider, provider),
+        eq(acquisitionSourceConnections.externalAccountId, externalAccountId),
+      ),
+    )
+    .limit(1);
+
+  if (byExternal) {
+    const shouldClaim = claimOwnership && byExternal.ownerUserId !== ownerUserId;
+    const [linked] = await db
+      .update(acquisitionSourceConnections)
+      .set({
+        ownerUserId: shouldClaim ? ownerUserId : byExternal.ownerUserId,
+        connectorId: connectorId || byExternal.connectorId,
+        channelId: channelId || byExternal.channelId,
+        name,
+        status: 'active',
+        config: {
+          ...((byExternal.config as Record<string, unknown>) || {}),
+          ...(extraConfig || {}),
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(acquisitionSourceConnections.id, byExternal.id))
+      .returning();
+    return linked;
+  }
+
+  const [byOwner] = await db
+    .select()
+    .from(acquisitionSourceConnections)
+    .where(
+      and(
+        eq(acquisitionSourceConnections.ownerUserId, ownerUserId),
+        eq(acquisitionSourceConnections.provider, provider),
+      ),
+    )
+    .limit(1);
+
+  if (byOwner) {
+    const [linked] = await db
+      .update(acquisitionSourceConnections)
+      .set({
+        externalAccountId,
+        connectorId: connectorId || byOwner.connectorId,
+        channelId: channelId || byOwner.channelId,
+        name,
+        status: 'active',
+        config: {
+          ...((byOwner.config as Record<string, unknown>) || {}),
+          ...(extraConfig || {}),
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(acquisitionSourceConnections.id, byOwner.id))
+      .returning();
+    return linked;
+  }
+
+  const [created] = await db
+    .insert(acquisitionSourceConnections)
+    .values({
+      ownerUserId,
+      provider,
+      name,
+      status: 'active',
+      externalAccountId,
+      connectorId: connectorId || null,
+      channelId: channelId || null,
+      config: extraConfig || {},
+    })
+    .returning();
+
+  return created;
+}
+
+/** Bind Facebook Page + Instagram acquisition sources to the logged-in user. */
+export async function ensureMetaPageSourceConnections(options: {
+  ownerUserId: string;
+  pageId?: string;
+  claimOwnership?: boolean;
+}) {
+  const { ownerUserId, claimOwnership = false } = options;
+  const stack = await ensureMetaPageChannelStack({
+    ownerUserId,
+    pageId: options.pageId,
+  });
+
+  const pageId =
+    stack.pageId || options.pageId || config.metaPageId || stack.connector.externalAccountId;
+  if (!pageId) {
+    throw new Error('META_PAGE_ID is required to connect Facebook + Instagram');
+  }
+
+  const igExternalId = stack.igAccountId || config.metaInstagramAccountId || pageId;
+
+  const facebookSource = await upsertPageSourceConnection({
+    ownerUserId,
+    provider: META_FB_PROVIDER,
+    externalAccountId: pageId,
+    name: stack.pageName ? `Facebook (${stack.pageName})` : 'Facebook Page',
+    connectorId: stack.connector.id,
+    channelId: stack.facebookChannel.id,
+    claimOwnership,
+    config: {
+      pageId,
+      pageName: stack.pageName,
+      surface: 'facebook',
+    },
+  });
+
+  const instagramSource = await upsertPageSourceConnection({
+    ownerUserId,
+    provider: META_IG_PROVIDER,
+    externalAccountId: igExternalId,
+    name: stack.igUsername
+      ? `Instagram (@${stack.igUsername})`
+      : 'Instagram',
+    connectorId: stack.connector.id,
+    channelId: stack.instagramChannel.id,
+    claimOwnership,
+    config: {
+      pageId,
+      pageName: stack.pageName,
+      igAccountId: stack.igAccountId,
+      igUsername: stack.igUsername,
+      surface: 'instagram',
+    },
+  });
+
+  return {
+    connector: stack.connector,
+    facebookChannel: stack.facebookChannel,
+    instagramChannel: stack.instagramChannel,
+    facebookSource,
+    instagramSource,
+    pageId,
+    pageName: stack.pageName,
+    igAccountId: stack.igAccountId,
+  };
+}
+
 async function resolveOrCreatePersonByWhatsApp(options: {
   ownerUserId: string;
   waId: string;
   displayName?: string;
-}) {
+}): Promise<typeof acquisitionPersons.$inferSelect | undefined> {
   const { ownerUserId, waId, displayName } = options;
 
   const [existingIdentity] = await db
@@ -439,6 +650,7 @@ export async function ingestMetaWhatsAppWebhook(options: {
             waId: message.from,
             displayName: contactNameByWaId.get(message.from),
           });
+          if (!person) continue;
 
           const textBody = message.text?.body || '';
           const occurredAt = toDateFromUnixSeconds(message.timestamp);
@@ -623,6 +835,284 @@ export async function maybeSendWhatsAppAutoReply(payload: MetaWebhookPayload): P
   }
 }
 
+export type MetaPageWebhookPayload = {
+  object?: string;
+  entry?: Array<{
+    id?: string;
+    time?: number;
+    messaging?: Array<{
+      sender?: { id?: string };
+      recipient?: { id?: string };
+      timestamp?: number;
+      message?: {
+        mid?: string;
+        text?: string;
+        is_echo?: boolean;
+      };
+      postback?: { payload?: string; title?: string };
+    }>;
+  }>;
+};
+
+async function resolveOrCreatePersonByMetaMessaging(options: {
+  ownerUserId: string;
+  externalId: string;
+  displayName?: string;
+  surface: 'facebook' | 'instagram';
+}) {
+  const { ownerUserId, externalId, displayName, surface } = options;
+  const identityExternalId = `${surface}:${externalId}`;
+
+  const [existingIdentity] = await db
+    .select()
+    .from(acquisitionPersonIdentities)
+    .where(
+      and(
+        eq(acquisitionPersonIdentities.ownerUserId, ownerUserId),
+        eq(acquisitionPersonIdentities.provider, 'meta'),
+        eq(acquisitionPersonIdentities.externalId, identityExternalId),
+      ),
+    )
+    .limit(1);
+
+  if (existingIdentity) {
+    const [person] = await db
+      .select()
+      .from(acquisitionPersons)
+      .where(eq(acquisitionPersons.id, existingIdentity.personId))
+      .limit(1);
+    return person;
+  }
+
+  const [person] = await db
+    .insert(acquisitionPersons)
+    .values({
+      ownerUserId,
+      displayName: displayName || `${surface} ${externalId.slice(-6)}`,
+      status: 'identified',
+      relationshipMaturity: 'identified',
+      metadata: { source: surface === 'facebook' ? META_FB_PROVIDER : META_IG_PROVIDER, surface },
+    })
+    .returning();
+
+  await db.insert(acquisitionPersonIdentities).values({
+    ownerUserId,
+    personId: person.id,
+    provider: 'meta',
+    externalId: identityExternalId,
+    confidence: 1,
+    isVerified: true,
+    verifiedAt: new Date(),
+  });
+
+  return person;
+}
+
+export async function ingestMetaPageWebhook(options: {
+  payload: MetaPageWebhookPayload;
+  headers?: Record<string, unknown>;
+  ownerUserId?: string;
+}) {
+  const { payload, headers, ownerUserId: preferredOwner } = options;
+  const objectType = payload.object;
+  if (objectType !== 'page' && objectType !== 'instagram') {
+    return { rawRecordId: null, ignored: true, events: [], interactions: [] };
+  }
+
+  const surface: 'facebook' | 'instagram' =
+    objectType === 'instagram' ? 'instagram' : 'facebook';
+  const pageId =
+    payload.entry?.[0]?.id ||
+    payload.entry?.[0]?.messaging?.[0]?.recipient?.id ||
+    config.metaPageId;
+
+  const ownerUserId = await resolveOwnerUserId({
+    preferredOwnerUserId: preferredOwner,
+    pageId: pageId || undefined,
+  });
+
+  // Ensure sources exist (without claiming) so webhook traffic has a home
+  let sources;
+  try {
+    sources = await ensureMetaPageSourceConnections({
+      ownerUserId,
+      pageId: pageId || undefined,
+      claimOwnership: false,
+    });
+  } catch (error) {
+    logger.warn('Meta Page source ensure failed during ingest', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    sources = null;
+  }
+
+  const sourceConnection =
+    surface === 'instagram'
+      ? sources?.instagramSource
+      : sources?.facebookSource;
+
+  if (!sourceConnection) {
+    // Fallback: create minimal FB source row
+    const fallback = await upsertPageSourceConnection({
+      ownerUserId,
+      provider: surface === 'instagram' ? META_IG_PROVIDER : META_FB_PROVIDER,
+      externalAccountId: pageId || config.metaPageId || 'unknown-page',
+      name: surface === 'instagram' ? 'Instagram' : 'Facebook Page',
+      claimOwnership: false,
+      config: { pageId, surface },
+    });
+    sources = {
+      facebookSource: fallback,
+      instagramSource: fallback,
+      connector: null as any,
+      facebookChannel: null as any,
+      instagramChannel: null as any,
+      pageId: pageId || '',
+      pageName: null,
+      igAccountId: null,
+    };
+  }
+
+  const activeSource =
+    (surface === 'instagram' ? sources?.instagramSource : sources?.facebookSource) ||
+    sources!.facebookSource;
+
+  const payloadHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  const [rawRecord] = await db
+    .insert(acquisitionRawRecords)
+    .values({
+      ownerUserId: activeSource.ownerUserId,
+      sourceConnectionId: activeSource.id,
+      externalEventId: payload.entry?.[0]?.id,
+      eventName: objectType,
+      headers: headers || {},
+      payload: payload as Record<string, unknown>,
+      payloadHash,
+      processingStatus: 'queued',
+      occurredAt: new Date(),
+    })
+    .returning();
+
+  const createdEvents: Array<{ id: string; eventType: string }> = [];
+  const createdInteractions: Array<{ id: string; personId: string }> = [];
+
+  try {
+    for (const entry of payload.entry || []) {
+      for (const messaging of entry.messaging || []) {
+        const message = messaging.message;
+        if (!message || message.is_echo) continue;
+        const senderId = messaging.sender?.id;
+        if (!senderId) continue;
+        // Skip page-as-sender echoes
+        if (pageId && senderId === pageId) continue;
+
+        const mid = message.mid || `${senderId}-${messaging.timestamp || Date.now()}`;
+        const textBody = message.text || messaging.postback?.title || '';
+        const occurredAt = messaging.timestamp
+          ? new Date(messaging.timestamp)
+          : new Date();
+
+        const person = await resolveOrCreatePersonByMetaMessaging({
+          ownerUserId: activeSource.ownerUserId,
+          externalId: senderId,
+          surface,
+        });
+        if (!person) continue;
+
+        const [event] = await db
+          .insert(acquisitionEvents)
+          .values({
+            ownerUserId: activeSource.ownerUserId,
+            sourceConnectionId: activeSource.id,
+            rawRecordId: rawRecord.id,
+            source: surface === 'instagram' ? META_IG_PROVIDER : META_FB_PROVIDER,
+            externalEventId: mid,
+            eventType: 'message.received',
+            occurredAt,
+            personId: person.id,
+            channel: surface,
+            objectType: 'message',
+            objectId: mid,
+            attributes: {
+              messageType: message.text ? 'text' : 'message',
+              text: textBody,
+              from: senderId,
+              surface,
+            },
+            schemaVersion: 1,
+          })
+          .returning();
+
+        createdEvents.push({ id: event.id, eventType: event.eventType });
+
+        const [interaction] = await db
+          .insert(acquisitionInteractions)
+          .values({
+            ownerUserId: activeSource.ownerUserId,
+            personId: person.id,
+            sourceEventId: event.id,
+            kind: 'message',
+            direction: 'inbound',
+            summary: textBody
+              ? `${surface === 'instagram' ? 'Instagram' : 'Facebook'}: ${textBody.slice(0, 180)}`
+              : `${surface === 'instagram' ? 'Instagram' : 'Facebook'} message received`,
+            occurredAt,
+          })
+          .returning();
+
+        createdInteractions.push({ id: interaction.id, personId: person.id });
+        await refreshPersonMaturity(person.id, 'engaged');
+      }
+    }
+
+    await db
+      .update(acquisitionRawRecords)
+      .set({ processingStatus: 'processed', errorMessage: null })
+      .where(eq(acquisitionRawRecords.id, rawRecord.id));
+
+    await db
+      .update(acquisitionSourceConnections)
+      .set({
+        lastSuccessAt: new Date(),
+        lastErrorAt: null,
+        lastErrorMessage: null,
+        status: 'active',
+        updatedAt: new Date(),
+      })
+      .where(eq(acquisitionSourceConnections.id, activeSource.id));
+
+    return {
+      rawRecordId: rawRecord.id,
+      ignored: false,
+      events: createdEvents,
+      interactions: createdInteractions,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown page ingest error';
+    logger.error('Acquisition Meta Page ingest failed', {
+      error: message,
+      rawRecordId: rawRecord.id,
+    });
+
+    await db
+      .update(acquisitionRawRecords)
+      .set({ processingStatus: 'failed', errorMessage: message })
+      .where(eq(acquisitionRawRecords.id, rawRecord.id));
+
+    await db
+      .update(acquisitionSourceConnections)
+      .set({
+        lastErrorAt: new Date(),
+        lastErrorMessage: message,
+        status: 'error',
+        updatedAt: new Date(),
+      })
+      .where(eq(acquisitionSourceConnections.id, activeSource.id));
+
+    throw error;
+  }
+}
+
 export async function listAcquisitionPeople(ownerUserId: string, limit = 50) {
   return db
     .select()
@@ -673,6 +1163,26 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     .select({ count: sql<number>`count(*)::int` })
     .from(acquisitionEvents)
     .where(eq(acquisitionEvents.ownerUserId, ownerUserId));
+
+  const [whatsappEventCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(acquisitionEvents)
+    .where(
+      and(
+        eq(acquisitionEvents.ownerUserId, ownerUserId),
+        eq(acquisitionEvents.channel, 'whatsapp'),
+      ),
+    );
+
+  const [pageEventCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(acquisitionEvents)
+    .where(
+      and(
+        eq(acquisitionEvents.ownerUserId, ownerUserId),
+        inArray(acquisitionEvents.channel, ['facebook', 'instagram']),
+      ),
+    );
 
   const [interactionCount] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -746,7 +1256,7 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     lastWebhookSuccessAt: metaSource?.lastSuccessAt || null,
     lastWebhookErrorAt: metaSource?.lastErrorAt || null,
     lastWebhookError: metaSource?.lastErrorMessage || null,
-    inboundEvents: eventCount?.count || 0,
+    inboundEvents: whatsappEventCount?.count || 0,
     people: peopleCount?.count || 0,
   };
 
@@ -763,6 +1273,74 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     );
   }
 
+  const fbSource = sources.find((s) => s.provider === META_FB_PROVIDER) || null;
+  const igSource = sources.find((s) => s.provider === META_IG_PROVIDER) || null;
+  const facebookChannel = channels.find((c) => c.kind === 'facebook_organic') || null;
+  const instagramChannel = channels.find((c) => c.kind === 'instagram_organic') || null;
+  const pageConnector = connectors.find((c) => c.provider === 'meta') || null;
+
+  const { probeMetaPageConnection } = await import('./meta-graph-service.js');
+  const pageProbe = await probeMetaPageConnection({
+    pageId:
+      fbSource?.externalAccountId ||
+      pageConnector?.externalAccountId ||
+      config.metaPageId ||
+      undefined,
+  });
+
+  if (pageConnector) {
+    try {
+      await db
+        .update(platformConnectors)
+        .set({
+          status: pageProbe.ok ? 'connected' : 'error',
+          lastValidatedAt: pageProbe.ok
+            ? new Date()
+            : pageConnector.lastValidatedAt
+              ? new Date(pageConnector.lastValidatedAt)
+              : null,
+          lastErrorAt: pageProbe.ok ? null : new Date(),
+          lastErrorMessage: pageProbe.ok ? null : pageProbe.error,
+          updatedAt: new Date(),
+        })
+        .where(eq(platformConnectors.id, pageConnector.id));
+    } catch {
+      // non-fatal
+    }
+    connectors = connectors.map((c) =>
+      c.id === pageConnector.id
+        ? {
+            ...c,
+            status: (pageProbe.ok ? 'connected' : 'error') as typeof c.status,
+            lastErrorMessage: pageProbe.ok ? null : pageProbe.error,
+          }
+        : c,
+    );
+  }
+
+  const pageHealth = {
+    boundToUser: Boolean(fbSource || igSource || facebookChannel || instagramChannel),
+    facebookSourceStatus: fbSource?.status || null,
+    instagramSourceStatus: igSource?.status || null,
+    connectorStatus: pageProbe.ok ? 'connected' : pageConnector ? 'error' : null,
+    tokenConfigured: pageProbe.tokenConfigured,
+    pageIdConfigured: pageProbe.pageIdConfigured,
+    verifyTokenConfigured: pageProbe.verifyTokenConfigured,
+    pageId: pageProbe.pageId,
+    pageName: pageProbe.pageName,
+    igAccountId: pageProbe.igAccountId,
+    igUsername: pageProbe.igUsername,
+    graphOk: pageProbe.ok,
+    graphError: pageProbe.error,
+    webhookPath: '/api/meta/page/webhook',
+    lastWebhookSuccessAt:
+      fbSource?.lastSuccessAt || igSource?.lastSuccessAt || null,
+    lastWebhookErrorAt: fbSource?.lastErrorAt || igSource?.lastErrorAt || null,
+    lastWebhookError: fbSource?.lastErrorMessage || igSource?.lastErrorMessage || null,
+    inboundEvents: pageEventCount?.count || 0,
+    people: peopleCount?.count || 0,
+  };
+
   return {
     people: peopleCount?.count || 0,
     events: eventCount?.count || 0,
@@ -771,5 +1349,6 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     channels,
     connectors,
     metaHealth,
+    pageHealth,
   };
 }

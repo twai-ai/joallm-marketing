@@ -42,7 +42,7 @@ export const CONNECTOR_REGISTRY: ConnectorRegistryEntry[] = [
     provider: 'meta',
     displayName: 'Meta Marketing API',
     defaultCapabilities: ['connect', 'validate', 'publish', 'schedule', 'fetchEvents', 'fetchMetrics', 'disconnect'],
-    setupNotes: 'Ads / Pages — bind later to Meta Ads Channel.',
+    setupNotes: 'Page ID + access token. Webhook: /api/meta/page/webhook for Messenger + Instagram messaging.',
   },
   {
     provider: 'linkedin',

@@ -177,6 +177,132 @@ export async function ensureMetaWhatsAppConnector(options: {
   return mapConnector(created);
 }
 
+/**
+ * Ensure Meta Marketing / Pages connector for Facebook + Instagram messaging.
+ */
+export async function ensureMetaPageConnector(options: {
+  ownerUserId: string;
+  pageId?: string;
+}) {
+  const { ownerUserId } = options;
+  const registry = getRegistryEntry('meta');
+  const capabilities = defaultCapabilitiesFor('meta');
+  const externalAccountId = options.pageId || config.metaPageId || null;
+
+  const { probeMetaPageConnection } = await import('./meta-graph-service.js');
+  const probe = await probeMetaPageConnection({
+    pageId: externalAccountId || undefined,
+  });
+  const liveStatus = probe.ok
+    ? 'connected'
+    : externalAccountId || probe.tokenConfigured
+      ? 'error'
+      : 'connecting';
+  const sharedConfig = {
+    pageId: probe.pageId || externalAccountId,
+    pageName: probe.pageName,
+    igAccountId: probe.igAccountId,
+    igUsername: probe.igUsername,
+    verifyTokenConfigured: probe.verifyTokenConfigured,
+    lastProbeAt: new Date().toISOString(),
+  };
+
+  if (externalAccountId) {
+    const [byAccount] = await db
+      .select()
+      .from(platformConnectors)
+      .where(
+        and(
+          eq(platformConnectors.ownerUserId, ownerUserId),
+          eq(platformConnectors.provider, 'meta'),
+          eq(platformConnectors.externalAccountId, externalAccountId),
+        ),
+      )
+      .limit(1);
+    if (byAccount) {
+      const [updated] = await db
+        .update(platformConnectors)
+        .set({
+          status: liveStatus,
+          name: probe.pageName
+            ? `Meta Page (${probe.pageName})`
+            : registry?.displayName || byAccount.name,
+          apiVersion: 'v20.0',
+          capabilities,
+          config: {
+            ...((byAccount.config as Record<string, unknown>) || {}),
+            ...sharedConfig,
+          },
+          lastValidatedAt: probe.ok ? new Date() : byAccount.lastValidatedAt,
+          lastErrorAt: probe.ok ? null : new Date(),
+          lastErrorMessage: probe.ok ? null : probe.error,
+          updatedAt: new Date(),
+        })
+        .where(eq(platformConnectors.id, byAccount.id))
+        .returning();
+      return mapConnector(updated);
+    }
+  }
+
+  const [existing] = await db
+    .select()
+    .from(platformConnectors)
+    .where(
+      and(
+        eq(platformConnectors.ownerUserId, ownerUserId),
+        eq(platformConnectors.provider, 'meta'),
+        or(isNull(platformConnectors.externalAccountId), eq(platformConnectors.externalAccountId, '')),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    const [updated] = await db
+      .update(platformConnectors)
+      .set({
+        status: liveStatus,
+        externalAccountId: externalAccountId || existing.externalAccountId,
+        name: probe.pageName
+          ? `Meta Page (${probe.pageName})`
+          : registry?.displayName || existing.name,
+        apiVersion: 'v20.0',
+        capabilities,
+        config: {
+          ...((existing.config as Record<string, unknown>) || {}),
+          ...sharedConfig,
+        },
+        lastValidatedAt: probe.ok ? new Date() : existing.lastValidatedAt,
+        lastErrorAt: probe.ok ? null : new Date(),
+        lastErrorMessage: probe.ok ? null : probe.error,
+        updatedAt: new Date(),
+      })
+      .where(eq(platformConnectors.id, existing.id))
+      .returning();
+    return mapConnector(updated);
+  }
+
+  const [created] = await db
+    .insert(platformConnectors)
+    .values({
+      ownerUserId,
+      provider: 'meta',
+      name: probe.pageName
+        ? `Meta Page (${probe.pageName})`
+        : registry?.displayName || 'Meta Marketing API',
+      apiVersion: 'v20.0',
+      status: liveStatus,
+      capabilities,
+      externalAccountId,
+      config: sharedConfig,
+      lastValidatedAt: probe.ok ? new Date() : null,
+      lastErrorAt: probe.ok ? null : new Date(),
+      lastErrorMessage: probe.ok ? null : probe.error,
+    })
+    .returning();
+
+  return mapConnector(created);
+}
+
 export async function validateConnector(ownerUserId: string, connectorId: string) {
   const [row] = await db
     .select()
@@ -210,6 +336,35 @@ export async function validateConnector(ownerUserId: string, connectorId: string
           displayPhoneNumber: probe.displayPhoneNumber,
           verifiedName: probe.verifiedName,
           qualityRating: probe.qualityRating,
+          lastProbeAt: new Date().toISOString(),
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(platformConnectors.id, row.id))
+      .returning();
+    return mapConnector(updated);
+  }
+
+  if (row.provider === 'meta') {
+    const { probeMetaPageConnection } = await import('./meta-graph-service.js');
+    const pageId =
+      row.externalAccountId ||
+      (row.config as { pageId?: string } | null)?.pageId ||
+      config.metaPageId;
+    const probe = await probeMetaPageConnection({ pageId: pageId || undefined });
+    const [updated] = await db
+      .update(platformConnectors)
+      .set({
+        status: probe.ok ? 'connected' : 'error',
+        lastValidatedAt: probe.ok ? new Date() : row.lastValidatedAt,
+        lastErrorAt: probe.ok ? null : new Date(),
+        lastErrorMessage: probe.ok ? null : probe.error,
+        config: {
+          ...((row.config as Record<string, unknown>) || {}),
+          pageId: probe.pageId,
+          pageName: probe.pageName,
+          igAccountId: probe.igAccountId,
+          igUsername: probe.igUsername,
           lastProbeAt: new Date().toISOString(),
         },
         updatedAt: new Date(),

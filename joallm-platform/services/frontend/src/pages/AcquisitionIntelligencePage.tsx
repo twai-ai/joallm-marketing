@@ -395,7 +395,7 @@ export function AcquisitionIntelligencePage() {
           <button
             type="button"
             onClick={() => void ensureMetaSource()}
-            disabled={connecting || connectingPage}
+            disabled={connecting || connectingPage || connectingMarketing}
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm disabled:cursor-not-allowed"
           >
             {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}

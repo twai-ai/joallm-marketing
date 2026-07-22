@@ -19,7 +19,9 @@ import {
 import { config } from '../config/config.js';
 import {
   ensureMetaPageSourceConnections,
+  ensureMetaMarketingSources,
   ensureMetaSourceConnection,
+  syncMetaMarketingInsights,
 } from '../services/acquisition-ingest-service.js';
 import { logger } from '../utils/logger.js';
 
@@ -110,6 +112,37 @@ export async function studioRoutes(fastify: FastifyInstance, _options: FastifyPl
       return reply.status(500).send({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to ensure Meta Page channels',
+      });
+    }
+  });
+
+  fastify.post('/channels/meta-marketing', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Ensure Meta Ads + Lead Ads sources for the Marketing API lifecycle',
+      tags: ['studio'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const body = (request.body || {}) as { pageId?: string; adAccountId?: string };
+
+      const stack = await ensureMetaMarketingSources({
+        ownerUserId: userId,
+        pageId: body.pageId || config.metaPageId,
+        adAccountId: body.adAccountId || config.metaAdAccountId,
+        claimOwnership: true,
+      });
+
+      return reply.status(201).send({
+        success: true,
+        data: stack,
+      });
+    } catch (error) {
+      logger.error('Ensure Meta Marketing sources failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to ensure Meta Marketing sources',
       });
     }
   });

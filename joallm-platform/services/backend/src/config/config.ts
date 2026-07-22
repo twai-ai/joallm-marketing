@@ -67,6 +67,8 @@ const configSchema = z.object({
   metaEnableAutoReply: z.boolean().default(true),
   metaPageId: z.string().optional(),
   metaInstagramAccountId: z.string().optional(),
+  /** Ad account id with or without act_ prefix */
+  metaAdAccountId: z.string().optional(),
   // Soft fallback only — prefer Studio-connected Meta source (phone_number_id) at runtime.
   acquisitionDefaultOwnerUserId: z.preprocess(
     (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
@@ -117,6 +119,7 @@ const envVars = {
   metaEnableAutoReply: process.env.META_ENABLE_AUTO_REPLY !== 'false',
   metaPageId: process.env.META_PAGE_ID,
   metaInstagramAccountId: process.env.META_INSTAGRAM_ACCOUNT_ID,
+  metaAdAccountId: process.env.META_AD_ACCOUNT_ID,
   acquisitionDefaultOwnerUserId: process.env.ACQUISITION_DEFAULT_OWNER_USER_ID,
 };
 

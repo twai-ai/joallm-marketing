@@ -31,6 +31,8 @@ import { listPlatformConnectors } from './connector-service.js';
 const META_PROVIDER = 'meta_whatsapp';
 const META_FB_PROVIDER = 'meta_facebook_page';
 const META_IG_PROVIDER = 'meta_instagram';
+const META_LEAD_PROVIDER = 'meta_lead_ads';
+const META_ADS_PROVIDER = 'meta_ads';
 const PAGE_SOURCE_PROVIDERS = [META_FB_PROVIDER, META_IG_PROVIDER] as const;
 
 export type MetaWebhookPayload = {
@@ -315,7 +317,11 @@ export async function ensureMetaSourceConnection(options: {
 
 async function upsertPageSourceConnection(options: {
   ownerUserId: string;
-  provider: typeof META_FB_PROVIDER | typeof META_IG_PROVIDER;
+  provider:
+    | typeof META_FB_PROVIDER
+    | typeof META_IG_PROVIDER
+    | typeof META_LEAD_PROVIDER
+    | typeof META_ADS_PROVIDER;
   externalAccountId: string;
   name: string;
   connectorId?: string | null;
@@ -477,6 +483,96 @@ export async function ensureMetaPageSourceConnections(options: {
     pageId,
     pageName: stack.pageName,
     igAccountId: stack.igAccountId,
+  };
+}
+
+/** Bind Meta Ads + Lead Ads acquisition sources (Marketing API lifecycle). */
+export async function ensureMetaMarketingSources(options: {
+  ownerUserId: string;
+  pageId?: string;
+  adAccountId?: string;
+  claimOwnership?: boolean;
+}) {
+  const { ownerUserId, claimOwnership = false } = options;
+  const {
+    normalizeAdAccountId,
+    probeMetaAdAccount,
+    probeMetaPageConnection,
+  } = await import('./meta-graph-service.js');
+
+  const pageId = options.pageId || config.metaPageId || undefined;
+  const adAccountId =
+    normalizeAdAccountId(options.adAccountId || config.metaAdAccountId || null) ||
+    undefined;
+
+  let connectorId: string | null = null;
+  let adsChannelId: string | null = null;
+  try {
+    const stack = await ensureMetaPageChannelStack({
+      ownerUserId,
+      pageId,
+    });
+    connectorId = stack.connector.id;
+    const { ensureStudioChannelByKind } = await import('./channel-service.js');
+    const adsChannel = await ensureStudioChannelByKind({
+      ownerUserId,
+      kind: 'meta_ads',
+      name: 'Meta Ads',
+    });
+    adsChannelId = adsChannel.id;
+  } catch (error) {
+    logger.warn('Meta marketing channel stack partial failure', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const pageProbe = await probeMetaPageConnection({ pageId });
+  const adProbe = await probeMetaAdAccount({ adAccountId });
+
+  const leadExternalId = pageId || pageProbe.pageId || 'meta-leads';
+  const adsExternalId = adAccountId || adProbe.adAccountId || 'meta-ads';
+
+  const leadSource = await upsertPageSourceConnection({
+    ownerUserId,
+    provider: META_LEAD_PROVIDER,
+    externalAccountId: leadExternalId,
+    name: pageProbe.pageName
+      ? `Lead Ads (${pageProbe.pageName})`
+      : 'Meta Lead Ads',
+    connectorId,
+    channelId: adsChannelId,
+    claimOwnership,
+    config: {
+      pageId: pageProbe.pageId || pageId || null,
+      pageName: pageProbe.pageName,
+      surface: 'lead_ads',
+      webhookField: 'leadgen',
+    },
+  });
+
+  const adsSource = await upsertPageSourceConnection({
+    ownerUserId,
+    provider: META_ADS_PROVIDER,
+    externalAccountId: adsExternalId,
+    name: adProbe.accountName
+      ? `Meta Ads (${adProbe.accountName})`
+      : 'Meta Ads',
+    connectorId,
+    channelId: adsChannelId,
+    claimOwnership,
+    config: {
+      adAccountId: adProbe.adAccountId || adAccountId || null,
+      currency: adProbe.currency,
+      surface: 'ads',
+    },
+  });
+
+  return {
+    leadSource,
+    adsSource,
+    pageProbe,
+    adProbe,
+    adsChannelId,
   };
 }
 
@@ -851,6 +947,17 @@ export type MetaPageWebhookPayload = {
       };
       postback?: { payload?: string; title?: string };
     }>;
+    changes?: Array<{
+      field?: string;
+      value?: {
+        leadgen_id?: string;
+        page_id?: string;
+        form_id?: string;
+        ad_id?: string;
+        adgroup_id?: string;
+        created_time?: number | string;
+      };
+    }>;
   }>;
 };
 
@@ -904,6 +1011,137 @@ async function resolveOrCreatePersonByMetaMessaging(options: {
     isVerified: true,
     verifiedAt: new Date(),
   });
+
+  return person;
+}
+
+async function resolveOrCreatePersonFromLead(options: {
+  ownerUserId: string;
+  identityKey: string;
+  email?: string | null;
+  phone?: string | null;
+  displayName?: string | null;
+}) {
+  const { ownerUserId, identityKey, email, phone, displayName } = options;
+
+  if (email) {
+    const [byEmail] = await db
+      .select()
+      .from(acquisitionPersonIdentities)
+      .where(
+        and(
+          eq(acquisitionPersonIdentities.ownerUserId, ownerUserId),
+          eq(acquisitionPersonIdentities.provider, 'email'),
+          eq(acquisitionPersonIdentities.externalId, email.toLowerCase()),
+        ),
+      )
+      .limit(1);
+    if (byEmail) {
+      const [person] = await db
+        .select()
+        .from(acquisitionPersons)
+        .where(eq(acquisitionPersons.id, byEmail.personId))
+        .limit(1);
+      return person;
+    }
+  }
+
+  if (phone) {
+    const normalized = phone.replace(/\D/g, '');
+    const [byPhone] = await db
+      .select()
+      .from(acquisitionPersonIdentities)
+      .where(
+        and(
+          eq(acquisitionPersonIdentities.ownerUserId, ownerUserId),
+          eq(acquisitionPersonIdentities.provider, 'phone'),
+          eq(acquisitionPersonIdentities.externalId, normalized),
+        ),
+      )
+      .limit(1);
+    if (byPhone) {
+      const [person] = await db
+        .select()
+        .from(acquisitionPersons)
+        .where(eq(acquisitionPersons.id, byPhone.personId))
+        .limit(1);
+      return person;
+    }
+  }
+
+  const metaExternalId = `lead:${identityKey}`;
+  const [existingMeta] = await db
+    .select()
+    .from(acquisitionPersonIdentities)
+    .where(
+      and(
+        eq(acquisitionPersonIdentities.ownerUserId, ownerUserId),
+        eq(acquisitionPersonIdentities.provider, 'meta'),
+        eq(acquisitionPersonIdentities.externalId, metaExternalId),
+      ),
+    )
+    .limit(1);
+  if (existingMeta) {
+    const [person] = await db
+      .select()
+      .from(acquisitionPersons)
+      .where(eq(acquisitionPersons.id, existingMeta.personId))
+      .limit(1);
+    return person;
+  }
+
+  const [person] = await db
+    .insert(acquisitionPersons)
+    .values({
+      ownerUserId,
+      displayName: displayName || email || phone || identityKey,
+      primaryEmail: email || null,
+      primaryPhone: phone || null,
+      status: 'identified',
+      relationshipMaturity: 'identified',
+      metadata: { source: META_LEAD_PROVIDER },
+    })
+    .returning();
+
+  await db.insert(acquisitionPersonIdentities).values({
+    ownerUserId,
+    personId: person.id,
+    provider: 'meta',
+    externalId: metaExternalId,
+    confidence: 1,
+    isVerified: true,
+    verifiedAt: new Date(),
+  });
+
+  if (email) {
+    try {
+      await db.insert(acquisitionPersonIdentities).values({
+        ownerUserId,
+        personId: person.id,
+        provider: 'email',
+        externalId: email.toLowerCase(),
+        confidence: 1,
+        isVerified: true,
+        verifiedAt: new Date(),
+      });
+    } catch {
+      // unique
+    }
+  }
+  if (phone) {
+    try {
+      await db.insert(acquisitionPersonIdentities).values({
+        ownerUserId,
+        personId: person.id,
+        provider: 'phone',
+        externalId: phone.replace(/\D/g, ''),
+        confidence: 0.9,
+        isVerified: false,
+      });
+    } catch {
+      // unique
+    }
+  }
 
   return person;
 }
@@ -1062,6 +1300,119 @@ export async function ingestMetaPageWebhook(options: {
 
         createdInteractions.push({ id: interaction.id, personId: person.id });
         await refreshPersonMaturity(person.id, 'engaged');
+      }
+
+      // Lead Ads (Marketing API) — field: leadgen on Page webhook
+      for (const change of entry.changes || []) {
+        if (change.field !== 'leadgen' || !change.value?.leadgen_id) continue;
+
+        const leadgenId = change.value.leadgen_id;
+        const { fetchMetaLeadById } = await import('./meta-graph-service.js');
+        const leadResult = await fetchMetaLeadById(leadgenId);
+        if (!leadResult.ok) {
+          logger.warn('Lead Ads fetch failed', { leadgenId, error: leadResult.error });
+          continue;
+        }
+        const lead = leadResult.lead;
+
+        let leadSource = (
+          await db
+            .select()
+            .from(acquisitionSourceConnections)
+            .where(
+              and(
+                eq(acquisitionSourceConnections.ownerUserId, activeSource.ownerUserId),
+                eq(acquisitionSourceConnections.provider, META_LEAD_PROVIDER),
+              ),
+            )
+            .limit(1)
+        )[0];
+
+        if (!leadSource) {
+          leadSource = await upsertPageSourceConnection({
+            ownerUserId: activeSource.ownerUserId,
+            provider: META_LEAD_PROVIDER,
+            externalAccountId: pageId || change.value.page_id || leadgenId,
+            name: 'Meta Lead Ads',
+            claimOwnership: false,
+            config: { pageId, surface: 'lead_ads' },
+          });
+        }
+
+        const identityKey =
+          lead.email ||
+          lead.phone ||
+          `lead:${lead.id}`;
+        const person = await resolveOrCreatePersonFromLead({
+          ownerUserId: activeSource.ownerUserId,
+          identityKey,
+          email: lead.email,
+          phone: lead.phone,
+          displayName: lead.fullName,
+        });
+        if (!person) continue;
+
+        const occurredAt = lead.createdTime
+          ? new Date(lead.createdTime)
+          : typeof change.value.created_time === 'number'
+            ? new Date(change.value.created_time * 1000)
+            : new Date();
+
+        const [event] = await db
+          .insert(acquisitionEvents)
+          .values({
+            ownerUserId: activeSource.ownerUserId,
+            sourceConnectionId: leadSource.id,
+            rawRecordId: rawRecord.id,
+            source: META_LEAD_PROVIDER,
+            externalEventId: lead.id,
+            eventType: 'lead.submitted',
+            occurredAt,
+            personId: person.id,
+            channel: 'meta_ads',
+            objectType: 'lead',
+            objectId: lead.id,
+            attributes: {
+              formId: lead.formId || change.value.form_id || null,
+              adId: lead.adId || change.value.ad_id || null,
+              adsetId: lead.adsetId || change.value.adgroup_id || null,
+              campaignId: lead.campaignId || null,
+              fieldData: lead.fieldData,
+              email: lead.email,
+              phone: lead.phone,
+            },
+            schemaVersion: 1,
+          })
+          .returning();
+
+        createdEvents.push({ id: event.id, eventType: event.eventType });
+
+        const [interaction] = await db
+          .insert(acquisitionInteractions)
+          .values({
+            ownerUserId: activeSource.ownerUserId,
+            personId: person.id,
+            sourceEventId: event.id,
+            kind: 'submission',
+            direction: 'inbound',
+            summary: `Lead Ads: ${lead.fullName || lead.email || lead.phone || lead.id}`,
+            occurredAt,
+          })
+          .returning();
+
+        createdInteractions.push({ id: interaction.id, personId: person.id });
+        await refreshPersonMaturity(person.id, 'engaged');
+
+        await db
+          .update(acquisitionSourceConnections)
+          .set({
+            lastSuccessAt: new Date(),
+            lastErrorAt: null,
+            lastErrorMessage: null,
+            status: 'active',
+            updatedAt: new Date(),
+          })
+          .where(eq(acquisitionSourceConnections.id, leadSource.id));
       }
     }
 
@@ -1341,6 +1692,81 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     people: peopleCount?.count || 0,
   };
 
+  const leadSource = sources.find((s) => s.provider === META_LEAD_PROVIDER) || null;
+  const adsSource = sources.find((s) => s.provider === META_ADS_PROVIDER) || null;
+  const adsChannel = channels.find((c) => c.kind === 'meta_ads') || null;
+
+  const {
+    probeMetaAdAccount,
+    normalizeAdAccountId,
+  } = await import('./meta-graph-service.js');
+  const adProbe = await probeMetaAdAccount({
+    adAccountId:
+      adsSource?.externalAccountId ||
+      config.metaAdAccountId ||
+      undefined,
+  });
+
+  const [leadEventCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(acquisitionEvents)
+    .where(
+      and(
+        eq(acquisitionEvents.ownerUserId, ownerUserId),
+        eq(acquisitionEvents.source, META_LEAD_PROVIDER),
+      ),
+    );
+
+  const lastInsights =
+    adsSource?.config &&
+    typeof adsSource.config === 'object' &&
+    (adsSource.config as { lastInsights?: unknown }).lastInsights
+      ? (adsSource.config as { lastInsights: Record<string, unknown> }).lastInsights
+      : null;
+
+  const marketingHealth = {
+    boundToUser: Boolean(leadSource || adsSource || adsChannel),
+    leadSourceStatus: leadSource?.status || null,
+    adsSourceStatus: adsSource?.status || null,
+    tokenConfigured: adProbe.tokenConfigured,
+    adAccountConfigured: adProbe.adAccountConfigured,
+    pageIdConfigured: Boolean(config.metaPageId || pageProbe.pageId),
+    adAccountId: adProbe.adAccountId || normalizeAdAccountId(config.metaAdAccountId) || null,
+    adAccountName: adProbe.accountName,
+    currency: adProbe.currency,
+    graphOk: adProbe.ok,
+    graphError: adProbe.error,
+    webhookPath: '/api/meta/page/webhook',
+    webhookField: 'leadgen',
+    lastLeadSuccessAt: leadSource?.lastSuccessAt || null,
+    lastLeadError: leadSource?.lastErrorMessage || null,
+    leadsIngested: leadEventCount?.count || 0,
+    lastInsights,
+    lifecycle: [
+      { id: 'create', label: 'Create creatives', status: 'ready' as const },
+      { id: 'reach', label: 'Reach via Meta Ads', status: adProbe.ok ? ('live' as const) : ('setup' as const) },
+      {
+        id: 'engage',
+        label: 'Engage DMs',
+        status:
+          (pageEventCount?.count || 0) > 0 || (whatsappEventCount?.count || 0) > 0
+            ? ('live' as const)
+            : ('setup' as const),
+      },
+      {
+        id: 'capture',
+        label: 'Capture Lead Ads',
+        status: (leadEventCount?.count || 0) > 0 ? ('live' as const) : ('setup' as const),
+      },
+      { id: 'nurture', label: 'Nurture on WhatsApp/IG', status: 'partial' as const },
+      {
+        id: 'measure',
+        label: 'Measure insights',
+        status: lastInsights ? ('live' as const) : ('setup' as const),
+      },
+    ],
+  };
+
   return {
     people: peopleCount?.count || 0,
     events: eventCount?.count || 0,
@@ -1350,5 +1776,61 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     connectors,
     metaHealth,
     pageHealth,
+    marketingHealth,
+  };
+}
+
+/** Pull Marketing API insights and persist on the meta_ads source. */
+export async function syncMetaMarketingInsights(options: {
+  ownerUserId: string;
+  datePreset?: string;
+}) {
+  const bound = await ensureMetaMarketingSources({
+    ownerUserId: options.ownerUserId,
+    claimOwnership: true,
+  });
+
+  const { fetchMetaAdAccountInsights } = await import('./meta-graph-service.js');
+  const result = await fetchMetaAdAccountInsights({
+    adAccountId: bound.adProbe.adAccountId || undefined,
+    datePreset: options.datePreset || 'last_7d',
+  });
+
+  if (!result.ok) {
+    await db
+      .update(acquisitionSourceConnections)
+      .set({
+        lastErrorAt: new Date(),
+        lastErrorMessage: result.error,
+        status: 'error',
+        updatedAt: new Date(),
+      })
+      .where(eq(acquisitionSourceConnections.id, bound.adsSource.id));
+    return { ok: false as const, error: result.error };
+  }
+
+  const [updated] = await db
+    .update(acquisitionSourceConnections)
+    .set({
+      status: 'active',
+      lastSuccessAt: new Date(),
+      lastErrorAt: null,
+      lastErrorMessage: null,
+      config: {
+        ...((bound.adsSource.config as Record<string, unknown>) || {}),
+        adAccountId: bound.adProbe.adAccountId,
+        accountName: result.accountName,
+        lastInsights: result.insights,
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(acquisitionSourceConnections.id, bound.adsSource.id))
+    .returning();
+
+  return {
+    ok: true as const,
+    insights: result.insights,
+    accountName: result.accountName,
+    source: updated,
   };
 }

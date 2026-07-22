@@ -69,6 +69,43 @@ interface PageConnectionHealth {
   people: number;
 }
 
+interface MarketingLifecycleStep {
+  id: string;
+  label: string;
+  status: 'ready' | 'live' | 'setup' | 'partial';
+}
+
+interface MarketingHealth {
+  boundToUser: boolean;
+  leadSourceStatus: string | null;
+  adsSourceStatus: string | null;
+  tokenConfigured: boolean;
+  adAccountConfigured: boolean;
+  pageIdConfigured: boolean;
+  adAccountId: string | null;
+  adAccountName: string | null;
+  currency: string | null;
+  graphOk: boolean;
+  graphError: string | null;
+  webhookPath: string;
+  webhookField: string;
+  lastLeadSuccessAt: string | null;
+  lastLeadError: string | null;
+  leadsIngested: number;
+  lastInsights: {
+    datePreset?: string;
+    impressions?: number;
+    clicks?: number;
+    spend?: number;
+    cpc?: number | null;
+    ctr?: number | null;
+    reach?: number | null;
+    currency?: string | null;
+    fetchedAt?: string;
+  } | null;
+  lifecycle: MarketingLifecycleStep[];
+}
+
 interface OverviewData {
   people: number;
   events: number;
@@ -78,6 +115,7 @@ interface OverviewData {
   connectors?: Connector[];
   metaHealth?: MetaConnectionHealth;
   pageHealth?: PageConnectionHealth;
+  marketingHealth?: MarketingHealth;
 }
 
 function formatWhen(value?: string | null) {
@@ -118,6 +156,8 @@ export function AcquisitionIntelligencePage() {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [connectingPage, setConnectingPage] = useState(false);
+  const [connectingMarketing, setConnectingMarketing] = useState(false);
+  const [syncingInsights, setSyncingInsights] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,6 +248,7 @@ export function AcquisitionIntelligencePage() {
   );
   const health = overview?.metaHealth;
   const pageHealth = overview?.pageHealth;
+  const marketingHealth = overview?.marketingHealth;
 
   const ensureMetaSource = async () => {
     setConnecting(true);
@@ -234,6 +275,36 @@ export function AcquisitionIntelligencePage() {
       );
     } finally {
       setConnectingPage(false);
+    }
+  };
+
+  const ensureMetaMarketing = async () => {
+    setConnectingMarketing(true);
+    try {
+      await apiClient.post('/api/studio/channels/meta-marketing', {});
+      showSuccess('Meta Ads + Lead Ads sources bound');
+      await load();
+    } catch (error) {
+      showError(
+        error instanceof Error ? error.message : 'Failed to connect Meta Marketing',
+      );
+    } finally {
+      setConnectingMarketing(false);
+    }
+  };
+
+  const syncInsights = async () => {
+    setSyncingInsights(true);
+    try {
+      await apiClient.post('/api/acquisition/marketing/sync-insights', {
+        datePreset: 'last_7d',
+      });
+      showSuccess('Meta ad insights synced (last 7 days)');
+      await load();
+    } catch (error) {
+      showError(error instanceof Error ? error.message : 'Failed to sync insights');
+    } finally {
+      setSyncingInsights(false);
     }
   };
 
@@ -333,7 +404,7 @@ export function AcquisitionIntelligencePage() {
           <button
             type="button"
             onClick={() => void ensureMetaPage()}
-            disabled={connecting || connectingPage}
+            disabled={connecting || connectingPage || connectingMarketing}
             className="inline-flex items-center gap-2 rounded-full border border-teal-300 bg-white px-4 py-2 text-sm font-medium text-teal-900 hover:bg-teal-50 disabled:cursor-not-allowed"
           >
             {connectingPage ? (
@@ -342,6 +413,19 @@ export function AcquisitionIntelligencePage() {
               <Link2 className="h-4 w-4" />
             )}
             {pageBound ? 'Re-bind Facebook + Instagram' : 'Connect Facebook + Instagram'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void ensureMetaMarketing()}
+            disabled={connecting || connectingPage || connectingMarketing}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed"
+          >
+            {connectingMarketing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Link2 className="h-4 w-4" />
+            )}
+            {marketingHealth?.boundToUser ? 'Re-bind Meta Marketing' : 'Connect Meta Marketing'}
           </button>
         </>
       }
@@ -574,6 +658,141 @@ export function AcquisitionIntelligencePage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">
+              Meta marketing lifecycle
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Lead Ads ingest + ad account insights. Subscribe Page webhook field{' '}
+              <code className="text-[11px]">leadgen</code> on{' '}
+              <code className="text-[11px]">/api/meta/page/webhook</code>.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {marketingHealth && (
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  marketingHealth.graphOk && marketingHealth.boundToUser
+                    ? 'bg-teal-50 text-teal-800 ring-1 ring-teal-200'
+                    : marketingHealth.boundToUser
+                      ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+                      : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+                }`}
+              >
+                {marketingHealth.graphOk && marketingHealth.boundToUser
+                  ? 'Ads Graph OK · bound'
+                  : marketingHealth.boundToUser
+                    ? 'Bound · Ads Graph not OK'
+                    : 'Not bound yet'}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => void syncInsights()}
+              disabled={syncingInsights || connectingMarketing}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed"
+            >
+              {syncingInsights ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Activity className="h-3.5 w-3.5" />
+              )}
+              Sync insights (7d)
+            </button>
+          </div>
+        </div>
+
+        {marketingHealth?.lifecycle && marketingHealth.lifecycle.length > 0 && (
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {marketingHealth.lifecycle.map((step) => (
+              <div
+                key={step.id}
+                className={`rounded-2xl border px-3 py-3 ${
+                  step.status === 'live'
+                    ? 'border-teal-200 bg-teal-50/70'
+                    : step.status === 'ready' || step.status === 'partial'
+                      ? 'border-amber-200 bg-amber-50/50'
+                      : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  {step.status}
+                </div>
+                <div className="mt-1 text-sm font-medium text-slate-950">{step.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {marketingHealth ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              ['Bound to your account', marketingHealth.boundToUser ? 'Yes' : 'No'],
+              ['Access token on backend', marketingHealth.tokenConfigured ? 'Yes' : 'Missing'],
+              ['Ad account configured', marketingHealth.adAccountConfigured ? 'Yes' : 'Missing'],
+              ['Page ID (for Lead Ads)', marketingHealth.pageIdConfigured ? 'Yes' : 'Missing'],
+              [
+                'Ad account Graph probe',
+                marketingHealth.graphOk ? 'OK' : marketingHealth.graphError || 'Failed',
+              ],
+              [
+                'Ad account',
+                marketingHealth.adAccountName || marketingHealth.adAccountId || '—',
+              ],
+              ['Currency', marketingHealth.currency || '—'],
+              ['Leads ingested', String(marketingHealth.leadsIngested)],
+              ['Last lead success', formatWhen(marketingHealth.lastLeadSuccessAt)],
+              [
+                'Insights (7d impressions)',
+                marketingHealth.lastInsights?.impressions != null
+                  ? String(marketingHealth.lastInsights.impressions)
+                  : '—',
+              ],
+              [
+                'Insights spend',
+                marketingHealth.lastInsights?.spend != null
+                  ? `${marketingHealth.lastInsights.spend}${
+                      marketingHealth.lastInsights.currency
+                        ? ` ${marketingHealth.lastInsights.currency}`
+                        : ''
+                    }`
+                  : '—',
+              ],
+              [
+                'Insights fetched',
+                formatWhen(
+                  typeof marketingHealth.lastInsights?.fetchedAt === 'string'
+                    ? marketingHealth.lastInsights.fetchedAt
+                    : null,
+                ),
+              ],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {label}
+                </div>
+                <div className="mt-1 break-all text-sm font-medium text-slate-900">{value}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-500">
+            {loading
+              ? 'Loading marketing health…'
+              : 'Connect Meta Marketing, set META_AD_ACCOUNT_ID, then Sync insights.'}
+          </p>
+        )}
+
+        {marketingHealth?.graphError && !marketingHealth.graphOk && (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            Ads Graph error: {marketingHealth.graphError}. Use a long-lived token with ads_read
+            (and leads_retrieval for Lead Ads), set META_AD_ACCOUNT_ID, then re-bind.
+          </p>
+        )}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">

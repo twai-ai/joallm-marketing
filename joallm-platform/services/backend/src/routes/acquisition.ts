@@ -10,6 +10,7 @@ import {
   listSourceConnections,
   ensureMetaSourceConnection,
   maybeSendWhatsAppAutoReply,
+  syncMetaMarketingInsights,
 } from '../services/acquisition-ingest-service.js';
 import { getPersonTimeline } from '../services/timeline-service.js';
 import { linkMediaFileToPerson } from '../services/knowledge-artifact-service.js';
@@ -156,6 +157,33 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
       claimOwnership: true,
     });
     return reply.status(201).send({ success: true, data: source });
+  });
+
+  fastify.post('/marketing/sync-insights', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Pull Meta Marketing API account insights into Acquisition',
+      tags: ['acquisition'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).user.id as string;
+      const body = (request.body || {}) as { datePreset?: string };
+      const result = await syncMetaMarketingInsights({
+        ownerUserId: userId,
+        datePreset: body.datePreset,
+      });
+      if (!result.ok) {
+        return reply.status(400).send({ success: false, error: result.error });
+      }
+      return reply.send({ success: true, data: result });
+    } catch (error) {
+      logger.error('Meta insights sync failed', error);
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Insights sync failed',
+      });
+    }
   });
 
   fastify.get('/people', {
@@ -1115,7 +1143,7 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
  * Native Meta webhook endpoints hosted on Railway backend.
  * WhatsApp Cloud API:
  *   https://<backend>.up.railway.app/api/meta/webhook
- * Facebook Page + Instagram messaging:
+ * Facebook Page + Instagram messaging + Lead Ads (leadgen):
  *   https://<backend>.up.railway.app/api/meta/page/webhook
  */
 export async function metaWebhookRoutes(fastify: FastifyInstance, _options: FastifyPluginOptions) {

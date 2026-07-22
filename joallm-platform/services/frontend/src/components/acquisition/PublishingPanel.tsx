@@ -21,6 +21,7 @@ type PublishingJobRow = {
 
 const CHANNEL_OPTIONS: { kind: ChannelKind; label: string }[] = [
   { kind: 'linkedin_organic', label: 'LinkedIn' },
+  { kind: 'facebook_organic', label: 'Facebook Page' },
   { kind: 'instagram_organic', label: 'Instagram' },
   { kind: 'whatsapp', label: 'WhatsApp' },
   { kind: 'website', label: 'Website' },
@@ -112,8 +113,8 @@ export function PublishingPanel({
           <div>
             <h2 className="text-xl font-semibold text-slate-950">Publishing Jobs</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Execute outbound: WhatsApp sends live when a recipient is set; other channels simulate
-              publish for dogfood. Published jobs create Program Interest.
+              Live: WhatsApp, Meta Ads (creative / PAUSED ad), Facebook Page photo. Other channels
+              still simulate. Published jobs create Program Interest.
             </p>
             <p className="mt-2 font-mono text-xs text-slate-500">
               Asset → Publish → Connector → Program Interest

@@ -69,6 +69,14 @@ const configSchema = z.object({
   metaInstagramAccountId: z.string().optional(),
   /** Ad account id with or without act_ prefix */
   metaAdAccountId: z.string().optional(),
+  /** Optional existing Ad Set — Meta Ads publish creates a PAUSED ad under it */
+  metaDefaultAdsetId: z.string().optional(),
+  /** Pixel / dataset id for Conversions API */
+  metaPixelId: z.string().optional(),
+  /** Optional dedicated CAPI token; falls back to META_ACCESS_TOKEN */
+  metaCapiAccessToken: z.string().optional(),
+  /** Landing / site URL used in link ads + CAPI event_source_url */
+  metaWebsiteUrl: z.string().optional(),
   // Soft fallback only — prefer Studio-connected Meta source (phone_number_id) at runtime.
   acquisitionDefaultOwnerUserId: z.preprocess(
     (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
@@ -120,6 +128,10 @@ const envVars = {
   metaPageId: process.env.META_PAGE_ID,
   metaInstagramAccountId: process.env.META_INSTAGRAM_ACCOUNT_ID,
   metaAdAccountId: process.env.META_AD_ACCOUNT_ID,
+  metaDefaultAdsetId: process.env.META_DEFAULT_ADSET_ID,
+  metaPixelId: process.env.META_PIXEL_ID,
+  metaCapiAccessToken: process.env.META_CAPI_ACCESS_TOKEN,
+  metaWebsiteUrl: process.env.META_WEBSITE_URL,
   acquisitionDefaultOwnerUserId: process.env.ACQUISITION_DEFAULT_OWNER_USER_ID,
 };
 

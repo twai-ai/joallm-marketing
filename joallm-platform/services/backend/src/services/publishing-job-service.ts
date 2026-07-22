@@ -1,6 +1,6 @@
 /**
  * Publishing Jobs (Sprint 4–5) — queue + execute outbound via Connectors.
- * WhatsApp uses Meta Graph send; other channels simulate publish for dogfood.
+ * WhatsApp + Meta Ads (draft/PAUSED) + Facebook Page photo are live; others simulate.
  */
 
 import { and, desc, eq, inArray } from 'drizzle-orm';
@@ -244,6 +244,118 @@ export async function executePublishingJob(options: {
       executeMode = 'whatsapp_stub';
       payload.note = 'No recipient phone — stub published for dogfood. Add recipientPhone to send live.';
     }
+  } else if (channelKind === 'meta_ads') {
+    const message =
+      typeof payload.body === 'string' && payload.body.trim()
+        ? payload.body
+        : typeof payload.assetTitle === 'string'
+          ? String(payload.assetTitle)
+          : 'ATRISI creative';
+    const name =
+      typeof payload.assetTitle === 'string' ? payload.assetTitle : `Job ${job.id.slice(0, 8)}`;
+    const fileIds = Array.isArray(payload.fileIds)
+      ? payload.fileIds.filter((id): id is string => typeof id === 'string')
+      : [];
+
+    let imageHash: string | null = null;
+    if (fileIds.length > 0) {
+      const { files } = await import('../database/schema.js');
+      const { eq } = await import('drizzle-orm');
+      const { storageProvider } = await import('./file-storage.js');
+      const [fileRow] = await db
+        .select()
+        .from(files)
+        .where(eq(files.id, fileIds[0]))
+        .limit(1);
+      if (fileRow?.storageKey && fileRow.mimetype?.startsWith('image/')) {
+        const buffer = await storageProvider.downloadFile(fileRow.storageKey);
+        const { uploadMetaAdImage } = await import('./meta-graph-service.js');
+        const uploaded = await uploadMetaAdImage({
+          buffer,
+          filename: fileRow.originalName || fileRow.filename || 'creative.jpg',
+          contentType: fileRow.mimetype,
+        });
+        if (uploaded.ok) {
+          imageHash = uploaded.imageHash;
+        } else {
+          payload.imageUploadError = uploaded.error;
+        }
+      }
+    }
+
+    const { createMetaAdsDraft } = await import('./meta-graph-service.js');
+    const draft = await createMetaAdsDraft({
+      name,
+      message,
+      imageHash,
+    });
+    if (draft.ok) {
+      externalPostId = draft.draft.adId || draft.draft.creativeId;
+      executeMode =
+        draft.draft.mode === 'ad_paused' ? 'meta_ads_paused' : 'meta_ads_creative';
+      payload.metaAdsDraft = draft.draft;
+      payload.note = draft.draft.note;
+    } else {
+      externalPostId = `meta-ads-fail:${job.id}`;
+      executeMode = 'meta_ads_failed';
+      errorMessage = draft.error;
+      payload.note = draft.error;
+    }
+  } else if (
+    channelKind === 'facebook_organic' ||
+    channelKind === 'instagram_organic'
+  ) {
+    const message =
+      typeof payload.body === 'string' && payload.body.trim()
+        ? payload.body
+        : typeof payload.assetTitle === 'string'
+          ? String(payload.assetTitle)
+          : 'ATRISI update';
+    const fileIds = Array.isArray(payload.fileIds)
+      ? payload.fileIds.filter((id): id is string => typeof id === 'string')
+      : [];
+
+    if (fileIds.length > 0) {
+      const { files } = await import('../database/schema.js');
+      const { eq } = await import('drizzle-orm');
+      const { storageProvider } = await import('./file-storage.js');
+      const [fileRow] = await db
+        .select()
+        .from(files)
+        .where(eq(files.id, fileIds[0]))
+        .limit(1);
+      if (fileRow?.storageKey && fileRow.mimetype?.startsWith('image/')) {
+        const buffer = await storageProvider.downloadFile(fileRow.storageKey);
+        const { publishMetaPagePhoto } = await import('./meta-graph-service.js');
+        const posted = await publishMetaPagePhoto({
+          message,
+          buffer,
+          filename: fileRow.originalName || fileRow.filename || 'post.jpg',
+          contentType: fileRow.mimetype,
+        });
+        if (posted.ok) {
+          externalPostId = posted.postId;
+          executeMode = 'facebook_organic_live';
+          payload.note =
+            channelKind === 'instagram_organic'
+              ? 'Published to Facebook Page (IG organic uses Page photo path for now).'
+              : 'Published photo to Facebook Page.';
+        } else {
+          externalPostId = `fb-organic-fail:${job.id}`;
+          executeMode = 'facebook_organic_failed';
+          errorMessage = posted.error;
+          payload.note = posted.error;
+        }
+      } else {
+        externalPostId = `stub:${channelKind}:${job.id}`;
+        executeMode = 'simulate';
+        payload.note = 'Organic publish needs an image file on the asset.';
+      }
+    } else {
+      externalPostId = `stub:${channelKind}:${job.id}`;
+      executeMode = 'simulate';
+      payload.note = 'Organic publish needs an image file on the asset.';
+    }
   } else {
     externalPostId = `stub:${channelKind}:${job.id}`;
     executeMode = 'simulate';
@@ -253,11 +365,14 @@ export async function executePublishingJob(options: {
   payload.executeMode = executeMode;
   payload.executedAt = new Date().toISOString();
 
+  const failed =
+    executeMode === 'meta_ads_failed' || executeMode === 'facebook_organic_failed';
+
   const [updated] = await db
     .update(publishingJobs)
     .set({
-      status: 'published',
-      publishedAt: new Date(),
+      status: failed ? 'failed' : 'published',
+      publishedAt: failed ? null : new Date(),
       externalPostId,
       errorMessage,
       payload,
@@ -266,14 +381,16 @@ export async function executePublishingJob(options: {
     .where(eq(publishingJobs.id, job.id))
     .returning();
 
-  try {
-    const { recordInterestFromPublishedJob } = await import('./program-interest-service.js');
-    await recordInterestFromPublishedJob({
-      ownerUserId: options.ownerUserId,
-      jobId: updated.id,
-    });
-  } catch {
-    /* interest recording should not fail the publish */
+  if (!failed) {
+    try {
+      const { recordInterestFromPublishedJob } = await import('./program-interest-service.js');
+      await recordInterestFromPublishedJob({
+        ownerUserId: options.ownerUserId,
+        jobId: updated.id,
+      });
+    } catch {
+      /* interest recording should not fail the publish */
+    }
   }
 
   return mapJob(updated, channel || null);

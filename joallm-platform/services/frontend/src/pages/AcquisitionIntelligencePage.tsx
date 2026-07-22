@@ -75,6 +75,13 @@ interface MarketingLifecycleStep {
   status: 'ready' | 'live' | 'setup' | 'partial';
 }
 
+interface MarketingDeveloperSetupStep {
+  id: string;
+  label: string;
+  detail: string;
+  done: boolean;
+}
+
 interface MarketingHealth {
   boundToUser: boolean;
   leadSourceStatus: string | null;
@@ -82,6 +89,9 @@ interface MarketingHealth {
   tokenConfigured: boolean;
   adAccountConfigured: boolean;
   pageIdConfigured: boolean;
+  pixelConfigured?: boolean;
+  defaultAdsetConfigured?: boolean;
+  websiteConfigured?: boolean;
   adAccountId: string | null;
   adAccountName: string | null;
   currency: string | null;
@@ -103,6 +113,14 @@ interface MarketingHealth {
     currency?: string | null;
     fetchedAt?: string;
   } | null;
+  lastCapi?: {
+    ok?: boolean;
+    eventsReceived?: number;
+    error?: string;
+    at?: string;
+    leadId?: string;
+  } | null;
+  developerSetup?: MarketingDeveloperSetupStep[];
   lifecycle: MarketingLifecycleStep[];
 }
 
@@ -707,7 +725,7 @@ export function AcquisitionIntelligencePage() {
         </div>
 
         {marketingHealth?.lifecycle && marketingHealth.lifecycle.length > 0 && (
-          <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {marketingHealth.lifecycle.map((step) => (
               <div
                 key={step.id}
@@ -736,6 +754,14 @@ export function AcquisitionIntelligencePage() {
               ['Ad account configured', marketingHealth.adAccountConfigured ? 'Yes' : 'Missing'],
               ['Page ID (for Lead Ads)', marketingHealth.pageIdConfigured ? 'Yes' : 'Missing'],
               [
+                'Default ad set',
+                marketingHealth.defaultAdsetConfigured ? 'Set' : 'Optional — creative only',
+              ],
+              [
+                'Pixel / CAPI',
+                marketingHealth.pixelConfigured ? 'Configured' : 'Missing META_PIXEL_ID',
+              ],
+              [
                 'Ad account Graph probe',
                 marketingHealth.graphOk ? 'OK' : marketingHealth.graphError || 'Failed',
               ],
@@ -746,6 +772,12 @@ export function AcquisitionIntelligencePage() {
               ['Currency', marketingHealth.currency || '—'],
               ['Leads ingested', String(marketingHealth.leadsIngested)],
               ['Last lead success', formatWhen(marketingHealth.lastLeadSuccessAt)],
+              [
+                'Last CAPI',
+                marketingHealth.lastCapi?.at
+                  ? `${marketingHealth.lastCapi.ok ? 'OK' : 'Error'} · ${formatWhen(marketingHealth.lastCapi.at)}`
+                  : '—',
+              ],
               [
                 'Insights (7d impressions)',
                 marketingHealth.lastInsights?.impressions != null
@@ -793,6 +825,139 @@ export function AcquisitionIntelligencePage() {
             (and leads_retrieval for Lead Ads), set META_AD_ACCOUNT_ID, then re-bind.
           </p>
         )}
+      </section>
+
+      <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-950">
+            Meta developer account checklist
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Do these in Meta Business / Developers, then mirror the IDs into Railway env vars and
+            redeploy.
+          </p>
+        </div>
+
+        {marketingHealth?.developerSetup && marketingHealth.developerSetup.length > 0 && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {marketingHealth.developerSetup.map((step) => (
+              <div
+                key={step.id}
+                className={`rounded-2xl border p-4 ${
+                  step.done
+                    ? 'border-teal-200 bg-teal-50/70'
+                    : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {step.id}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                      step.done
+                        ? 'bg-teal-100 text-teal-800'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {step.done ? 'Done' : 'Todo'}
+                  </span>
+                </div>
+                <div className="mt-2 font-medium text-slate-950">{step.label}</div>
+                <p className="mt-1 text-xs leading-5 text-slate-600">{step.detail}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 space-y-4 text-sm text-slate-700">
+          <div>
+            <div className="font-semibold text-slate-950">1. App + Business assets</div>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-600">
+              <li>
+                developers.facebook.com → your App → add products: WhatsApp, Messenger, Instagram,
+                Webhooks, Marketing API.
+              </li>
+              <li>
+                Business Settings → link Page, WhatsApp Business Account, Ad Account, and (optional)
+                Pixel / dataset to the same Business.
+              </li>
+            </ul>
+          </div>
+          <div>
+            <div className="font-semibold text-slate-950">2. Permissions + long-lived token</div>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-600">
+              <li>
+                Create a System User in Business Settings → generate token with:{' '}
+                <code className="text-[11px]">
+                  ads_management, ads_read, leads_retrieval, pages_show_list, pages_manage_metadata,
+                  pages_messaging, pages_read_engagement, business_management, whatsapp_business_messaging
+                </code>
+                .
+              </li>
+              <li>
+                Assign the System User to your Page, Ad Account, and WhatsApp assets. Paste token into
+                Railway <code className="text-[11px]">META_ACCESS_TOKEN</code>.
+              </li>
+            </ul>
+          </div>
+          <div>
+            <div className="font-semibold text-slate-950">3. Webhooks</div>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-600">
+              <li>
+                WhatsApp callback:{' '}
+                <code className="text-[11px]">
+                  https://joallm-marketing-backend-production.up.railway.app/api/meta/webhook
+                </code>{' '}
+                — subscribe <code className="text-[11px]">messages</code>.
+              </li>
+              <li>
+                Page / IG / Lead Ads:{' '}
+                <code className="text-[11px]">
+                  https://joallm-marketing-backend-production.up.railway.app/api/meta/page/webhook
+                </code>{' '}
+                — subscribe <code className="text-[11px]">messages</code> and{' '}
+                <code className="text-[11px]">leadgen</code>. Verify token:{' '}
+                <code className="text-[11px]">atrisi_meta_webhook_verify</code> (or your{' '}
+                <code className="text-[11px]">META_VERIFY_TOKEN</code>).
+              </li>
+            </ul>
+          </div>
+          <div>
+            <div className="font-semibold text-slate-950">4. Railway env vars</div>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-600">
+              <li>
+                Required now: <code className="text-[11px]">META_ACCESS_TOKEN</code>,{' '}
+                <code className="text-[11px]">META_PHONE_NUMBER_ID</code>,{' '}
+                <code className="text-[11px]">META_PAGE_ID</code>,{' '}
+                <code className="text-[11px]">META_AD_ACCOUNT_ID</code>,{' '}
+                <code className="text-[11px]">META_VERIFY_TOKEN</code>
+              </li>
+              <li>
+                For PAUSED ads from Assets: <code className="text-[11px]">META_DEFAULT_ADSET_ID</code>{' '}
+                (create a paused ad set once in Ads Manager)
+              </li>
+              <li>
+                For CAPI on Lead Ads: <code className="text-[11px]">META_PIXEL_ID</code> (+ optional{' '}
+                <code className="text-[11px]">META_CAPI_ACCESS_TOKEN</code>,{' '}
+                <code className="text-[11px]">META_WEBSITE_URL</code>)
+              </li>
+            </ul>
+          </div>
+          <div>
+            <div className="font-semibold text-slate-950">5. After redeploy</div>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-5 text-slate-600">
+              <li>
+                Acquisition Intelligence → Connect WhatsApp, Facebook + Instagram, Meta Marketing.
+              </li>
+              <li>Sync insights → submit a test Lead Ad → confirm person + CAPI row updates.</li>
+              <li>
+                Workspace → Assets → Publish to Meta Ads (creates creative / PAUSED ad) or Facebook
+                organic (Page photo).
+              </li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">

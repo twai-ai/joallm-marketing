@@ -2,6 +2,7 @@
  * Meta Graph helpers for Page + Instagram (Acquisition Intelligence).
  */
 
+import { createHash } from 'crypto';
 import { config } from '../config/config.js';
 
 export type MetaPageProbeResult = {
@@ -348,6 +349,365 @@ export async function fetchMetaAdAccountInsights(options?: {
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Insights fetch failed',
+    };
+  }
+}
+
+function graphErrorMessage(data: unknown, status: number): string {
+  if (
+    typeof data === 'object' &&
+    data &&
+    'error' in data &&
+    typeof (data as { error?: unknown }).error === 'object' &&
+    (data as { error?: { message?: string } }).error &&
+    'message' in ((data as { error: { message?: string } }).error as object)
+  ) {
+    return String((data as { error: { message?: string } }).error.message);
+  }
+  return `Graph API ${status}`;
+}
+
+function sha256Normalize(value: string): string {
+  return createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
+}
+
+/** Upload an image into the ad account image library; returns image_hash. */
+export async function uploadMetaAdImage(options: {
+  buffer: Buffer;
+  filename: string;
+  contentType?: string;
+  adAccountId?: string;
+  accessToken?: string;
+}): Promise<{ ok: true; imageHash: string } | { ok: false; error: string }> {
+  const accessToken = options.accessToken || config.metaAccessToken;
+  const adAccountId = normalizeAdAccountId(
+    options.adAccountId || config.metaAdAccountId || null,
+  );
+  if (!accessToken || !adAccountId) {
+    return {
+      ok: false,
+      error: !accessToken
+        ? 'META_ACCESS_TOKEN not configured'
+        : 'META_AD_ACCOUNT_ID not configured',
+    };
+  }
+
+  try {
+    const form = new FormData();
+    const blob = new Blob([new Uint8Array(options.buffer)], {
+      type: options.contentType || 'image/jpeg',
+    });
+    form.append('filename', blob, options.filename || 'creative.jpg');
+    form.append('access_token', accessToken);
+
+    const response = await fetch(
+      `https://graph.facebook.com/v20.0/${adAccountId}/adimages`,
+      { method: 'POST', body: form },
+    );
+    const data = (await response.json()) as {
+      images?: Record<string, { hash?: string }>;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      return { ok: false, error: graphErrorMessage(data, response.status) };
+    }
+    const first = data.images ? Object.values(data.images)[0] : null;
+    const imageHash = first?.hash;
+    if (!imageHash) {
+      return { ok: false, error: 'Ad image upload returned no hash' };
+    }
+    return { ok: true, imageHash };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Ad image upload failed',
+    };
+  }
+}
+
+export type MetaAdsDraftResult = {
+  mode: 'ad_paused' | 'creative_only';
+  creativeId: string;
+  adId: string | null;
+  imageHash: string | null;
+  adsetId: string | null;
+  note: string;
+};
+
+/**
+ * Create a Marketing API creative (and optionally a PAUSED ad under META_DEFAULT_ADSET_ID).
+ * Ads stay PAUSED — activate spend in Ads Manager.
+ */
+export async function createMetaAdsDraft(options: {
+  name: string;
+  message: string;
+  link?: string;
+  imageHash?: string | null;
+  adAccountId?: string;
+  pageId?: string;
+  adsetId?: string;
+  accessToken?: string;
+}): Promise<{ ok: true; draft: MetaAdsDraftResult } | { ok: false; error: string }> {
+  const accessToken = options.accessToken || config.metaAccessToken;
+  const adAccountId = normalizeAdAccountId(
+    options.adAccountId || config.metaAdAccountId || null,
+  );
+  const pageId = options.pageId || config.metaPageId || null;
+  const adsetId = options.adsetId || config.metaDefaultAdsetId || null;
+  const link =
+    options.link ||
+    config.metaWebsiteUrl ||
+    (pageId ? `https://www.facebook.com/${pageId}` : null);
+
+  if (!accessToken || !adAccountId) {
+    return {
+      ok: false,
+      error: !accessToken
+        ? 'META_ACCESS_TOKEN not configured'
+        : 'META_AD_ACCOUNT_ID not configured',
+    };
+  }
+  if (!pageId) {
+    return { ok: false, error: 'META_PAGE_ID required to create Meta Ads creatives' };
+  }
+  if (!link && !options.imageHash) {
+    return {
+      ok: false,
+      error: 'Provide an image file or META_WEBSITE_URL / link for the creative',
+    };
+  }
+
+  try {
+    const objectStorySpec: Record<string, unknown> = { page_id: pageId };
+    if (options.imageHash && link) {
+      objectStorySpec.link_data = {
+        message: options.message,
+        link,
+        name: options.name.slice(0, 40),
+        image_hash: options.imageHash,
+      };
+    } else if (options.imageHash) {
+      objectStorySpec.photo_data = {
+        caption: options.message,
+        image_hash: options.imageHash,
+      };
+    } else {
+      objectStorySpec.link_data = {
+        message: options.message,
+        link,
+        name: options.name.slice(0, 40),
+      };
+    }
+
+    const creativeRes = await fetch(
+      `https://graph.facebook.com/v20.0/${adAccountId}/adcreatives`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: `ATRISI · ${options.name}`.slice(0, 100),
+          object_story_spec: objectStorySpec,
+        }),
+      },
+    );
+    const creativeData = (await creativeRes.json()) as {
+      id?: string;
+      error?: { message?: string };
+    };
+    if (!creativeRes.ok || !creativeData.id) {
+      return {
+        ok: false,
+        error: graphErrorMessage(creativeData, creativeRes.status),
+      };
+    }
+
+    if (!adsetId) {
+      return {
+        ok: true,
+        draft: {
+          mode: 'creative_only',
+          creativeId: creativeData.id,
+          adId: null,
+          imageHash: options.imageHash || null,
+          adsetId: null,
+          note:
+            'Creative created in Ads Manager. Set META_DEFAULT_ADSET_ID to also create a PAUSED ad under an existing ad set.',
+        },
+      };
+    }
+
+    const adRes = await fetch(`https://graph.facebook.com/v20.0/${adAccountId}/ads`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: `ATRISI · ${options.name}`.slice(0, 100),
+        adset_id: adsetId,
+        creative: { creative_id: creativeData.id },
+        status: 'PAUSED',
+      }),
+    });
+    const adData = (await adRes.json()) as { id?: string; error?: { message?: string } };
+    if (!adRes.ok || !adData.id) {
+      return {
+        ok: false,
+        error: `Creative ${creativeData.id} created, but ad failed: ${graphErrorMessage(adData, adRes.status)}`,
+      };
+    }
+
+    return {
+      ok: true,
+      draft: {
+        mode: 'ad_paused',
+        creativeId: creativeData.id,
+        adId: adData.id,
+        imageHash: options.imageHash || null,
+        adsetId,
+        note: 'PAUSED ad created under META_DEFAULT_ADSET_ID — review and activate in Ads Manager.',
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Meta Ads draft failed',
+    };
+  }
+}
+
+/** Publish a photo to the Facebook Page feed (organic). */
+export async function publishMetaPagePhoto(options: {
+  message: string;
+  buffer: Buffer;
+  filename?: string;
+  contentType?: string;
+  pageId?: string;
+  accessToken?: string;
+  published?: boolean;
+}): Promise<{ ok: true; postId: string } | { ok: false; error: string }> {
+  const accessToken = options.accessToken || config.metaAccessToken;
+  const pageId = options.pageId || config.metaPageId || null;
+  if (!accessToken || !pageId) {
+    return {
+      ok: false,
+      error: !accessToken
+        ? 'META_ACCESS_TOKEN not configured'
+        : 'META_PAGE_ID not configured',
+    };
+  }
+
+  try {
+    const form = new FormData();
+    const blob = new Blob([new Uint8Array(options.buffer)], {
+      type: options.contentType || 'image/jpeg',
+    });
+    form.append('source', blob, options.filename || 'post.jpg');
+    form.append('caption', options.message);
+    form.append('published', options.published === false ? 'false' : 'true');
+    form.append('access_token', accessToken);
+
+    const response = await fetch(
+      `https://graph.facebook.com/v20.0/${pageId}/photos`,
+      { method: 'POST', body: form },
+    );
+    const data = (await response.json()) as {
+      id?: string;
+      post_id?: string;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      return { ok: false, error: graphErrorMessage(data, response.status) };
+    }
+    return { ok: true, postId: data.post_id || data.id || `page-photo:${Date.now()}` };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Page photo publish failed',
+    };
+  }
+}
+
+/**
+ * Send a Lead event to Meta Conversions API (Pixel / dataset).
+ * Prefer including lead_id from Lead Ads for high match quality.
+ */
+export async function sendMetaCapiLeadEvent(options: {
+  leadId?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  eventTime?: Date;
+  eventSourceUrl?: string;
+  formId?: string | null;
+  accessToken?: string;
+  pixelId?: string;
+}): Promise<
+  | { ok: true; eventsReceived: number }
+  | { ok: false; error: string; skipped?: boolean }
+> {
+  const pixelId = options.pixelId || config.metaPixelId || null;
+  const accessToken =
+    options.accessToken || config.metaCapiAccessToken || config.metaAccessToken || null;
+
+  if (!pixelId) {
+    return { ok: false, error: 'META_PIXEL_ID not configured', skipped: true };
+  }
+  if (!accessToken) {
+    return { ok: false, error: 'META_ACCESS_TOKEN / META_CAPI_ACCESS_TOKEN missing' };
+  }
+
+  const userData: Record<string, unknown> = {};
+  if (options.email) userData.em = [sha256Normalize(options.email)];
+  if (options.phone) {
+    const digits = options.phone.replace(/\D/g, '');
+    if (digits) userData.ph = [sha256Normalize(digits)];
+  }
+  if (options.leadId) userData.lead_id = options.leadId;
+
+  if (!userData.em && !userData.ph && !userData.lead_id) {
+    return { ok: false, error: 'CAPI Lead needs email, phone, or lead_id', skipped: true };
+  }
+
+  try {
+    const body = {
+      data: [
+        {
+          event_name: 'Lead',
+          event_time: Math.floor((options.eventTime || new Date()).getTime() / 1000),
+          action_source: 'system_generated',
+          event_source_url:
+            options.eventSourceUrl || config.metaWebsiteUrl || undefined,
+          user_data: userData,
+          custom_data: options.formId
+            ? { content_name: String(options.formId) }
+            : undefined,
+        },
+      ],
+    };
+
+    const url = new URL(`https://graph.facebook.com/v20.0/${pixelId}/events`);
+    url.searchParams.set('access_token', accessToken);
+
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = (await response.json()) as {
+      events_received?: number;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      return { ok: false, error: graphErrorMessage(data, response.status) };
+    }
+    return { ok: true, eventsReceived: data.events_received || 1 };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'CAPI send failed',
     };
   }
 }

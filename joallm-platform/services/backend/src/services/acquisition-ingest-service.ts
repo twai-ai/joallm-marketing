@@ -1403,6 +1403,58 @@ export async function ingestMetaPageWebhook(options: {
         createdInteractions.push({ id: interaction.id, personId: person.id });
         await refreshPersonMaturity(person.id, 'engaged');
 
+        try {
+          const { sendMetaCapiLeadEvent } = await import('./meta-graph-service.js');
+          const capi = await sendMetaCapiLeadEvent({
+            leadId: lead.id,
+            email: lead.email,
+            phone: lead.phone,
+            eventTime: occurredAt,
+            formId: lead.formId || change.value.form_id || null,
+          });
+          if (capi.ok) {
+            await db
+              .update(acquisitionSourceConnections)
+              .set({
+                config: {
+                  ...((leadSource.config as Record<string, unknown>) || {}),
+                  lastCapi: {
+                    ok: true,
+                    eventsReceived: capi.eventsReceived,
+                    at: new Date().toISOString(),
+                    leadId: lead.id,
+                  },
+                },
+                updatedAt: new Date(),
+              })
+              .where(eq(acquisitionSourceConnections.id, leadSource.id));
+          } else if (!capi.skipped) {
+            logger.warn('CAPI Lead event failed', {
+              leadId: lead.id,
+              error: capi.error,
+            });
+            await db
+              .update(acquisitionSourceConnections)
+              .set({
+                config: {
+                  ...((leadSource.config as Record<string, unknown>) || {}),
+                  lastCapi: {
+                    ok: false,
+                    error: capi.error,
+                    at: new Date().toISOString(),
+                    leadId: lead.id,
+                  },
+                },
+                updatedAt: new Date(),
+              })
+              .where(eq(acquisitionSourceConnections.id, leadSource.id));
+          }
+        } catch (capiError) {
+          logger.warn('CAPI Lead event threw', {
+            error: capiError instanceof Error ? capiError.message : String(capiError),
+          });
+        }
+
         await db
           .update(acquisitionSourceConnections)
           .set({
@@ -1724,6 +1776,17 @@ export async function getAcquisitionOverview(ownerUserId: string) {
       ? (adsSource.config as { lastInsights: Record<string, unknown> }).lastInsights
       : null;
 
+  const lastCapi =
+    leadSource?.config &&
+    typeof leadSource.config === 'object' &&
+    (leadSource.config as { lastCapi?: unknown }).lastCapi
+      ? (leadSource.config as { lastCapi: Record<string, unknown> }).lastCapi
+      : null;
+
+  const pixelConfigured = Boolean(config.metaPixelId);
+  const defaultAdsetConfigured = Boolean(config.metaDefaultAdsetId);
+  const websiteConfigured = Boolean(config.metaWebsiteUrl);
+
   const marketingHealth = {
     boundToUser: Boolean(leadSource || adsSource || adsChannel),
     leadSourceStatus: leadSource?.status || null,
@@ -1731,6 +1794,9 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     tokenConfigured: adProbe.tokenConfigured,
     adAccountConfigured: adProbe.adAccountConfigured,
     pageIdConfigured: Boolean(config.metaPageId || pageProbe.pageId),
+    pixelConfigured,
+    defaultAdsetConfigured,
+    websiteConfigured,
     adAccountId: adProbe.adAccountId || normalizeAdAccountId(config.metaAdAccountId) || null,
     adAccountName: adProbe.accountName,
     currency: adProbe.currency,
@@ -1742,9 +1808,59 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     lastLeadError: leadSource?.lastErrorMessage || null,
     leadsIngested: leadEventCount?.count || 0,
     lastInsights,
+    lastCapi,
+    developerSetup: [
+      {
+        id: 'app',
+        label: 'Meta App + products',
+        detail: 'WhatsApp, Messenger, Instagram, Marketing API, Webhooks',
+        done: adProbe.tokenConfigured,
+      },
+      {
+        id: 'token',
+        label: 'Long-lived System User token',
+        detail: 'ads_management, ads_read, leads_retrieval, pages_*, whatsapp',
+        done: adProbe.tokenConfigured && adProbe.ok,
+      },
+      {
+        id: 'webhooks',
+        label: 'Webhooks subscribed',
+        detail: 'messages + leadgen on Page; messages on WhatsApp',
+        done:
+          (pageEventCount?.count || 0) > 0 ||
+          (whatsappEventCount?.count || 0) > 0 ||
+          (leadEventCount?.count || 0) > 0,
+      },
+      {
+        id: 'ad_account',
+        label: 'Ad account linked',
+        detail: 'META_AD_ACCOUNT_ID on Railway',
+        done: adProbe.adAccountConfigured && adProbe.ok,
+      },
+      {
+        id: 'adset',
+        label: 'Default ad set (optional)',
+        detail: 'META_DEFAULT_ADSET_ID to create PAUSED ads from Assets',
+        done: defaultAdsetConfigured,
+      },
+      {
+        id: 'pixel',
+        label: 'Pixel / CAPI dataset',
+        detail: 'META_PIXEL_ID for Lead conversion events',
+        done: pixelConfigured,
+      },
+    ],
     lifecycle: [
       { id: 'create', label: 'Create creatives', status: 'ready' as const },
-      { id: 'reach', label: 'Reach via Meta Ads', status: adProbe.ok ? ('live' as const) : ('setup' as const) },
+      {
+        id: 'reach',
+        label: 'Reach via Meta Ads',
+        status: adProbe.ok
+          ? defaultAdsetConfigured
+            ? ('live' as const)
+            : ('partial' as const)
+          : ('setup' as const),
+      },
       {
         id: 'engage',
         label: 'Engage DMs',
@@ -1757,6 +1873,15 @@ export async function getAcquisitionOverview(ownerUserId: string) {
         id: 'capture',
         label: 'Capture Lead Ads',
         status: (leadEventCount?.count || 0) > 0 ? ('live' as const) : ('setup' as const),
+      },
+      {
+        id: 'convert',
+        label: 'CAPI Lead events',
+        status: lastCapi && lastCapi.ok === true
+          ? ('live' as const)
+          : pixelConfigured
+            ? ('partial' as const)
+            : ('setup' as const),
       },
       { id: 'nurture', label: 'Nurture on WhatsApp/IG', status: 'partial' as const },
       {

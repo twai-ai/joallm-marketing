@@ -70,3 +70,79 @@ export async function sendWhatsAppText(options: {
     };
   }
 }
+
+export type MetaWhatsAppProbeResult = {
+  ok: boolean;
+  phoneNumberId: string | null;
+  displayPhoneNumber: string | null;
+  verifiedName: string | null;
+  qualityRating: string | null;
+  error: string | null;
+  tokenConfigured: boolean;
+  phoneNumberIdConfigured: boolean;
+  verifyTokenConfigured: boolean;
+};
+
+/** Live Graph check that token + phone_number_id actually work. */
+export async function probeMetaWhatsAppConnection(options?: {
+  phoneNumberId?: string;
+  accessToken?: string;
+}): Promise<MetaWhatsAppProbeResult> {
+  const accessToken = options?.accessToken || config.metaAccessToken || null;
+  const phoneNumberId = options?.phoneNumberId || config.metaPhoneNumberId || null;
+  const base: MetaWhatsAppProbeResult = {
+    ok: false,
+    phoneNumberId,
+    displayPhoneNumber: null,
+    verifiedName: null,
+    qualityRating: null,
+    error: null,
+    tokenConfigured: Boolean(accessToken),
+    phoneNumberIdConfigured: Boolean(phoneNumberId),
+    verifyTokenConfigured: Boolean(config.metaVerifyToken),
+  };
+
+  if (!accessToken || !phoneNumberId) {
+    return {
+      ...base,
+      error: !accessToken
+        ? 'META_ACCESS_TOKEN not configured on backend'
+        : 'META_PHONE_NUMBER_ID not configured on backend',
+    };
+  }
+
+  try {
+    const url = new URL(`https://graph.facebook.com/v20.0/${phoneNumberId}`);
+    url.searchParams.set(
+      'fields',
+      'display_phone_number,verified_name,quality_rating,code_verification_status',
+    );
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const data = (await response.json()) as Record<string, unknown>;
+    if (!response.ok) {
+      const err =
+        typeof data.error === 'object' && data.error && 'message' in (data.error as object)
+          ? String((data.error as { message?: string }).message)
+          : `Graph API ${response.status}`;
+      return { ...base, error: err };
+    }
+
+    return {
+      ...base,
+      ok: true,
+      displayPhoneNumber:
+        typeof data.display_phone_number === 'string' ? data.display_phone_number : null,
+      verifiedName: typeof data.verified_name === 'string' ? data.verified_name : null,
+      qualityRating: typeof data.quality_rating === 'string' ? data.quality_rating : null,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ...base,
+      error: error instanceof Error ? error.message : 'Meta Graph probe failed',
+    };
+  }
+}
+

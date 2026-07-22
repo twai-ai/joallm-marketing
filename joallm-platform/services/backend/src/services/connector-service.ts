@@ -69,6 +69,24 @@ export async function ensureMetaWhatsAppConnector(options: {
   const capabilities = defaultCapabilitiesFor('meta_whatsapp');
   const externalAccountId = phoneNumberId || config.metaPhoneNumberId || null;
 
+  const { probeMetaWhatsAppConnection } = await import('./whatsapp-send-service.js');
+  const probe = await probeMetaWhatsAppConnection({
+    phoneNumberId: externalAccountId || undefined,
+  });
+  const liveStatus = probe.ok
+    ? 'connected'
+    : externalAccountId || probe.tokenConfigured
+      ? 'error'
+      : 'connecting';
+  const sharedConfig = {
+    displayPhoneNumber: displayPhoneNumber || probe.displayPhoneNumber || null,
+    phoneNumberId: externalAccountId,
+    verifiedName: probe.verifiedName,
+    qualityRating: probe.qualityRating,
+    verifyTokenConfigured: probe.verifyTokenConfigured,
+    lastProbeAt: new Date().toISOString(),
+  };
+
   if (externalAccountId) {
     const [byAccount] = await db
       .select()
@@ -85,18 +103,17 @@ export async function ensureMetaWhatsAppConnector(options: {
       const [updated] = await db
         .update(platformConnectors)
         .set({
-          status: 'connected',
+          status: liveStatus,
           name: registry?.displayName || byAccount.name,
           apiVersion: 'v20.0',
           capabilities,
           config: {
             ...((byAccount.config as Record<string, unknown>) || {}),
-            displayPhoneNumber: displayPhoneNumber || null,
-            phoneNumberId: externalAccountId,
+            ...sharedConfig,
           },
-          lastValidatedAt: new Date(),
-          lastErrorAt: null,
-          lastErrorMessage: null,
+          lastValidatedAt: probe.ok ? new Date() : byAccount.lastValidatedAt,
+          lastErrorAt: probe.ok ? null : new Date(),
+          lastErrorMessage: probe.ok ? null : probe.error,
           updatedAt: new Date(),
         })
         .where(eq(platformConnectors.id, byAccount.id))
@@ -121,17 +138,18 @@ export async function ensureMetaWhatsAppConnector(options: {
     const [updated] = await db
       .update(platformConnectors)
       .set({
-        status: 'connected',
+        status: liveStatus,
         externalAccountId: externalAccountId || existing.externalAccountId,
         name: registry?.displayName || existing.name,
         apiVersion: 'v20.0',
         capabilities,
         config: {
           ...((existing.config as Record<string, unknown>) || {}),
-          displayPhoneNumber: displayPhoneNumber || null,
-          phoneNumberId: externalAccountId,
+          ...sharedConfig,
         },
-        lastValidatedAt: new Date(),
+        lastValidatedAt: probe.ok ? new Date() : existing.lastValidatedAt,
+        lastErrorAt: probe.ok ? null : new Date(),
+        lastErrorMessage: probe.ok ? null : probe.error,
         updatedAt: new Date(),
       })
       .where(eq(platformConnectors.id, existing.id))
@@ -139,7 +157,6 @@ export async function ensureMetaWhatsAppConnector(options: {
     return mapConnector(updated);
   }
 
-  const hasToken = Boolean(config.metaAccessToken);
   const [created] = await db
     .insert(platformConnectors)
     .values({
@@ -147,15 +164,13 @@ export async function ensureMetaWhatsAppConnector(options: {
       provider: 'meta_whatsapp',
       name: registry?.displayName || 'Meta WhatsApp Cloud API',
       apiVersion: 'v20.0',
-      status: externalAccountId || hasToken ? 'connected' : 'connecting',
+      status: liveStatus,
       capabilities,
       externalAccountId,
-      config: {
-        displayPhoneNumber: displayPhoneNumber || null,
-        phoneNumberId: externalAccountId,
-        verifyTokenConfigured: Boolean(config.metaVerifyToken),
-      },
-      lastValidatedAt: new Date(),
+      config: sharedConfig,
+      lastValidatedAt: probe.ok ? new Date() : null,
+      lastErrorAt: probe.ok ? null : new Date(),
+      lastErrorMessage: probe.ok ? null : probe.error,
     })
     .returning();
 
@@ -176,14 +191,27 @@ export async function validateConnector(ownerUserId: string, connectorId: string
   if (!row) return null;
 
   if (row.provider === 'meta_whatsapp') {
-    const ok = Boolean(config.metaVerifyToken);
+    const { probeMetaWhatsAppConnection } = await import('./whatsapp-send-service.js');
+    const phoneNumberId =
+      row.externalAccountId ||
+      (row.config as { phoneNumberId?: string } | null)?.phoneNumberId ||
+      config.metaPhoneNumberId;
+    const probe = await probeMetaWhatsAppConnection({ phoneNumberId: phoneNumberId || undefined });
     const [updated] = await db
       .update(platformConnectors)
       .set({
-        status: ok ? 'connected' : 'error',
-        lastValidatedAt: ok ? new Date() : row.lastValidatedAt,
-        lastErrorAt: ok ? null : new Date(),
-        lastErrorMessage: ok ? null : 'META_VERIFY_TOKEN not configured',
+        status: probe.ok ? 'connected' : 'error',
+        lastValidatedAt: probe.ok ? new Date() : row.lastValidatedAt,
+        lastErrorAt: probe.ok ? null : new Date(),
+        lastErrorMessage: probe.ok ? null : probe.error,
+        config: {
+          ...((row.config as Record<string, unknown>) || {}),
+          phoneNumberId: probe.phoneNumberId,
+          displayPhoneNumber: probe.displayPhoneNumber,
+          verifiedName: probe.verifiedName,
+          qualityRating: probe.qualityRating,
+          lastProbeAt: new Date().toISOString(),
+        },
         updatedAt: new Date(),
       })
       .where(eq(platformConnectors.id, row.id))

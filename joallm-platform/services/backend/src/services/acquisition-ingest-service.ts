@@ -8,6 +8,7 @@ import {
   acquisitionPersons,
   acquisitionRawRecords,
   acquisitionSourceConnections,
+  platformConnectors,
   users,
 } from '../database/schema.js';
 import { logger } from '../utils/logger.js';
@@ -689,6 +690,79 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     // Tables may not exist yet on partially migrated envs
   }
 
+  const metaSource =
+    sources.find((s) => s.provider === META_PROVIDER) || null;
+  const whatsappChannel =
+    channels.find((c) => c.kind === 'whatsapp') || null;
+  const metaConnector =
+    connectors.find((c) => c.provider === 'meta_whatsapp') || null;
+
+  const { probeMetaWhatsAppConnection } = await import('./whatsapp-send-service.js');
+  const probe = await probeMetaWhatsAppConnection({
+    phoneNumberId:
+      metaSource?.externalAccountId ||
+      metaConnector?.externalAccountId ||
+      config.metaPhoneNumberId ||
+      undefined,
+  });
+
+  // Keep connector row honest after live probe
+  if (metaConnector) {
+    try {
+      await db
+        .update(platformConnectors)
+        .set({
+          status: probe.ok ? 'connected' : 'error',
+          lastValidatedAt: probe.ok
+            ? new Date()
+            : metaConnector.lastValidatedAt
+              ? new Date(metaConnector.lastValidatedAt)
+              : null,
+          lastErrorAt: probe.ok ? null : new Date(),
+          lastErrorMessage: probe.ok ? null : probe.error,
+          updatedAt: new Date(),
+        })
+        .where(eq(platformConnectors.id, metaConnector.id));
+    } catch {
+      // Non-fatal — overview still returns probe results
+    }
+  }
+
+  const metaHealth = {
+    boundToUser: Boolean(metaSource || whatsappChannel),
+    sourceStatus: metaSource?.status || null,
+    channelStatus: whatsappChannel?.status || null,
+    connectorStatus: probe.ok ? 'connected' : metaConnector ? 'error' : null,
+    tokenConfigured: probe.tokenConfigured,
+    phoneNumberIdConfigured: probe.phoneNumberIdConfigured,
+    verifyTokenConfigured: probe.verifyTokenConfigured,
+    phoneNumberId: probe.phoneNumberId,
+    displayPhoneNumber: probe.displayPhoneNumber,
+    verifiedName: probe.verifiedName,
+    qualityRating: probe.qualityRating,
+    graphOk: probe.ok,
+    graphError: probe.error,
+    webhookPath: '/api/meta/webhook',
+    lastWebhookSuccessAt: metaSource?.lastSuccessAt || null,
+    lastWebhookErrorAt: metaSource?.lastErrorAt || null,
+    lastWebhookError: metaSource?.lastErrorMessage || null,
+    inboundEvents: eventCount?.count || 0,
+    people: peopleCount?.count || 0,
+  };
+
+  // Refresh connectors list status for response if we updated
+  if (metaConnector) {
+    connectors = connectors.map((c) =>
+      c.id === metaConnector.id
+        ? {
+            ...c,
+            status: (probe.ok ? 'connected' : 'error') as typeof c.status,
+            lastErrorMessage: probe.ok ? null : probe.error,
+          }
+        : c,
+    );
+  }
+
   return {
     people: peopleCount?.count || 0,
     events: eventCount?.count || 0,
@@ -696,5 +770,6 @@ export async function getAcquisitionOverview(ownerUserId: string) {
     sources,
     channels,
     connectors,
+    metaHealth,
   };
 }

@@ -25,6 +25,28 @@ import { getUseCaseById } from '../constants/useCases';
 import { apiClient } from '../utils/api-client';
 import { showError, showSuccess } from '../utils/toast';
 
+interface MetaConnectionHealth {
+  boundToUser: boolean;
+  sourceStatus: string | null;
+  channelStatus: string | null;
+  connectorStatus: string | null;
+  tokenConfigured: boolean;
+  phoneNumberIdConfigured: boolean;
+  verifyTokenConfigured: boolean;
+  phoneNumberId: string | null;
+  displayPhoneNumber: string | null;
+  verifiedName: string | null;
+  qualityRating: string | null;
+  graphOk: boolean;
+  graphError: string | null;
+  webhookPath: string;
+  lastWebhookSuccessAt: string | null;
+  lastWebhookErrorAt: string | null;
+  lastWebhookError: string | null;
+  inboundEvents: number;
+  people: number;
+}
+
 interface OverviewData {
   people: number;
   events: number;
@@ -32,6 +54,7 @@ interface OverviewData {
   sources: SourceConnection[];
   channels?: Channel[];
   connectors?: Connector[];
+  metaHealth?: MetaConnectionHealth;
 }
 
 function formatWhen(value?: string | null) {
@@ -140,12 +163,13 @@ export function AcquisitionIntelligencePage() {
     () => overview?.channels?.find((channel) => channel.kind === 'whatsapp'),
     [overview],
   );
+  const health = overview?.metaHealth;
 
   const ensureMetaSource = async () => {
     setConnecting(true);
     try {
       await apiClient.post('/api/studio/channels/whatsapp', {});
-      showSuccess('WhatsApp bound to your account — inbound messages will appear here');
+      showSuccess('WhatsApp bound — live Meta probe runs on refresh');
       await load();
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to connect WhatsApp channel');
@@ -157,27 +181,29 @@ export function AcquisitionIntelligencePage() {
   const setupSteps = [
     {
       n: '1',
-      title: 'Connect WhatsApp to your account',
-      body: 'One click binds Meta WhatsApp to your logged-in user. Inbound messages then land on your Acquisition timeline — no UUID env var required.',
-      done: Boolean(whatsappChannel || metaSource),
+      title: 'Bound to your JoaLLM account',
+      body: 'Studio channel/source row exists for your logged-in user.',
+      done: Boolean(health?.boundToUser ?? (whatsappChannel || metaSource)),
     },
     {
       n: '2',
-      title: 'Meta webhook + tokens',
-      body: 'Point Meta at /api/meta/webhook and set META_ACCESS_TOKEN + META_PHONE_NUMBER_ID on the Railway backend.',
-      done: metaSource?.status === 'active',
+      title: 'Backend env configured',
+      body: 'META_ACCESS_TOKEN + META_PHONE_NUMBER_ID present on Railway backend.',
+      done: Boolean(health?.tokenConfigured && health?.phoneNumberIdConfigured),
     },
     {
       n: '3',
-      title: 'Send a live WhatsApp message',
-      body: 'New messages (not old history) become Acquisition Events under your account at runtime.',
-      done: (overview?.events ?? 0) > 0,
+      title: 'Meta Graph reachable',
+      body: health?.graphError
+        ? `Live probe failed: ${health.graphError}`
+        : 'Token can read this WhatsApp phone number from Meta.',
+      done: Boolean(health?.graphOk),
     },
     {
       n: '4',
-      title: 'Open Person Timelines',
-      body: 'Resolved people appear here. Select one to review interactions, artifacts, and maturity.',
-      done: people.length > 0,
+      title: 'Inbound webhook traffic',
+      body: 'At least one WhatsApp event ingested after Meta webhook fires.',
+      done: (health?.inboundEvents ?? overview?.events ?? 0) > 0,
     },
   ];
 
@@ -240,12 +266,76 @@ export function AcquisitionIntelligencePage() {
       }
     >
       <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-950">Getting started</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">Live Meta connection health</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Values below come from a live Graph probe + your DB — not just an optimistic “connected”
+              flag after clicking Connect.
+            </p>
+          </div>
+          {health && (
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                health.graphOk && health.boundToUser
+                  ? 'bg-teal-50 text-teal-800 ring-1 ring-teal-200'
+                  : health.boundToUser
+                    ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+              }`}
+            >
+              {health.graphOk && health.boundToUser
+                ? 'Graph OK · bound'
+                : health.boundToUser
+                  ? 'Bound · Graph not OK'
+                  : 'Not bound yet'}
+            </span>
+          )}
+        </div>
+
+        {health ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              ['Bound to your account', health.boundToUser ? 'Yes' : 'No'],
+              ['Access token on backend', health.tokenConfigured ? 'Yes' : 'Missing'],
+              ['Phone number ID on backend', health.phoneNumberIdConfigured ? 'Yes' : 'Missing'],
+              ['Verify token set', health.verifyTokenConfigured ? 'Yes' : 'Missing'],
+              ['Meta Graph probe', health.graphOk ? 'OK' : health.graphError || 'Failed'],
+              [
+                'WhatsApp number',
+                health.displayPhoneNumber || health.phoneNumberId || '—',
+              ],
+              ['Verified name', health.verifiedName || '—'],
+              ['Webhook path', health.webhookPath],
+              ['Last webhook success', formatWhen(health.lastWebhookSuccessAt)],
+              ['Inbound events', String(health.inboundEvents)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {label}
+                </div>
+                <div className="mt-1 break-all text-sm font-medium text-slate-900">{value}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-500">
+            {loading ? 'Probing Meta…' : 'Refresh to run a live Meta health check.'}
+          </p>
+        )}
+
+        {health?.graphError && !health.graphOk && (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            Graph error: {health.graphError}. Connector badges may look connected from an older
+            click — trust this probe instead.
+          </p>
+        )}
+
+        <h3 className="mt-6 text-sm font-semibold text-slate-950">Setup checklist</h3>
         <p className="mt-1 text-sm text-slate-600">
-          Connect while logged in to bind Meta to your user at runtime. Then verify the webhook and
-          send a test WhatsApp message — ownership follows the connected source, not a static UUID.
+          Connect binds ownership. Env + Graph + a real inbound message prove the pipe is live.
         </p>
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {setupSteps.map((step) => (
             <div
               key={step.n}
@@ -266,7 +356,7 @@ export function AcquisitionIntelligencePage() {
                       : 'bg-slate-200 text-slate-600'
                   }`}
                 >
-                  {step.done ? 'Done' : 'Next'}
+                  {step.done ? 'True' : 'False'}
                 </span>
               </div>
               <div className="mt-2 font-medium text-slate-950">{step.title}</div>
@@ -291,8 +381,8 @@ export function AcquisitionIntelligencePage() {
           <div className="mt-5 space-y-3">
             {(overview?.channels || []).length === 0 && (overview?.sources || []).length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                No channels yet. Use <span className="font-medium">Connect WhatsApp channel</span> to create
-                Channel → Connector → acquisition source.
+                No channels yet. Use <span className="font-medium">Connect WhatsApp to my account</span> to
+                bind ownership, then check Live Meta connection health above.
               </div>
             ) : (
               <>
@@ -334,6 +424,9 @@ export function AcquisitionIntelligencePage() {
                         {connector.status}
                       </span>
                     </div>
+                    {connector.lastErrorMessage && (
+                      <div className="mt-2 text-xs text-rose-700">{connector.lastErrorMessage}</div>
+                    )}
                   </div>
                 ))}
                 {(overview?.sources || []).map((source) => (

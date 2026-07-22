@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, CheckCircle2, AlertCircle, Mic, Sparkles, ChevronDown, ChevronRight, Download, Tags, BarChart3, Clapperboard, ExternalLink, Copy } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, Mic, Sparkles, ChevronDown, ChevronRight, Download, Tags, BarChart3, Clapperboard, ExternalLink, Copy, Pencil } from 'lucide-react';
 import { apiClient } from '../../utils/api-client';
-import { API_ENDPOINTS } from '../../config/api';
+import { API_BASE_URL, API_ENDPOINTS } from '../../config/api';
 import { cx, workspaceSectionLabel, workspacePanelMuted } from '../workspace/workspaceTheme';
 import { DEFAULT_MEDIA_INTELLIGENCE_MODE, getMediaIntelligenceModeLabel, getMediaIntelligenceResultsProfile, type MediaIntelligenceMode } from '../../constants/mediaIntelligenceModes';
+import { showError, showSuccess } from '../../utils/toast';
+import { getAuthToken } from '../../utils/storage';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -164,6 +166,28 @@ interface CreatedClip {
   startTime: number;
   endTime: number;
   duration: number;
+  sourceInsightId?: string | null;
+  editPlanId?: string;
+}
+
+interface LibraryClip {
+  renderOutputId: string;
+  editPlanId: string;
+  title: string;
+  startTime: number | null;
+  endTime: number | null;
+  duration: number | null;
+  sizeBytes: number | null;
+  status: string;
+  sourceInsightId: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  downloadUrl: string;
+}
+
+interface ClipRangeDraft {
+  startTime: number;
+  endTime: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -172,6 +196,68 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatClipBytes(size: number | null | undefined): string {
+  if (!Number.isFinite(size) || !size || size <= 0) return '';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function resolveClipDownloadUrl(fileId: string, renderOutputId: string, downloadUrl?: string): string {
+  if (downloadUrl?.startsWith('http://') || downloadUrl?.startsWith('https://')) {
+    return downloadUrl;
+  }
+  if (downloadUrl?.startsWith('/')) {
+    return `${API_BASE_URL}${downloadUrl}`;
+  }
+  return API_ENDPOINTS.files.downloadClip(fileId, renderOutputId);
+}
+
+async function fetchClipBlob(url: string): Promise<Blob> {
+  const token = getAuthToken();
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (!response.ok) {
+    let message = `Download failed (${response.status})`;
+    try {
+      const data = await response.json();
+      message = data.message || data.error || message;
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(message);
+  }
+
+  return response.blob();
+}
+
+function getClipRange(clip: MediaClipSuggestion, drafts: Record<string, ClipRangeDraft>): ClipRangeDraft {
+  return drafts[clip.id] ?? { startTime: clip.startTime, endTime: clip.endTime };
+}
+
+function validateClipRange(
+  startTime: number,
+  endTime: number,
+  mediaDurationSec?: number,
+): string | null {
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+    return 'Enter valid start and end times in seconds.';
+  }
+  if (startTime < 0) {
+    return 'Start time cannot be negative.';
+  }
+  if (endTime <= startTime) {
+    return 'End time must be greater than start time.';
+  }
+  if (mediaDurationSec && mediaDurationSec > 0 && endTime > mediaDurationSec + 0.05) {
+    return `End time cannot exceed media duration (${formatTime(mediaDurationSec)}).`;
+  }
+  return null;
 }
 
 function formatMediaTypeLabel(mediaType: MediaResultsResponse['overview']['mediaType']): string {
@@ -424,6 +510,12 @@ export function MediaStatusPanel({ fileId, processingStage, filename, showExtend
   const [insightsOpen, setInsightsOpen] = useState(cachedEntry?.insightsOpen ?? true);
   const [creatingClipId, setCreatingClipId] = useState<string | null>(null);
   const [createdClips, setCreatedClips] = useState<Record<string, CreatedClip>>(cachedEntry?.createdClips ?? {});
+  const [clipRangeDrafts, setClipRangeDrafts] = useState<Record<string, ClipRangeDraft>>({});
+  const [editingClipId, setEditingClipId] = useState<string | null>(null);
+  const [clipErrors, setClipErrors] = useState<Record<string, string>>({});
+  const [clipLibrary, setClipLibrary] = useState<LibraryClip[]>([]);
+  const [loadingClipLibrary, setLoadingClipLibrary] = useState(false);
+  const [openingClipId, setOpeningClipId] = useState<string | null>(null);
 
   useEffect(() => {
     mediaStatusCache.set(fileId, {
@@ -551,32 +643,210 @@ export function MediaStatusPanel({ fileId, processingStage, filename, showExtend
     };
   }, [fileId, hasInsights, resolvedStage, showExtendedResults]);
 
+  useEffect(() => {
+    if (!showExtendedResults) return;
+
+    let cancelled = false;
+
+    const loadClipLibrary = async () => {
+      setLoadingClipLibrary(true);
+      try {
+        const data = await apiClient.get<{ clips: LibraryClip[] }>(API_ENDPOINTS.files.listClips(fileId));
+        if (cancelled) return;
+
+        const clips = data.clips ?? [];
+        setClipLibrary(clips);
+
+        setCreatedClips(current => {
+          const next = { ...current };
+          for (const clip of clips) {
+            if (clip.sourceInsightId) {
+              const suggestionKey = `clip-${clip.sourceInsightId}`;
+              next[suggestionKey] = {
+                renderOutputId: clip.renderOutputId,
+                title: clip.title,
+                downloadUrl: clip.downloadUrl,
+                startTime: clip.startTime ?? 0,
+                endTime: clip.endTime ?? 0,
+                duration: clip.duration ?? 0,
+                sourceInsightId: clip.sourceInsightId,
+                editPlanId: clip.editPlanId,
+              };
+            }
+          }
+          return next;
+        });
+      } catch {
+        if (!cancelled) {
+          setClipLibrary([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingClipLibrary(false);
+        }
+      }
+    };
+
+    void loadClipLibrary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId, showExtendedResults]);
+
   const exportBaseName = (resolvedFilename || filename || 'media-analysis')
     .replace(/\.[a-z0-9]+$/i, '')
     .replace(/[^a-z0-9-_]+/gi, '-')
     .toLowerCase();
 
-  const handleCreateClip = async (clip: MediaClipSuggestion) => {
-    setCreatingClipId(clip.id);
+  const openOrDownloadClip = async (
+    renderOutputId: string,
+    downloadUrl: string,
+    title: string,
+    mode: 'open' | 'download',
+  ) => {
+    setOpeningClipId(renderOutputId);
     try {
-      const response = await apiClient.post<CreatedClip>(API_ENDPOINTS.files.createClip(fileId), {
-        startTime: clip.startTime,
-        endTime: clip.endTime,
-        title: clip.title,
-        sourceInsightId: clip.id.replace(/^clip-/, ''),
-      });
+      const url = resolveClipDownloadUrl(fileId, renderOutputId, downloadUrl);
+      const blob = await fetchClipBlob(url);
+      const objectUrl = window.URL.createObjectURL(blob);
+
+      if (mode === 'download') {
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = `${title.replace(/[^\w.\- ]+/g, '').trim() || 'clip'}.mp4`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      } else {
+        window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to open clip. It may no longer be on disk.';
+      showError(message);
+    } finally {
+      setOpeningClipId(null);
+    }
+  };
+
+  const handleCreateClip = async (clip: MediaClipSuggestion) => {
+    const range = getClipRange(clip, clipRangeDrafts);
+    const validationError = validateClipRange(
+      range.startTime,
+      range.endTime,
+      mediaResults?.overview.durationSec,
+    );
+
+    if (validationError) {
+      setClipErrors(current => ({ ...current, [clip.id]: validationError }));
+      showError(validationError);
+      return;
+    }
+
+    setCreatingClipId(clip.id);
+    setClipErrors(current => {
+      const next = { ...current };
+      delete next[clip.id];
+      return next;
+    });
+
+    try {
+      const response = await apiClient.post<CreatedClip>(
+        API_ENDPOINTS.files.createClip(fileId),
+        {
+          startTime: range.startTime,
+          endTime: range.endTime,
+          title: clip.title,
+          sourceInsightId: clip.id.replace(/^clip-/, ''),
+        },
+        { showErrorToast: false },
+      );
 
       setCreatedClips(current => ({
         ...current,
         [clip.id]: response,
       }));
+      setClipLibrary(current => {
+        const nextEntry: LibraryClip = {
+          renderOutputId: response.renderOutputId,
+          editPlanId: response.editPlanId || '',
+          title: response.title,
+          startTime: response.startTime,
+          endTime: response.endTime,
+          duration: response.duration,
+          sizeBytes: null,
+          status: 'done',
+          sourceInsightId: response.sourceInsightId ?? clip.id.replace(/^clip-/, ''),
+          createdAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          downloadUrl: response.downloadUrl,
+        };
+        return [nextEntry, ...current.filter(item => item.renderOutputId !== response.renderOutputId)];
+      });
+      setEditingClipId(current => (current === clip.id ? null : current));
+      showSuccess(`Clip ready: ${formatTime(response.startTime)}–${formatTime(response.endTime)}`);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Object && 'message' in error && typeof (error as { message: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : 'Failed to create clip. Try adjusting the range or re-running analysis.';
+      setClipErrors(current => ({ ...current, [clip.id]: message }));
+      showError(message);
     } finally {
       setCreatingClipId(null);
     }
   };
 
   const handleCopyClipTimestamps = async (clip: MediaClipSuggestion) => {
-    await navigator.clipboard.writeText(`${formatTime(clip.startTime)}-${formatTime(clip.endTime)}`);
+    const range = getClipRange(clip, clipRangeDrafts);
+    await navigator.clipboard.writeText(`${formatTime(range.startTime)}-${formatTime(range.endTime)}`);
+  };
+
+  const beginEditClipRange = (clip: MediaClipSuggestion) => {
+    setClipRangeDrafts(current => ({
+      ...current,
+      [clip.id]: getClipRange(clip, current),
+    }));
+    setEditingClipId(clip.id);
+    setClipErrors(current => {
+      const next = { ...current };
+      delete next[clip.id];
+      return next;
+    });
+  };
+
+  const updateClipRangeDraft = (
+    clipId: string,
+    field: keyof ClipRangeDraft,
+    rawValue: string,
+  ) => {
+    const parsed = Number(rawValue);
+    setClipRangeDrafts(current => {
+      const base = current[clipId] ?? { startTime: 0, endTime: 0 };
+      return {
+        ...current,
+        [clipId]: {
+          ...base,
+          [field]: Number.isFinite(parsed) ? parsed : base[field],
+        },
+      };
+    });
+  };
+
+  const resetClipRange = (clip: MediaClipSuggestion) => {
+    setClipRangeDrafts(current => {
+      const next = { ...current };
+      delete next[clip.id];
+      return next;
+    });
+    setClipErrors(current => {
+      const next = { ...current };
+      delete next[clip.id];
+      return next;
+    });
   };
 
   const exportSummaryAsMarkdown = () => {
@@ -1197,59 +1467,244 @@ export function MediaStatusPanel({ fileId, processingStage, filename, showExtend
                   <h4 className="text-sm font-semibold text-slate-900">{clipsTitle}</h4>
                 </div>
                 <div className="space-y-3 p-3">
-                  {mediaResults.clipSuggestions.map(clip => (
-                    <div key={clip.id} className="rounded-xl border border-slate-200 bg-white/70 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-slate-900">{clip.title}</p>
-                        <span className="font-mono text-[11px] text-slate-400">
-                          {formatTime(clip.startTime)}–{formatTime(clip.endTime)}
-                        </span>
-                      </div>
-                      <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">Hook: {clip.hook}</p>
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5">{clip.duration}s</span>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5">{Math.round(clip.confidence * 100)}% confidence</span>
-                      </div>
-                      <p className="mt-2 text-xs text-slate-500">{clip.whyItWorks}</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          onClick={() => void handleCreateClip(clip)}
-                          disabled={creatingClipId === clip.id}
-                          className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                          {creatingClipId === clip.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Clapperboard className="h-3.5 w-3.5" />
-                          )}
-                          {creatingClipId === clip.id ? 'Creating clip…' : 'Create clip'}
-                        </button>
-                        <button
-                          onClick={() => void handleCopyClipTimestamps(clip)}
-                          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          Copy timestamps
-                        </button>
-                        {createdClips[clip.id] && (
-                          <a
-                            href={createdClips[clip.id].downloadUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
+                  {mediaResults.clipSuggestions.map(clip => {
+                    const range = getClipRange(clip, clipRangeDrafts);
+                    const durationSec = Math.max(0, Number((range.endTime - range.startTime).toFixed(1)));
+                    const isEditing = editingClipId === clip.id;
+                    const rangeChanged =
+                      range.startTime !== clip.startTime || range.endTime !== clip.endTime;
+                    const clipError = clipErrors[clip.id];
+
+                    return (
+                      <div key={clip.id} className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-900">{clip.title}</p>
+                          <span className="font-mono text-[11px] text-slate-400">
+                            {formatTime(range.startTime)}–{formatTime(range.endTime)}
+                          </span>
+                        </div>
+                        <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">Hook: {clip.hook}</p>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5">{durationSec}s</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5">{Math.round(clip.confidence * 100)}% confidence</span>
+                          {rangeChanged ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">Edited range</span>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">{clip.whyItWorks}</p>
+
+                        {isEditing ? (
+                          <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Edit range (seconds)
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <label className="space-y-1 text-xs text-slate-600">
+                                <span>Start</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.1}
+                                  value={range.startTime}
+                                  onChange={(event) => updateClipRangeDraft(clip.id, 'startTime', event.target.value)}
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 font-mono text-sm text-slate-900 outline-none focus:border-slate-400"
+                                />
+                              </label>
+                              <label className="space-y-1 text-xs text-slate-600">
+                                <span>End</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.1}
+                                  value={range.endTime}
+                                  onChange={(event) => updateClipRangeDraft(clip.id, 'endTime', event.target.value)}
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 font-mono text-sm text-slate-900 outline-none focus:border-slate-400"
+                                />
+                              </label>
+                            </div>
+                            <p className="text-[11px] text-slate-500">
+                              Preview {formatTime(range.startTime)}–{formatTime(range.endTime)}
+                              {mediaResults.overview.durationSec > 0
+                                ? ` · media length ${formatTime(mediaResults.overview.durationSec)}`
+                                : ''}
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingClipId(null)}
+                                className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                              >
+                                Done
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => resetClipRange(clip)}
+                                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                              >
+                                Reset to suggestion
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {clipError ? (
+                          <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <span>{clipError}</span>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleCreateClip(clip)}
+                            disabled={creatingClipId === clip.id}
+                            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
                           >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            Open clip
-                          </a>
+                            {creatingClipId === clip.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Clapperboard className="h-3.5 w-3.5" />
+                            )}
+                            {creatingClipId === clip.id ? 'Creating clip…' : 'Create clip'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => (isEditing ? setEditingClipId(null) : beginEditClipRange(clip))}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            {isEditing ? 'Hide editor' : 'Edit range'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyClipTimestamps(clip)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            Copy timestamps
+                          </button>
+                          {createdClips[clip.id] && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void openOrDownloadClip(
+                                    createdClips[clip.id].renderOutputId,
+                                    createdClips[clip.id].downloadUrl,
+                                    createdClips[clip.id].title,
+                                    'open',
+                                  )
+                                }
+                                disabled={openingClipId === createdClips[clip.id].renderOutputId}
+                                className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70"
+                              >
+                                {openingClipId === createdClips[clip.id].renderOutputId ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                )}
+                                Open clip
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void openOrDownloadClip(
+                                    createdClips[clip.id].renderOutputId,
+                                    createdClips[clip.id].downloadUrl,
+                                    createdClips[clip.id].title,
+                                    'download',
+                                  )
+                                }
+                                disabled={openingClipId === createdClips[clip.id].renderOutputId}
+                                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                Download
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {createdClips[clip.id] && (
+                          <p className="mt-2 text-xs text-emerald-700">
+                            Clip created for {formatTime(createdClips[clip.id].startTime)}–{formatTime(createdClips[clip.id].endTime)}.
+                          </p>
                         )}
                       </div>
-                      {createdClips[clip.id] && (
-                        <p className="mt-2 text-xs text-emerald-700">
-                          Clip created for {formatTime(createdClips[clip.id].startTime)}–{formatTime(createdClips[clip.id].endTime)}.
-                        </p>
-                      )}
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {showExtendedResults ? (
+              <div className={workspacePanelMuted}>
+                <div className="border-b border-slate-200/60 px-3 py-3">
+                  <p className={workspaceSectionLabel}>Library</p>
+                  <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <Clapperboard className="h-4 w-4 text-slate-500" />
+                    Saved clips
+                  </h4>
+                </div>
+                <div className="space-y-3 p-3">
+                  {loadingClipLibrary ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading saved clips…
                     </div>
-                  ))}
+                  ) : clipLibrary.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      No saved clips yet. Create one from a suggestion above and it will stay available after refresh.
+                    </p>
+                  ) : (
+                    clipLibrary.map((clip) => (
+                      <div key={clip.renderOutputId} className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">{clip.title}</p>
+                            <p className="mt-1 font-mono text-[11px] text-slate-400">
+                              {clip.startTime !== null && clip.endTime !== null
+                                ? `${formatTime(clip.startTime)}–${formatTime(clip.endTime)}`
+                                : 'Range unavailable'}
+                              {clip.duration ? ` · ${Math.round(clip.duration)}s` : ''}
+                              {formatClipBytes(clip.sizeBytes) ? ` · ${formatClipBytes(clip.sizeBytes)}` : ''}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            Saved
+                          </span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void openOrDownloadClip(clip.renderOutputId, clip.downloadUrl, clip.title, 'open')
+                            }
+                            disabled={openingClipId === clip.renderOutputId}
+                            className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            {openingClipId === clip.renderOutputId ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            )}
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void openOrDownloadClip(clip.renderOutputId, clip.downloadUrl, clip.title, 'download')
+                            }
+                            disabled={openingClipId === clip.renderOutputId}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Download
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             ) : null}

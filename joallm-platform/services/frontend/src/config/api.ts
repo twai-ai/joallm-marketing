@@ -44,6 +44,8 @@ export const API_ENDPOINTS = {
     delete: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}`,
     status: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/status`,
     download: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/download`,
+    /** Inline image preview — always proxied (no R2 redirect) for gallery thumbnails */
+    preview: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/preview`,
     reprocess: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/reprocess`,
     migrateStorage: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/migrate-storage`,
     transcript: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/transcript`,
@@ -51,6 +53,9 @@ export const API_ENDPOINTS = {
     mediaResults: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/media-results`,
     analyzeMedia: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/analyze-media`,
     createClip: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/clips`,
+    listClips: (fileId: string) => `${API_BASE_URL}/api/files/${fileId}/clips`,
+    downloadClip: (fileId: string, renderOutputId: string) =>
+      `${API_BASE_URL}/api/files/${fileId}/clips/${renderOutputId}/download`,
   },
   rag: {
     search: `${API_BASE_URL}/api/rag/search`,

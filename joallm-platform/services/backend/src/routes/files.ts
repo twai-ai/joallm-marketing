@@ -1125,6 +1125,68 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
     }
   });
 
+  // Inline preview (gallery thumbnails) — always stream through backend so browser fetch works with R2/S3
+  fastify.get('/:fileId/preview', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Inline preview of an uploaded image (proxied, no redirect)',
+      tags: ['files'],
+      params: {
+        type: 'object',
+        properties: {
+          fileId: { type: 'string' },
+        },
+        required: ['fileId'],
+      },
+    },
+  }, async (request, reply) => {
+    try {
+      const { fileId } = request.params as { fileId: string };
+      const userId = (request as any).user.id;
+
+      const fileRecord = await db.query.files.findFirst({
+        where: eq(files.id, fileId),
+      });
+
+      if (!fileRecord) {
+        return reply.status(404).send({
+          error: 'File not found',
+          message: 'The requested file does not exist',
+        });
+      }
+
+      if (fileRecord.userId && fileRecord.userId !== userId) {
+        return reply.status(403).send({ error: 'Access denied', message: 'You do not own this file' });
+      }
+
+      const storageKey = (fileRecord as any).storageKey as string | null | undefined;
+      if (!storageKey) {
+        return reply.status(404).send({
+          error: 'File not available',
+          message: 'Original bytes were not retained. Re-generate or re-upload this creative.',
+        });
+      }
+
+      const fileBuffer = await storageProvider.downloadFile(storageKey);
+      const mime = fileRecord.mimetype?.startsWith('image/')
+        ? fileRecord.mimetype
+        : 'image/png';
+
+      reply
+        .header('Content-Type', mime)
+        .header('Content-Disposition', 'inline')
+        .header('Cache-Control', 'private, max-age=3600')
+        .header('Content-Length', String(fileBuffer.length))
+        .send(fileBuffer);
+    } catch (error) {
+      logger.error('File preview error:', error);
+      reply.status(500).send({
+        error: 'Preview failed',
+        message: 'An error occurred while retrieving the preview',
+      });
+    }
+  });
+
   // Get file status
   fastify.get('/:fileId/status', {
     preHandler: [authenticateToken],

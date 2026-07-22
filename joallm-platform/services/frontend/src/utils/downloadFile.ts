@@ -2,6 +2,7 @@
  * Authenticated file download helpers for Studio assets.
  */
 
+import { API_ENDPOINTS } from '../config/api';
 import { storage, STORAGE_KEYS } from './storage';
 
 function getAuthToken(): string | null {
@@ -22,6 +23,34 @@ export async function fetchAuthenticatedBlob(url: string): Promise<Blob> {
     throw new Error(text || `Download failed (${response.status})`);
   }
   return response.blob();
+}
+
+const previewObjectUrlCache = new Map<string, string>();
+
+/** Fetch image bytes via the preview endpoint (proxied — works with R2/S3). */
+export async function getAuthenticatedPreviewObjectUrl(fileId: string): Promise<string> {
+  const cached = previewObjectUrlCache.get(fileId);
+  if (cached) return cached;
+
+  const blob = await fetchAuthenticatedBlob(API_ENDPOINTS.files.preview(fileId));
+  const objectUrl = URL.createObjectURL(blob);
+  previewObjectUrlCache.set(fileId, objectUrl);
+  return objectUrl;
+}
+
+export function revokeAuthenticatedPreviewObjectUrl(fileId: string): void {
+  const url = previewObjectUrlCache.get(fileId);
+  if (url) {
+    URL.revokeObjectURL(url);
+    previewObjectUrlCache.delete(fileId);
+  }
+}
+
+export function clearAuthenticatedPreviewCache(): void {
+  for (const url of previewObjectUrlCache.values()) {
+    URL.revokeObjectURL(url);
+  }
+  previewObjectUrlCache.clear();
 }
 
 export async function downloadAuthenticatedFile(options: {

@@ -26,6 +26,7 @@ import {
   downloadAuthenticatedFile,
   extensionForMime,
   fetchAuthenticatedBlob,
+  getAuthenticatedPreviewObjectUrl,
   safeDownloadFilename,
 } from '../../utils/downloadFile';
 import { showError, showSuccess } from '../../utils/toast';
@@ -50,37 +51,38 @@ function AssetImagePreview({
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [failReason, setFailReason] = useState<string | null>(null);
 
   useEffect(() => {
-    let revoked: string | null = null;
     let cancelled = false;
     setFailed(false);
+    setFailReason(null);
     setSrc(null);
     void (async () => {
       try {
-        const blob = await fetchAuthenticatedBlob(API_ENDPOINTS.files.download(fileId));
+        const url = await getAuthenticatedPreviewObjectUrl(fileId);
         if (cancelled) return;
-        if (!blob.type.startsWith('image/')) {
-          setFailed(true);
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        revoked = url;
         setSrc(url);
-      } catch {
-        if (!cancelled) setFailed(true);
+      } catch (error) {
+        if (cancelled) return;
+        setFailed(true);
+        const message = error instanceof Error ? error.message : '';
+        if (message.includes('not retained') || message.includes('not available')) {
+          setFailReason('Bytes missing — re-generate this creative');
+        } else {
+          setFailReason('Preview failed');
+        }
       }
     })();
     return () => {
       cancelled = true;
-      if (revoked) URL.revokeObjectURL(revoked);
     };
   }, [fileId]);
 
   if (failed) {
     return (
-      <div className="flex aspect-[4/5] items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-500">
-        Preview unavailable — use Download
+      <div className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded-xl bg-slate-100 px-3 text-center text-xs text-slate-500">
+        <span>{failReason || 'Preview unavailable'}</span>
       </div>
     );
   }
@@ -237,6 +239,7 @@ export function AssetsPanel({
   const [projects, setProjects] = useState<CreativeProject[]>([]);
   const [assets, setAssets] = useState<GrowthMarketingAsset[]>([]);
   const [projectId, setProjectId] = useState('');
+  const [galleryProjectFilter, setGalleryProjectFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -660,18 +663,8 @@ export function AssetsPanel({
     if (!fileId) return;
     setOpeningId(asset.id);
     try {
-      const blob = await fetchAuthenticatedBlob(API_ENDPOINTS.files.download(fileId));
-      const src = URL.createObjectURL(blob);
-      if (blob.type.startsWith('image/')) {
-        setLightbox({ src, title: asset.title });
-      } else {
-        const opened = window.open(src, '_blank', 'noopener,noreferrer');
-        if (!opened) {
-          window.location.assign(src);
-        } else {
-          window.setTimeout(() => URL.revokeObjectURL(src), 60_000);
-        }
-      }
+      const src = await getAuthenticatedPreviewObjectUrl(fileId);
+      setLightbox({ src, title: asset.title });
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Could not open file');
     } finally {
@@ -771,6 +764,7 @@ export function AssetsPanel({
       );
       showSuccess('Creative project deleted');
       if (projectId === project.id) setProjectId('');
+      setGalleryProjectFilter((current) => (current === project.id ? '' : current));
       await load();
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to delete project');
@@ -783,9 +777,19 @@ export function AssetsPanel({
     void handleUpload(event.dataTransfer.files);
   };
 
-  const visibleAssets = projectId
-    ? assets.filter((a) => a.creativeProjectId === projectId)
-    : assets;
+  const visibleAssets = useMemo(() => {
+    const filtered = galleryProjectFilter
+      ? assets.filter((a) => a.creativeProjectId === galleryProjectFilter)
+      : assets;
+    return [...filtered].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [assets, galleryProjectFilter]);
+
+  const imageAssets = useMemo(
+    () => visibleAssets.filter((a) => a.fileIds[0] && a.kind !== 'email'),
+    [visibleAssets],
+  );
 
   if (campaignsLoading) {
     return (
@@ -824,6 +828,7 @@ export function AssetsPanel({
                   onChange={(e) => {
                     setCampaignId(e.target.value);
                     setProjectId('');
+                    setGalleryProjectFilter('');
                   }}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-400"
                 >
@@ -1432,11 +1437,25 @@ export function AssetsPanel({
 
       {projects.length > 0 && (
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-950">Creative projects</h3>
+          <h3 className="text-sm font-semibold text-slate-950">Gallery filter</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Filter the gallery below — does not affect where new creatives are saved.
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setGalleryProjectFilter('')}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                !galleryProjectFilter
+                  ? 'border-teal-300 bg-teal-50 text-teal-900'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-teal-300'
+              }`}
+            >
+              All assets · {assets.length}
+            </button>
             {projects.map((project) => {
               const count = assets.filter((a) => a.creativeProjectId === project.id).length;
-              const active = projectId === project.id;
+              const active = galleryProjectFilter === project.id;
               return (
                 <div
                   key={project.id}
@@ -1446,7 +1465,7 @@ export function AssetsPanel({
                       : 'border-slate-200 bg-slate-50 text-slate-700'
                   }`}
                 >
-                  <button type="button" onClick={() => setProjectId(project.id)}>
+                  <button type="button" onClick={() => setGalleryProjectFilter(project.id)}>
                     {project.name} · {count}
                   </button>
                   <button
@@ -1466,7 +1485,15 @@ export function AssetsPanel({
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-950">Uploaded assets</h3>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-950">Creative gallery</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                {imageAssets.length} image{imageAssets.length === 1 ? '' : 's'}
+                {galleryProjectFilter ? ' in this project' : ' in this campaign'} · newest first
+              </p>
+            </div>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block text-xs">
               <span className="font-medium text-slate-600">Publish channel</span>
@@ -1511,10 +1538,12 @@ export function AssetsPanel({
           </div>
         ) : visibleAssets.length === 0 ? (
           <p className="mt-4 text-sm text-slate-600">
-            No assets yet — generate a flyer above or upload a file.
+            {galleryProjectFilter
+              ? 'No assets in this project — switch to All assets or generate a new creative.'
+              : 'No assets yet — generate a flyer above or upload a file.'}
           </p>
         ) : (
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visibleAssets.map((asset) => {
               const project = projects.find((p) => p.id === asset.creativeProjectId);
               const fileId = asset.fileIds[0];
@@ -1522,13 +1551,17 @@ export function AssetsPanel({
               const provider =
                 typeof asset.metadata?.provider === 'string' ? asset.metadata.provider : null;
               const generated = asset.metadata?.generatedBy === 'creative_ai';
+              const createdLabel = new Date(asset.createdAt).toLocaleDateString(undefined, {
+                month: 'short',
+                day: 'numeric',
+              });
               return (
                 <div
                   key={asset.id}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
                 >
-                  {fileId && (
-                    <div className="mb-3">
+                  {fileId && (asset.kind === 'image' || asset.kind === 'poster' || asset.kind === 'landing_hero' || generated) ? (
+                    <div className="mb-2">
                       <AssetImagePreview
                         fileId={fileId}
                         title={asset.title}
@@ -1536,15 +1569,18 @@ export function AssetsPanel({
                         onOpen={() => void handleOpenAsset(asset)}
                       />
                     </div>
+                  ) : (
+                    <div className="mb-2 flex aspect-[4/5] items-center justify-center rounded-xl bg-slate-100 text-xs text-slate-500">
+                      {fileId ? asset.kind : 'No file attached'}
+                    </div>
                   )}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-slate-950">{asset.title}</div>
-                      <div className="mt-0.5 text-xs text-slate-500">
-                        {asset.kind}
+                      <div className="truncate text-sm font-medium text-slate-950">{asset.title}</div>
+                      <div className="mt-0.5 text-[11px] text-slate-500">
+                        {createdLabel}
                         {project ? ` · ${project.name}` : ''}
-                        {generated && provider ? ` · AI · ${provider}` : ''}
-                        {asset.metadata?.transparentBackground === true ? ' · transparent' : ''}
+                        {generated && provider ? ` · ${provider}` : ''}
                       </div>
                     </div>
                     <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200">
@@ -1640,7 +1676,6 @@ export function AssetsPanel({
           aria-modal="true"
           aria-label={lightbox.title}
           onClick={() => {
-            URL.revokeObjectURL(lightbox.src);
             setLightbox(null);
           }}
         >
@@ -1654,7 +1689,6 @@ export function AssetsPanel({
                 type="button"
                 className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:border-teal-300"
                 onClick={() => {
-                  URL.revokeObjectURL(lightbox.src);
                   setLightbox(null);
                 }}
               >

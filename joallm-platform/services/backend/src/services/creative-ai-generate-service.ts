@@ -23,6 +23,7 @@ import { resolveCreativeProviderApiKey } from './creative-ai-keys.js';
 import { describeCreativeReferenceImages } from './vision-analysis-service.js';
 import { userApiKeyRepository } from '../repositories/user-api-key-repository.js';
 import { resolvePaletteColors } from './creative-palettes.js';
+import { parseBrandTheme, type BrandThemeInput } from './creative-brand-theme.js';
 
 const EXECUTABLE_PROVIDERS = ['ideogram', 'flux'] as const;
 type ExecutableProvider = (typeof EXECUTABLE_PROVIDERS)[number];
@@ -36,7 +37,9 @@ export type PromptPrecision = {
   /** Things to avoid (wrong logos, watermarks, clutter…) */
   avoid?: string;
   institutionName?: string;
-  /** Palette type id from creative-palettes catalog (preferred over raw hex) */
+  /** Optional structured brand theme JSON (palette + mood/layout rules) */
+  brandTheme?: BrandThemeInput;
+  /** Palette type id from creative-palettes catalog (fallback when no brandTheme palette) */
   paletteType?: string;
   /** Brand palette hex colors (#RRGGBB) — optional override */
   primaryColor?: string;
@@ -299,15 +302,26 @@ export function buildEnhancedPrompt(options: {
     parts.push(`Institution / program context: "${institution}".`);
   }
 
-  const paletteHex = resolvePaletteColors({
-    paletteType: p.paletteType,
-    primaryColor: p.primaryColor,
-    secondaryColor: p.secondaryColor,
-    accentColor: p.accentColor,
-  });
+  const parsedTheme = parseBrandTheme(p.brandTheme);
+
+  const paletteHex =
+    parsedTheme?.colors.length
+      ? parsedTheme.colors
+      : resolvePaletteColors({
+          paletteType: p.paletteType,
+          primaryColor: p.primaryColor,
+          secondaryColor: p.secondaryColor,
+          accentColor: p.accentColor,
+        });
 
   if (paletteHex.length > 0) {
-    parts.push(`Brand colors: ${paletteHex.join(', ')}.`);
+    parts.push(
+      `Brand colors (use exactly, do not invent alternate brand colors): ${paletteHex.join(', ')}.`,
+    );
+  }
+
+  if (parsedTheme?.promptLines.length) {
+    parts.push(...parsedTheme.promptLines);
   }
 
   if (p.useLogoReference) {
@@ -882,9 +896,10 @@ export async function generateCreativeImages(
     input.precision?.useLogoReference === true ||
     (input.precision?.useLogoReference !== false && visionNotes[0]?.isLogoLike === true);
 
+  const parsedTheme = parseBrandTheme(input.precision?.brandTheme);
   const paletteType = input.precision?.paletteType || 'auto';
   const typedColors = resolvePaletteColors({ paletteType });
-  const preferLegibleText = hasExactText(input.precision);
+  const themeColors = parsedTheme?.colors || [];
 
   const precision: PromptPrecision = {
     ...(input.precision || {}),
@@ -892,18 +907,20 @@ export async function generateCreativeImages(
     useLogoReference: useLogoReference || undefined,
     referenceVisualContext:
       referenceVisualContext || input.precision?.referenceVisualContext,
-    // Typed palette wins; otherwise keep explicit hex; else vision-inferred
     primaryColor:
+      themeColors[0] ||
       typedColors[0] ||
       input.precision?.primaryColor ||
       (paletteType === 'auto' ? inferredPalette[0] : undefined) ||
       undefined,
     secondaryColor:
+      themeColors[1] ||
       typedColors[1] ||
       input.precision?.secondaryColor ||
       (paletteType === 'auto' ? inferredPalette[1] : undefined) ||
       undefined,
     accentColor:
+      themeColors[2] ||
       typedColors[2] ||
       input.precision?.accentColor ||
       (paletteType === 'auto' ? inferredPalette[2] : undefined) ||
@@ -918,6 +935,7 @@ export async function generateCreativeImages(
   });
   const prompt = enhanced.prompt;
 
+  const preferLegibleText = hasExactText(input.precision);
   const dims = resolveDimensions(style, input.aspectRatio);
   const { provider, apiKey, source } = await pickProvider(
     input.ownerUserId,

@@ -677,6 +677,30 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
         secondaryColor: z.string().max(20).optional(),
         accentColor: z.string().max(20).optional(),
         useLogoReference: z.boolean().optional(),
+        brandTheme: z
+          .object({
+            palette: z
+              .object({
+                primary: z.string().max(20).optional(),
+                secondary: z.string().max(20).optional(),
+                accent: z.string().max(20).optional(),
+                background: z.string().max(20).optional(),
+                text: z.string().max(20).optional(),
+                colors: z.array(z.string().max(20)).max(5).optional(),
+              })
+              .optional(),
+            theme: z
+              .object({
+                mood: z.string().max(300).optional(),
+                typography: z.string().max(300).optional(),
+                layout: z.string().max(300).optional(),
+                imagery: z.string().max(300).optional(),
+                density: z.string().max(120).optional(),
+                notes: z.string().max(500).optional(),
+              })
+              .optional(),
+          })
+          .optional(),
       })
       .optional(),
     analyzeReferences: z.boolean().optional(),

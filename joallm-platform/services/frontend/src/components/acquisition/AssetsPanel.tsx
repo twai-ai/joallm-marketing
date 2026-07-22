@@ -21,6 +21,11 @@ import {
   getPaletteType,
   type CreativePaletteTypeId,
 } from '../../constants/creativePalettes';
+import {
+  BRAND_THEME_JSON_EXAMPLE,
+  parseBrandThemeJson,
+  type BrandThemeInput,
+} from '../../constants/creativeBrandTheme';
 import { apiClient } from '../../utils/api-client';
 import {
   downloadAuthenticatedFile,
@@ -264,6 +269,8 @@ export function AssetsPanel({
   const [briefHeadline, setBriefHeadline] = useState('');
   const [briefCta, setBriefCta] = useState('');
   const [paletteType, setPaletteType] = useState<CreativePaletteTypeId>('institutional_navy');
+  const [brandThemeJson, setBrandThemeJson] = useState('');
+  const [brandThemeError, setBrandThemeError] = useState<string | null>(null);
   const [useLogoReference, setUseLogoReference] = useState(true);
   const [analyzeReferences, setAnalyzeReferences] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -406,6 +413,18 @@ export function AssetsPanel({
       return;
     }
 
+    let brandTheme: BrandThemeInput | undefined;
+    if (brandThemeJson.trim()) {
+      const parsed = parseBrandThemeJson(brandThemeJson);
+      if (parsed.error || !parsed.theme) {
+        setBrandThemeError(parsed.error || 'Invalid brand theme JSON');
+        showError(parsed.error || 'Fix brand theme JSON before generating');
+        return;
+      }
+      brandTheme = parsed.theme;
+      setBrandThemeError(null);
+    }
+
     setGenerating(true);
     try {
       const targetCampaignId = await ensureCampaignId();
@@ -454,7 +473,8 @@ export function AssetsPanel({
             headline: briefHeadline.trim() || undefined,
             cta: briefCta.trim() || undefined,
             mustIncludeText: briefHeadline.trim() || undefined,
-            paletteType,
+            paletteType: brandTheme ? 'auto' : paletteType,
+            brandTheme,
             useLogoReference: sessionRefs.length > 0 ? useLogoReference : undefined,
           },
           analyzeReferences:
@@ -878,8 +898,8 @@ export function AssetsPanel({
               <div>
                 <h3 className="text-sm font-semibold text-slate-950">Exact text & palette</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Keep headline/CTA short — Ideogram renders 2–6 words best. Palette is a type from
-                  the brand catalog (not freeform hex).
+                  Headline/CTA for exact text. Optional brand theme JSON overrides the palette
+                  dropdown and steers mood, layout, and imagery.
                 </p>
               </div>
               <button
@@ -951,6 +971,39 @@ export function AssetsPanel({
                 })()}
               </label>
             </div>
+            <label className="mt-3 block text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-medium text-slate-600">Brand theme JSON (optional)</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBrandThemeJson(BRAND_THEME_JSON_EXAMPLE);
+                    setBrandThemeError(null);
+                  }}
+                  className="text-[11px] font-medium text-teal-800 hover:underline"
+                >
+                  Insert example
+                </button>
+              </div>
+              <textarea
+                value={brandThemeJson}
+                onChange={(e) => {
+                  setBrandThemeJson(e.target.value);
+                  if (!e.target.value.trim()) setBrandThemeError(null);
+                }}
+                rows={7}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-teal-400"
+                placeholder='{ "palette": { "primary": "#0B2C5E" }, "theme": { "mood": "..." } }'
+              />
+              {brandThemeError ? (
+                <span className="mt-1 block text-[11px] text-rose-600">{brandThemeError}</span>
+              ) : (
+                <span className="mt-1 block text-[11px] text-slate-500">
+                  Palette hex → Ideogram color_palette + prompt. Theme fields → layout/mood/imagery
+                  in the prompt. Overrides the palette dropdown when set.
+                </span>
+              )}
+            </label>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">

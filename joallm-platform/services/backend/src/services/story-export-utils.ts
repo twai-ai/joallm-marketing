@@ -92,6 +92,60 @@ export function fitImageInBox(
   };
 }
 
+/**
+ * Optimal deck layout for a source image: portrait → split (image | copy),
+ * landscape/square → stacked (image above caption). Maximizes usable pixels.
+ */
+export function pickDeckImageLayout(
+  pixelW: number,
+  pixelH: number,
+  slideW: number,
+  slideH: number,
+): {
+  mode: 'split' | 'stack';
+  imageBox: { x: number; y: number; w: number; h: number };
+  titleBox: { x: number; y: number; w: number; h: number };
+  captionBox: { x: number; y: number; w: number; h: number };
+  roleBox: { x: number; y: number; w: number; h: number };
+} {
+  const aspect = pixelW / Math.max(pixelH, 1);
+  const margin = 0.4;
+  if (aspect < 0.95 && slideW >= 10) {
+    const imgW = Math.min(6.4, slideW * 0.48);
+    return {
+      mode: 'split',
+      roleBox: { x: imgW + margin + 0.15, y: 0.35, w: slideW - imgW - margin * 2, h: 0.3 },
+      titleBox: { x: imgW + margin + 0.15, y: 0.7, w: slideW - imgW - margin * 2, h: 1.1 },
+      imageBox: { x: margin, y: 0.5, w: imgW, h: slideH - 1.0 },
+      captionBox: {
+        x: imgW + margin + 0.15,
+        y: 2.0,
+        w: slideW - imgW - margin * 2,
+        h: slideH - 2.6,
+      },
+    };
+  }
+  const headerH = 1.05;
+  const captionH = 1.15;
+  return {
+    mode: 'stack',
+    roleBox: { x: margin, y: 0.28, w: slideW - margin * 2, h: 0.28 },
+    titleBox: { x: margin, y: 0.55, w: slideW - margin * 2, h: 0.45 },
+    imageBox: {
+      x: margin,
+      y: headerH,
+      w: slideW - margin * 2,
+      h: Math.max(2.5, slideH - headerH - captionH - 0.15),
+    },
+    captionBox: {
+      x: margin,
+      y: slideH - captionH,
+      w: slideW - margin * 2 - 1.1,
+      h: captionH - 0.2,
+    },
+  };
+}
+
 export function safeExportSlug(value: string, fallback = 'beat'): string {
   return (
     value

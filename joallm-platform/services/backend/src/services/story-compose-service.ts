@@ -22,7 +22,7 @@ const VISION_DELAY_MS = 200;
 const MAX_IMAGE_BYTES = 4_500_000;
 
 /** Invalidate cached vision when this changes */
-export const STORY_VISION_PROMPT_VERSION = 'atrisi-v2';
+export const STORY_VISION_PROMPT_VERSION = 'atrisi-v3';
 
 /**
  * Shared product brief for every compose stage.
@@ -44,16 +44,17 @@ Voice:
 - Prefer exact on-image text when a headline/CTA is readable
 - Do NOT write “in this image…”, “this slide shows…”, or stock phrases like “unlock your potential”
 
-Narrative arc (Context → Proof → Ask):
+Narrative arc (Context → Proof → Ask) — ALWAYS assign one; the user may not have labeled beats:
 - context: world / program / who it’s for — set the frame
 - proof: outcomes, community, credibility, evidence — build trust
 - ask: clear next step toward interest / registration / conversation
+- other: ONLY if the asset cannot serve acquisition (pure decoration, unrelated stock, unreadable junk)
 Constitution: Studio creates. Products operate. Platform remembers.`;
 
 const SEE_PROMPT = `${ATRISI_STORY_BRIEF}
 
 You are the See stage. Look at this single creative asset that may become a beat in an ATRISI acquisition story.
-Extract facts for later Structure/Speak stages. Return ONLY JSON:
+You MUST place it on the Context → Proof → Ask spine when possible. Return ONLY JSON:
 {
   "what": "one concrete sentence: what is visually dominant (people/setting/object/UI) — factual, not slogan",
   "onImageText": "exact readable text/logo/CTA lines on the image, or null if none",
@@ -67,7 +68,9 @@ Extract facts for later Structure/Speak stages. Return ONLY JSON:
 Rules:
 - Do not invent text that is not visible.
 - Prefer precise nouns over vague marketing language.
-- If the image is decorative only, say so in what and set narrativeFit to other.`;
+- Prefer context|proof|ask over other whenever the image could open, evidence, or close an acquisition argument.
+- Use other ONLY for decorative / off-brief / unusable assets — and set confidence low (<0.35).
+- confidence reflects how sure you are about narrativeFit.`;
 
 function isUsableKey(value?: string | null): value is string {
   return Boolean(value && value.trim().length > 0 && !value.includes('PLACEHOLDER'));
@@ -543,9 +546,11 @@ Return ONLY JSON:
 Rules:
 - Include every beat id exactly once.
 - ${keepOrder ? 'KEEP upload order; assign roles only.' : 'Reorder aggressively for Context → Proof → Ask. Upload order is usually wrong — fix it.'}
+- You MUST assign every beat to context, proof, or ask when it can serve acquisition. Use other only for unusable assets.
 - Prefer opening with world/who-for (context), middle with evidence (proof), close with next step (ask).
 - Deduplicate near-identical beats by placing the stronger one earlier in its role band.
-- Thesis must explain how the sequence works as one argument.`;
+- Thesis must explain how the sequence works as one argument.
+- If assets cannot form Context → Proof → Ask, still best-effort assign roles and write thesis noting the gap.`;
 
   const parsed = await chatJson({
     system,
@@ -740,4 +745,98 @@ export function applyHeuristicFromVision(beats: StoryBeat[], title: string): {
     tone: 'atrisi_institutional',
     beats: proposed,
   };
+}
+
+export type StoryArcValidation = {
+  ok: boolean;
+  beats: StoryBeat[];
+  warnings: string[];
+  errors: string[];
+};
+
+/**
+ * Force a Context → Proof → Ask spine, then reject Propose when vision
+ * cannot place assets on an acquisition arc.
+ */
+export function enforceAndValidateStoryArc(
+  beats: StoryBeat[],
+  options?: { visionCount?: number },
+): StoryArcValidation {
+  const warnings: string[] = [];
+  const errors: string[] = [];
+
+  if (beats.length === 0) {
+    return {
+      ok: false,
+      beats,
+      warnings,
+      errors: ['Add assets before proposing a storyline.'],
+    };
+  }
+
+  // Reorder from vision narrativeFit; user need not pre-label beats.
+  const ranked = heuristicReorderBeats(beats);
+  const n = ranked.length;
+
+  const next: StoryBeat[] = ranked.map((beat, index) => {
+    let arcRole: StoryBeat['arcRole'] =
+      beat.vision?.narrativeFit ||
+      beat.arcRole ||
+      (n <= 1 ? 'ask' : index === 0 ? 'context' : index === n - 1 ? 'ask' : 'proof');
+
+    // Positional spine for multi-beat stories — always Context … Ask
+    if (n >= 2) {
+      if (index === 0) arcRole = 'context';
+      else if (index === n - 1) arcRole = 'ask';
+      else if (!arcRole || arcRole === 'other' || arcRole === 'context' || arcRole === 'ask') {
+        arcRole = 'proof';
+      }
+    }
+
+    return { ...beat, order: index, arcRole };
+  });
+
+  const withVision = next.filter((b) => b.vision);
+  const visionCount = options?.visionCount ?? withVision.length;
+  const unusable = withVision.filter(
+    (b) =>
+      b.vision?.narrativeFit === 'other' ||
+      (typeof b.vision?.confidence === 'number' && b.vision.confidence < 0.28),
+  );
+  const avgConf = withVision.length
+    ? withVision.reduce((sum, b) => sum + (b.vision?.confidence || 0), 0) / withVision.length
+    : 0;
+
+  if (next.length >= 2 && visionCount === 0) {
+    errors.push(
+      'Vision could not analyse these images. Check Creative AI / Groq vision keys, re-upload clearer assets, then Propose again.',
+    );
+  }
+
+  if (next.length >= 2 && withVision.length > 0 && unusable.length === withVision.length) {
+    errors.push(
+      'These images are not aligned for Context → Proof → Ask (decorative or off-brief). Upload acquisition creatives that open a frame, show proof, and close with an ask — then Propose again.',
+    );
+  }
+
+  if (next.length >= 3 && withVision.length > 0 && avgConf > 0 && avgConf < 0.22) {
+    errors.push(
+      'Vision confidence is too low to build a reliable story arc. Use sharper, on-message creatives and Propose again.',
+    );
+  }
+
+  if (next.length >= 3 && !next.some((b) => b.arcRole === 'proof')) {
+    warnings.push('No clear Proof beat — middle slides were assigned as proof by position.');
+  }
+
+  const audiences = new Set(
+    withVision
+      .map((b) => b.vision?.audienceHint)
+      .filter((a): a is string => Boolean(a) && a !== 'unclear'),
+  );
+  if (audiences.size > 2) {
+    warnings.push('Audience signals conflict across beats — review titles and captions.');
+  }
+
+  return { ok: errors.length === 0, beats: next, warnings, errors };
 }

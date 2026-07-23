@@ -14,10 +14,12 @@ import type { BrandThemeInput } from './creative-brand-theme.js';
 import {
   applyHeuristicFromVision,
   combineVisionIntoStory,
+  enforceAndValidateStoryArc,
   seeBeatVisionCards,
   speakStoryline,
   structureStoryline,
 } from './story-compose-service.js';
+import { getStoryAspectRatio, getStoryFormat, isStoryFormatId } from './story-format.js';
 import {
   buildOrgDualReadScope,
   resolveOrganizationIdForUser,
@@ -28,6 +30,7 @@ import {
   cleanStoryTypography,
   fitImageInBox,
   groupBeatsByArc,
+  pickDeckImageLayout,
   readImagePixelSize,
   safeExportSlug,
   sortBeatsByStoryArc,
@@ -140,9 +143,10 @@ export async function getStory(ownerUserId: string, storyId: string): Promise<St
 
 export async function createStory(
   ownerUserId: string,
-  input?: { title?: string; tone?: string; arc?: string },
+  input?: { title?: string; tone?: string; arc?: string; format?: string },
 ): Promise<StorySessionDto> {
   const organizationId = await resolveOrganizationIdForUser(ownerUserId);
+  const format = isStoryFormatId(input?.format) ? input!.format : 'deck';
   const [row] = await db
     .insert(storySessions)
     .values({
@@ -152,7 +156,11 @@ export async function createStory(
       tone: input?.tone || 'atrisi_institutional',
       arc: input?.arc || 'context_proof_ask',
       beats: [],
-      metadata: { constitution: 'Studio creates. Products operate. Platform remembers.' },
+      metadata: {
+        constitution: 'Studio creates. Products operate. Platform remembers.',
+        format,
+        aspectRatio: getStoryAspectRatio({ format }),
+      },
     })
     .returning();
   return toDto(row);
@@ -372,7 +380,7 @@ export async function brandStoryBeat(
     prompt: promptParts.join(' '),
     style: useTitleCopy ? 'marketing_poster' : 'photo_realistic',
     quality: 'standard',
-    aspectRatio: '16x9',
+    aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
     titleHint: beat.title || 'ATRISI branded beat',
     referenceFileIds: brandReferenceIds(kit, beat.fileId!),
     referenceMode: 'style',
@@ -386,6 +394,7 @@ export async function brandStoryBeat(
       textMode,
       watermark,
       usedBrandKit: Boolean(kit.logoFileId || (kit.styleFileIds && kit.styleFileIds.length)),
+      format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
     },
     precision: {
       textFree: !useTitleCopy,
@@ -466,7 +475,7 @@ export async function generateSimilarStoryBeats(
     prompt: promptParts.join(' '),
     style: 'photo_realistic',
     quality: 'standard',
-    aspectRatio: '16x9',
+    aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
     titleHint: beat.title || 'Similar beat',
     referenceFileIds: similarRefs,
     referenceMode: 'style',
@@ -478,6 +487,7 @@ export async function generateSimilarStoryBeats(
       beatId,
       referenceFileId: beat.fileId,
       watermark,
+      format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
     },
     precision: {
       textFree: true,
@@ -529,6 +539,7 @@ export async function proposeStoryline(
   visionCount: number;
   reordered: boolean;
   thesis?: string;
+  warnings?: string[];
 }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   if (!existing.beats.length) {
@@ -580,7 +591,7 @@ export async function proposeStoryline(
         return {
           ...beat,
           order,
-          arcRole: structure.roles[id] || beat.arcRole || 'other',
+          arcRole: structure.roles[id] || beat.arcRole || beat.vision?.narrativeFit || 'other',
         };
       })
       .filter(Boolean) as StoryBeat[];
@@ -616,6 +627,36 @@ export async function proposeStoryline(
     source = seen.visionCount > 0 ? 'vision-heuristic' : 'heuristic';
   }
 
+  // 4) Enforce Context → Proof → Ask; error when assets cannot align
+  const validated = enforceAndValidateStoryArc(proposal.beats, {
+    visionCount: seen.visionCount,
+  });
+  if (!validated.ok) {
+    throw Object.assign(new Error(validated.errors.join(' ')), {
+      statusCode: 422,
+      details: { errors: validated.errors, warnings: validated.warnings },
+    });
+  }
+
+  const arcChanged = validated.beats.some(
+    (b, i) => b.id !== proposal.beats[i]?.id || b.arcRole !== proposal.beats[i]?.arcRole,
+  );
+  if (arcChanged) reordered = true;
+
+  proposal = {
+    ...proposal,
+    arc: 'context_proof_ask',
+    beats: validated.beats.map((beat) => {
+      const spoken = proposal.beats.find((b) => b.id === beat.id);
+      return {
+        ...beat,
+        title: spoken?.title || beat.title,
+        caption: spoken?.caption || beat.caption,
+        notes: spoken?.notes || beat.notes,
+      };
+    }),
+  };
+
   const story = await updateStory(ownerUserId, storyId, {
     title: proposal.title,
     arc: proposal.arc,
@@ -628,12 +669,20 @@ export async function proposeStoryline(
       lastVisionCount: seen.visionCount,
       lastThesis: thesis || undefined,
       lastReordered: reordered,
+      lastProposeWarnings: validated.warnings,
       composePipeline: 'see_combine_speak',
       combineMethod: combined?.method || (structure ? 'structure' : 'heuristic'),
     },
   });
 
-  return { story, source, visionCount: seen.visionCount, reordered, thesis: thesis || undefined };
+  return {
+    story,
+    source,
+    visionCount: seen.visionCount,
+    reordered,
+    thesis: thesis || undefined,
+    warnings: validated.warnings,
+  };
 }
 
 function storySafeFilename(title: string, ext: string): string {
@@ -691,7 +740,9 @@ export async function exportStoryPptx(
 ): Promise<{ buffer: Buffer; filename: string }> {
   const story = await getOwnedStory(ownerUserId, storyId);
   const beats = sortBeatsByStoryArc([...story.beats]);
-  const kit = getStoryBrandKit(story.metadata as Record<string, unknown>);
+  const meta = story.metadata as Record<string, unknown>;
+  const format = getStoryFormat(meta);
+  const kit = getStoryBrandKit(meta);
   let watermarkLogo: { mime: string; base64: string } | null = null;
   if (kit.logoFileId && kit.watermark !== false) {
     watermarkLogo = await loadBeatImageForExport(ownerUserId, kit.logoFileId, { allowWebp: true });
@@ -701,7 +752,6 @@ export async function exportStoryPptx(
     throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
   }
 
-  // Load CJS build explicitly — ESM entry (`import JSZip from 'jszip'`) breaks under Node dist.
   let PptxCtor: new () => any;
   try {
     const pptxMod = requirePptx('pptxgenjs');
@@ -720,80 +770,94 @@ export async function exportStoryPptx(
       { statusCode: 503 },
     );
   }
+
+  const slideW = format.pptx.width;
+  const slideH = format.pptx.height;
   const pptx = new PptxCtor();
   pptx.author = 'ATRISI Marketing';
   pptx.title = story.title;
-  pptx.subject = 'Story export — Context → Proof → Ask';
-  pptx.defineLayout({ name: 'LAYOUT_16x9', width: 13.333, height: 7.5 });
-  pptx.layout = 'LAYOUT_16x9';
+  pptx.subject = `Story export · ${format.label} · Context → Proof → Ask`;
+  pptx.defineLayout({ name: format.pptx.name, width: slideW, height: slideH });
+  pptx.layout = format.pptx.name;
 
   const thesis =
-    typeof (story.metadata as Record<string, unknown>)?.lastThesis === 'string'
-      ? String((story.metadata as Record<string, unknown>).lastThesis)
-      : 'Context → Proof → Ask';
+    typeof meta.lastThesis === 'string' ? String(meta.lastThesis) : 'Context → Proof → Ask';
+
+  const addLogo = (
+    slide: { addImage: (opts: Record<string, unknown>) => void },
+    box: { x: number; y: number; w: number; h: number },
+  ) => {
+    if (!watermarkLogo) return;
+    const logoRaw = Buffer.from(watermarkLogo.base64, 'base64');
+    const logoPx = readImagePixelSize(logoRaw) || { width: 400, height: 200 };
+    const logoFit = fitImageInBox(logoPx.width, logoPx.height, box.x, box.y, box.w, box.h);
+    slide.addImage({
+      data: `data:${watermarkLogo.mime};base64,${watermarkLogo.base64}`,
+      x: logoFit.x,
+      y: logoFit.y,
+      w: logoFit.w,
+      h: logoFit.h,
+    });
+  };
 
   // Title slide
   {
     const slide = pptx.addSlide();
     slide.background = { color: '0F172A' };
+    const pad = Math.min(0.7, slideW * 0.08);
     slide.addText('ATRISI', {
-      x: 0.7,
-      y: 2.2,
-      w: 12,
-      h: 0.4,
-      fontSize: 16,
+      x: pad,
+      y: slideH * 0.28,
+      w: slideW - pad * 2,
+      h: 0.35,
+      fontSize: 14,
       color: '2DD4BF',
       fontFace: 'Arial',
       bold: true,
     });
     slide.addText(story.title || 'Untitled story', {
-      x: 0.7,
-      y: 2.7,
-      w: 12,
-      h: 1,
-      fontSize: 36,
+      x: pad,
+      y: slideH * 0.34,
+      w: slideW - pad * 2,
+      h: Math.min(1.4, slideH * 0.2),
+      fontSize: format.layout === 'fullbleed' ? 28 : 36,
       color: 'F8FAFC',
       fontFace: 'Arial',
       bold: true,
     });
-    slide.addText(thesis, {
-      x: 0.7,
-      y: 4.0,
-      w: 11,
-      h: 0.8,
-      fontSize: 16,
+    slide.addText(`${format.label} · ${thesis}`, {
+      x: pad,
+      y: slideH * 0.55,
+      w: slideW - pad * 2,
+      h: 0.9,
+      fontSize: 14,
       color: '94A3B8',
       fontFace: 'Arial',
     });
-    if (watermarkLogo) {
-      const logoRaw = Buffer.from(watermarkLogo.base64, 'base64');
-      const logoPx = readImagePixelSize(logoRaw) || { width: 400, height: 200 };
-      const logoFit = fitImageInBox(logoPx.width, logoPx.height, 11.5, 6.4, 1.3, 0.7);
-      slide.addImage({
-        data: `data:${watermarkLogo.mime};base64,${watermarkLogo.base64}`,
-        x: logoFit.x,
-        y: logoFit.y,
-        w: logoFit.w,
-        h: logoFit.h,
-      });
-    }
+    addLogo(slide, {
+      x: slideW - 1.5,
+      y: slideH - 0.9,
+      w: 1.2,
+      h: 0.6,
+    });
   }
 
   const grouped = groupBeatsByArc(beats);
   let slideIndex = 0;
+
   for (const role of ['context', 'proof', 'ask', 'other'] as const) {
     const group = grouped[role];
     if (group.length === 0) continue;
 
-    // Section divider aligned to story arc
-    {
+    // Section divider (deck only — fullbleed stays image-led)
+    if (format.layout === 'deck') {
       const divider = pptx.addSlide();
       divider.background = { color: '0F172A' };
       divider.addText(ARC_LABELS[role].toUpperCase(), {
         x: 0.7,
-        y: 3.0,
-        w: 12,
-        h: 0.6,
+        y: slideH * 0.4,
+        w: slideW - 1.4,
+        h: 0.55,
         fontSize: 28,
         color: '2DD4BF',
         fontFace: 'Arial',
@@ -801,9 +865,9 @@ export async function exportStoryPptx(
       });
       divider.addText(`${group.length} beat${group.length === 1 ? '' : 's'}`, {
         x: 0.7,
-        y: 3.7,
-        w: 12,
-        h: 0.4,
+        y: slideH * 0.4 + 0.65,
+        w: slideW - 1.4,
+        h: 0.35,
         fontSize: 14,
         color: '94A3B8',
         fontFace: 'Arial',
@@ -813,44 +877,35 @@ export async function exportStoryPptx(
     for (const beat of group) {
       slideIndex += 1;
       const slide = pptx.addSlide();
-      slide.background = { color: 'F8FAFC' };
+      const storyLine = [beat.caption, beat.notes].filter(Boolean).join(' — ');
+      const roleLabel = `${ARC_LABELS[role].toUpperCase()}  ·  ${slideIndex}`;
 
-      slide.addText(`${ARC_LABELS[role].toUpperCase()}  ·  ${slideIndex}`, {
-        x: 0.5,
-        y: 0.28,
-        w: 8,
-        h: 0.3,
-        fontSize: 11,
-        color: '0D9488',
-        fontFace: 'Arial',
-        bold: true,
-      });
-      slide.addText(beat.title || 'Beat', {
-        x: 0.5,
-        y: 0.55,
-        w: 12.3,
-        h: 0.5,
-        fontSize: 24,
-        color: '0F172A',
-        fontFace: 'Arial',
-        bold: true,
-      });
-
-      const imageBox = { x: 0.5, y: 1.15, w: 12.3, h: 4.2 };
+      let image: { mime: string; base64: string } | null = null;
+      let pixels = { width: 1920, height: 1080 };
       if (beat.fileId) {
-        const image = await loadBeatImageForExport(ownerUserId, beat.fileId);
+        image = await loadBeatImageForExport(ownerUserId, beat.fileId);
+        if (image) {
+          const raw = Buffer.from(image.base64, 'base64');
+          pixels = readImagePixelSize(raw) || pixels;
+        }
+      }
+
+      if (format.layout === 'fullbleed') {
+        slide.background = { color: '0F172A' };
         if (image) {
           try {
-            const raw = Buffer.from(image.base64, 'base64');
-            const pixels = readImagePixelSize(raw) || { width: 1920, height: 1080 };
-            const fitted = fitImageInBox(
-              pixels.width,
-              pixels.height,
-              imageBox.x,
-              imageBox.y,
-              imageBox.w,
-              imageBox.h,
-            );
+            // Cover the full slide so carousel/feed/stories use pixels optimally
+            slide.addImage({
+              data: `data:${image.mime};base64,${image.base64}`,
+              x: 0,
+              y: 0,
+              w: slideW,
+              h: slideH,
+              sizing: { type: 'cover', w: slideW, h: slideH },
+            });
+          } catch (error) {
+            // Fallback without sizing API
+            const fitted = fitImageInBox(pixels.width, pixels.height, 0, 0, slideW, slideH);
             slide.addImage({
               data: `data:${image.mime};base64,${image.base64}`,
               x: fitted.x,
@@ -858,22 +913,161 @@ export async function exportStoryPptx(
               w: fitted.w,
               h: fitted.h,
             });
-          } catch (error) {
-            logger.warn('Story PPTX addImage failed', {
+            logger.warn('Story PPTX cover sizing fallback', {
               beatId: beat.id,
               error: error instanceof Error ? error.message : String(error),
             });
           }
         }
+        // Overlay bars for readable copy
+        try {
+          const rect = pptx.ShapeType?.rect;
+          if (rect) {
+            slide.addShape(rect, {
+              x: 0,
+              y: 0,
+              w: slideW,
+              h: Math.min(1.35, slideH * 0.18),
+              fill: { color: '0F172A', transparency: 35 },
+              line: { color: '0F172A', transparency: 100 },
+            });
+            slide.addShape(rect, {
+              x: 0,
+              y: slideH - Math.min(1.8, slideH * 0.24),
+              w: slideW,
+              h: Math.min(1.8, slideH * 0.24),
+              fill: { color: '0F172A', transparency: 30 },
+              line: { color: '0F172A', transparency: 100 },
+            });
+          }
+        } catch {
+          // Shapes optional — text overlays still render
+        }
+        slide.addText(roleLabel, {
+          x: 0.35,
+          y: 0.25,
+          w: slideW - 0.7,
+          h: 0.28,
+          fontSize: 11,
+          color: '2DD4BF',
+          fontFace: 'Arial',
+          bold: true,
+        });
+        slide.addText(beat.title || 'Beat', {
+          x: 0.35,
+          y: 0.55,
+          w: slideW - 0.7,
+          h: 0.55,
+          fontSize: 22,
+          color: 'F8FAFC',
+          fontFace: 'Arial',
+          bold: true,
+        });
+        if (storyLine) {
+          slide.addText(storyLine, {
+            x: 0.35,
+            y: slideH - Math.min(1.55, slideH * 0.2),
+            w: slideW - 1.6,
+            h: Math.min(1.2, slideH * 0.16),
+            fontSize: 13,
+            color: 'E2E8F0',
+            fontFace: 'Arial',
+            valign: 'top',
+          });
+        }
+        addLogo(slide, {
+          x: slideW - 1.25,
+          y: slideH - 0.85,
+          w: 0.95,
+          h: 0.55,
+        });
+        continue;
       }
 
-      const storyLine = [beat.caption, beat.notes].filter(Boolean).join(' — ');
+      // Deck layout — pick split vs stack from source image aspect
+      slide.background = { color: 'F8FAFC' };
+      const layout = pickDeckImageLayout(pixels.width, pixels.height, slideW, slideH);
+
+      slide.addText(roleLabel, {
+        x: layout.roleBox.x,
+        y: layout.roleBox.y,
+        w: layout.roleBox.w,
+        h: layout.roleBox.h,
+        fontSize: 11,
+        color: '0D9488',
+        fontFace: 'Arial',
+        bold: true,
+      });
+      slide.addText(beat.title || 'Beat', {
+        x: layout.titleBox.x,
+        y: layout.titleBox.y,
+        w: layout.titleBox.w,
+        h: layout.titleBox.h,
+        fontSize: layout.mode === 'split' ? 26 : 22,
+        color: '0F172A',
+        fontFace: 'Arial',
+        bold: true,
+        valign: 'top',
+      });
+
+      if (image) {
+        try {
+          const box = layout.imageBox;
+          if (format.imageFit === 'cover') {
+            slide.addImage({
+              data: `data:${image.mime};base64,${image.base64}`,
+              x: box.x,
+              y: box.y,
+              w: box.w,
+              h: box.h,
+              sizing: { type: 'cover', w: box.w, h: box.h },
+            });
+          } else {
+            const fitted = fitImageInBox(
+              pixels.width,
+              pixels.height,
+              box.x,
+              box.y,
+              box.w,
+              box.h,
+            );
+            // Prefer contain with correct aspect; if near-match, use cover to fill
+            const srcAspect = pixels.width / Math.max(pixels.height, 1);
+            const boxAspect = box.w / Math.max(box.h, 1);
+            const closeMatch = Math.abs(srcAspect - boxAspect) / boxAspect < 0.12;
+            if (closeMatch) {
+              slide.addImage({
+                data: `data:${image.mime};base64,${image.base64}`,
+                x: box.x,
+                y: box.y,
+                w: box.w,
+                h: box.h,
+                sizing: { type: 'cover', w: box.w, h: box.h },
+              });
+            } else {
+              slide.addImage({
+                data: `data:${image.mime};base64,${image.base64}`,
+                x: fitted.x,
+                y: fitted.y,
+                w: fitted.w,
+                h: fitted.h,
+              });
+            }
+          }
+        } catch (error) {
+          logger.warn('Story PPTX addImage failed', {
+            beatId: beat.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       if (storyLine) {
         slide.addText(storyLine, {
-          x: 0.5,
-          y: 5.5,
-          w: 11.2,
-          h: 1.15,
+          x: layout.captionBox.x,
+          y: layout.captionBox.y,
+          w: layout.captionBox.w,
+          h: layout.captionBox.h,
           fontSize: 14,
           color: '334155',
           fontFace: 'Arial',
@@ -881,22 +1075,16 @@ export async function exportStoryPptx(
         });
       }
 
-      if (watermarkLogo) {
-        const logoRaw = Buffer.from(watermarkLogo.base64, 'base64');
-        const logoPx = readImagePixelSize(logoRaw) || { width: 400, height: 200 };
-        const logoFit = fitImageInBox(logoPx.width, logoPx.height, 11.9, 6.75, 1.0, 0.55);
-        slide.addImage({
-          data: `data:${watermarkLogo.mime};base64,${watermarkLogo.base64}`,
-          x: logoFit.x,
-          y: logoFit.y,
-          w: logoFit.w,
-          h: logoFit.h,
-        });
-      }
+      addLogo(slide, {
+        x: slideW - 1.35,
+        y: slideH - 0.75,
+        w: 1.0,
+        h: 0.5,
+      });
     }
   }
 
-  // Closing ask slide — story CTA from last Ask beat or thesis
+  // Closing ask slide
   {
     const askBeats = grouped.ask;
     const closing =
@@ -905,10 +1093,11 @@ export async function exportStoryPptx(
       thesis;
     const close = pptx.addSlide();
     close.background = { color: '0F172A' };
+    const pad = Math.min(0.7, slideW * 0.08);
     close.addText('ASK', {
-      x: 0.7,
-      y: 2.4,
-      w: 12,
+      x: pad,
+      y: slideH * 0.32,
+      w: slideW - pad * 2,
       h: 0.35,
       fontSize: 14,
       color: '2DD4BF',
@@ -916,27 +1105,21 @@ export async function exportStoryPptx(
       bold: true,
     });
     close.addText(closing, {
-      x: 0.7,
-      y: 2.9,
-      w: 11.5,
-      h: 1.6,
-      fontSize: 28,
+      x: pad,
+      y: slideH * 0.38,
+      w: slideW - pad * 2,
+      h: Math.min(2.2, slideH * 0.35),
+      fontSize: format.layout === 'fullbleed' ? 24 : 28,
       color: 'F8FAFC',
       fontFace: 'Arial',
       bold: true,
     });
-    if (watermarkLogo) {
-      const logoRaw = Buffer.from(watermarkLogo.base64, 'base64');
-      const logoPx = readImagePixelSize(logoRaw) || { width: 400, height: 200 };
-      const logoFit = fitImageInBox(logoPx.width, logoPx.height, 11.5, 6.4, 1.3, 0.7);
-      close.addImage({
-        data: `data:${watermarkLogo.mime};base64,${watermarkLogo.base64}`,
-        x: logoFit.x,
-        y: logoFit.y,
-        w: logoFit.w,
-        h: logoFit.h,
-      });
-    }
+    addLogo(close, {
+      x: slideW - 1.5,
+      y: slideH - 0.9,
+      w: 1.2,
+      h: 0.6,
+    });
   }
 
   try {
@@ -1122,10 +1305,20 @@ export async function exportStoryHtml(
     throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
   }
 
-  const thesis =
-    typeof (story.metadata as Record<string, unknown>)?.lastThesis === 'string'
-      ? String((story.metadata as Record<string, unknown>).lastThesis)
-      : '';
+  const meta = story.metadata as Record<string, unknown>;
+  const format = getStoryFormat(meta);
+  const frameClass =
+    format.id === 'carousel'
+      ? 'frame-1x1'
+      : format.id === 'feed'
+        ? 'frame-4x5'
+        : format.id === 'story'
+          ? 'frame-9x16'
+          : 'frame-16x9';
+  const maxW =
+    format.id === 'story' ? '420px' : format.id === 'deck' ? '960px' : '560px';
+
+  const thesis = typeof meta.lastThesis === 'string' ? String(meta.lastThesis) : '';
 
   const cards: string[] = [];
   const byArc = groupBeatsByArc(beats);
@@ -1141,7 +1334,7 @@ export async function exportStoryHtml(
       if (beat.fileId) {
         const image = await loadBeatImageForExport(ownerUserId, beat.fileId, { allowWebp: true });
         if (image) {
-          img = `<img src="data:${image.mime};base64,${image.base64}" alt="" />`;
+          img = `<div class="frame ${frameClass}"><img src="data:${image.mime};base64,${image.base64}" alt="" /></div>`;
         } else {
           img = `<p class="missing">Image unavailable — re-upload this beat asset</p>`;
         }
@@ -1166,16 +1359,22 @@ export async function exportStoryHtml(
   :root { color-scheme: light; --ink:#0f172a; --muted:#64748b; --teal:#0d9488; --bg:#f1f5f9; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: Georgia, "Times New Roman", serif; background:var(--bg); color:var(--ink); }
-  header { padding:2.5rem 1.5rem 1rem; max-width:720px; margin:0 auto; }
+  header { padding:2.5rem 1.5rem 1rem; max-width:${maxW}; margin:0 auto; }
   header .brand { font-family: system-ui, sans-serif; letter-spacing:.18em; text-transform:uppercase; font-size:.7rem; color:var(--teal); font-weight:700; }
   header h1 { font-size:2rem; margin:.5rem 0; }
   header .thesis { color:var(--muted); line-height:1.5; }
-  main { max-width:720px; margin:0 auto; padding:0 1.5rem 3rem; display:grid; gap:1rem; }
+  header .format { font-family:system-ui,sans-serif; font-size:.75rem; color:var(--muted); }
+  main { max-width:${maxW}; margin:0 auto; padding:0 1.5rem 3rem; display:grid; gap:1rem; }
   .arc { font-family: system-ui, sans-serif; font-size:.75rem; letter-spacing:.16em; text-transform:uppercase; color:var(--teal); margin:1.5rem 0 0.25rem; }
   .beat { background:#fff; padding:1.25rem; border-radius:4px; }
   .beat .role { font-family: system-ui, sans-serif; font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--teal); margin:0 0 .5rem; }
   .beat h3 { margin:0 0 1rem; font-size:1.35rem; }
-  .beat img { width:100%; height:auto; display:block; margin:0 0 1rem; background:#e2e8f0; }
+  .frame { width:100%; overflow:hidden; background:#0f172a; margin:0 0 1rem; }
+  .frame-1x1 { aspect-ratio:1/1; }
+  .frame-4x5 { aspect-ratio:4/5; }
+  .frame-9x16 { aspect-ratio:9/16; }
+  .frame-16x9 { aspect-ratio:16/9; }
+  .frame img { width:100%; height:100%; object-fit:cover; display:block; }
   .beat .caption { margin:0; color:#334155; line-height:1.55; font-size:1rem; }
   .beat .missing { margin:0 0 1rem; padding:1rem; background:#f8fafc; color:var(--muted); font-family:system-ui,sans-serif; font-size:.85rem; }
   footer { text-align:center; padding:2rem; color:var(--muted); font-size:.8rem; font-family:system-ui,sans-serif; }
@@ -1184,6 +1383,7 @@ export async function exportStoryHtml(
 <body>
 <header>
   <p class="brand">ATRISI · Story · Context → Proof → Ask</p>
+  <p class="format">${escapeHtml(format.label)} · ${escapeHtml(format.hint)}</p>
   <h1>${escapeHtml(story.title || 'Untitled story')}</h1>
   ${thesis ? `<p class="thesis">${escapeHtml(thesis)}</p>` : ''}
 </header>

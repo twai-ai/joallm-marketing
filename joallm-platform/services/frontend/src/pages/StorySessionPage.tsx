@@ -13,7 +13,8 @@ import { Link, useParams } from 'react-router-dom';
 import { AuthPreviewImage } from '../components/story/AuthPreviewImage';
 import { useDocuments } from '../hooks/useDocuments';
 import { useStorySession } from '../hooks/useStory';
-import type { StoryBeat } from '../types/story';
+import type { StoryBeat, StoryFormatId } from '../types/story';
+import { STORY_FORMAT_OPTIONS } from '../types/story';
 import { showError } from '../utils/toast';
 
 const ARC_LABEL: Record<string, string> = {
@@ -44,6 +45,7 @@ export function StorySessionPage() {
     saveBrandKit,
     isSavingBrandKit,
     brandKit,
+    format,
     exportStory,
   } = useStorySession(storyId);
   const { uploadMultiple, isUploading } = useDocuments();
@@ -146,6 +148,22 @@ export function StorySessionPage() {
     });
   };
 
+  const setFormat = async (next: StoryFormatId) => {
+    const aspectByFormat: Record<StoryFormatId, string> = {
+      deck: '16x9',
+      carousel: '1x1',
+      feed: '4x5',
+      story: '9x16',
+    };
+    await saveStory({
+      metadata: {
+        ...(story?.metadata || {}),
+        format: next,
+        aspectRatio: aspectByFormat[next],
+      },
+    });
+  };
+
   const updateSelected = (patch: Partial<StoryBeat>) => {
     if (!selected) return;
     setBeats(beats.map((b) => (b.id === selected.id ? { ...b, ...patch } : b)));
@@ -199,6 +217,22 @@ export function StorySessionPage() {
           className="min-w-0 flex-1 border-0 bg-transparent text-lg font-semibold tracking-tight text-slate-950 outline-none"
           placeholder="Story title"
         />
+        <label className="sr-only" htmlFor="story-format">
+          Output format
+        </label>
+        <select
+          id="story-format"
+          value={format}
+          onChange={(e) => void setFormat(e.target.value as StoryFormatId)}
+          className="hidden rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none sm:block"
+          title="Output size for Brand, Similar, and exports"
+        >
+          {STORY_FORMAT_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label} · {opt.aspect}
+            </option>
+          ))}
+        </select>
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
@@ -265,7 +299,7 @@ export function StorySessionPage() {
                       {
                         id: 'pptx' as const,
                         label: 'Slide deck',
-                        hint: 'PPTX · arc order, no stretch',
+                        hint: 'PPTX · matches format size, optimal image fit',
                       },
                       {
                         id: 'json' as const,
@@ -477,6 +511,26 @@ export function StorySessionPage() {
             ) : null}
             {selected ? (
               <div className="mt-5 space-y-4">
+                <div>
+                  <label className="sr-only" htmlFor="story-format-edit">
+                    Output format
+                  </label>
+                  <select
+                    id="story-format-edit"
+                    value={format}
+                    onChange={(e) => void setFormat(e.target.value as StoryFormatId)}
+                    className="w-full border-0 border-b border-slate-200 bg-transparent py-2 text-sm text-slate-800 outline-none focus:border-teal-500 sm:hidden"
+                  >
+                    {STORY_FORMAT_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label} · {opt.aspect}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-400 sm:hidden">
+                    Brand / Similar / exports use this size
+                  </p>
+                </div>
                 <div>
                   <label className="sr-only" htmlFor="story-arc">
                     Arc

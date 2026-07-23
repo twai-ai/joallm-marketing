@@ -25,6 +25,7 @@ import {
   setStoryBrandKit,
   updateStory,
 } from '../services/story-service.js';
+import { getStoryAspectRatio, getStoryFormat } from '../services/story-format.js';
 import { logger } from '../utils/logger.js';
 
 const BeatSchema = z.object({
@@ -58,6 +59,7 @@ const CreateSchema = z.object({
   title: z.string().max(200).optional(),
   tone: z.string().max(80).optional(),
   arc: z.string().max(80).optional(),
+  format: z.enum(['deck', 'carousel', 'feed', 'story']).optional(),
 });
 
 const UpdateSchema = z.object({
@@ -235,6 +237,7 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
         visionCount: result.visionCount,
         reordered: result.reordered,
         thesis: result.thesis,
+        warnings: result.warnings || [],
       });
     } catch (error) {
       return reply.status(statusFromError(error)).send({
@@ -256,15 +259,22 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
       const { storyId } = request.params as { storyId: string };
       const body = GenerateBeatSchema.parse(request.body || {});
       const story = await getStory(userId, storyId);
+      const aspectRatio =
+        body.aspectRatio ||
+        getStoryAspectRatio(story.metadata as Record<string, unknown>);
 
       const generated = await generateCreativeImages({
         ownerUserId: userId,
         prompt: body.prompt,
         style: body.style || 'social_media',
         quality: 'standard',
-        aspectRatio: body.aspectRatio || '16x9',
+        aspectRatio,
         titleHint: body.titleHint || 'Story beat',
-        metadata: { source: 'story', storyId },
+        metadata: {
+          source: 'story',
+          storyId,
+          format: getStoryFormat(story.metadata as Record<string, unknown>).id,
+        },
         variantCount: 1,
       });
 

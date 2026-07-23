@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../config/api';
 import type { StoryBeat, StoryBrandKit, StorySession } from '../types/story';
-import { readStoryBrandKit } from '../types/story';
+import { readStoryBrandKit, readStoryFormat } from '../types/story';
 import { apiClient } from '../utils/api-client';
 import { showError, showSuccess } from '../utils/toast';
 
@@ -109,8 +109,9 @@ export function useStorySession(storyId: string | undefined) {
           visionCount?: number;
           reordered?: boolean;
           thesis?: string;
+          warnings?: string[];
         }
-      >(API_ENDPOINTS.story.propose(storyId!), options || {});
+      >(API_ENDPOINTS.story.propose(storyId!), options || {}, { showErrorToast: false });
       return res;
     },
     onSuccess: (res) => {
@@ -127,19 +128,35 @@ export function useStorySession(storyId: string | undefined) {
       }
       if (res.reordered) bits.push('beats rearranged');
       showSuccess(bits.join(' · '));
+      for (const warning of res.warnings || []) {
+        showError(warning);
+      }
     },
-    onError: () => showError('Could not propose storyline'),
+    onError: (error: unknown) => {
+      const message =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message: string }).message)
+          : 'Could not propose storyline';
+      showError(message || 'Could not propose storyline');
+    },
   });
 
   const generateBeatMutation = useMutation({
     mutationFn: async (input: { prompt: string; titleHint?: string }) => {
+      const format = readStoryFormat(storyQuery.data?.metadata);
+      const aspectByFormat: Record<string, string> = {
+        deck: '16x9',
+        carousel: '1x1',
+        feed: '4x5',
+        story: '9x16',
+      };
       const res = await apiClient.post<ApiOk<StorySession>>(
         API_ENDPOINTS.story.generateBeat(storyId!),
         {
           prompt: input.prompt,
           titleHint: input.titleHint,
-          style: 'social_media',
-          aspectRatio: '16x9',
+          style: format === 'deck' ? 'hero_banner' : 'social_media',
+          aspectRatio: aspectByFormat[format] || '1x1',
         },
       );
       return res.data;
@@ -314,6 +331,7 @@ export function useStorySession(storyId: string | undefined) {
     saveBrandKit: brandKitMutation.mutateAsync,
     isSavingBrandKit: brandKitMutation.isPending,
     brandKit: readStoryBrandKit(storyQuery.data?.metadata),
+    format: readStoryFormat(storyQuery.data?.metadata),
     exportStory,
   };
 }

@@ -27,6 +27,7 @@ import {
   listStudioChannels,
 } from './channel-service.js';
 import { listPlatformConnectors } from './connector-service.js';
+import { resolveOrganizationIdForUser } from './organization-ownership.js';
 
 const META_PROVIDER = 'meta_whatsapp';
 const META_FB_PROVIDER = 'meta_facebook_page';
@@ -34,6 +35,11 @@ const META_IG_PROVIDER = 'meta_instagram';
 const META_LEAD_PROVIDER = 'meta_lead_ads';
 const META_ADS_PROVIDER = 'meta_ads';
 const PAGE_SOURCE_PROVIDERS = [META_FB_PROVIDER, META_IG_PROVIDER] as const;
+
+/** Resolve org ownership for dual-write on Marketing creates. */
+async function organizationIdForOwner(ownerUserId: string): Promise<string | null> {
+  return resolveOrganizationIdForUser(ownerUserId);
+}
 
 export type MetaWebhookPayload = {
   object?: string;
@@ -198,8 +204,11 @@ export async function ensureMetaSourceConnection(options: {
   displayPhoneNumber?: string;
   /** When true (Studio Connect), reassign source ownership to the logged-in user. */
   claimOwnership?: boolean;
+  organizationId?: string | null;
 }) {
   const { ownerUserId, phoneNumberId, displayPhoneNumber, claimOwnership = false } = options;
+  const organizationId =
+    options.organizationId ?? (await organizationIdForOwner(ownerUserId));
 
   // Studio-1: Platform Connector → Studio Channel → Publishing Profile
   let connectorId: string | null = null;
@@ -240,6 +249,7 @@ export async function ensureMetaSourceConnection(options: {
           .update(acquisitionSourceConnections)
           .set({
             ownerUserId: shouldClaim ? ownerUserId : byExternal.ownerUserId,
+            organizationId: organizationId || byExternal.organizationId,
             connectorId: connectorId || byExternal.connectorId,
             channelId: channelId || byExternal.channelId,
             name: displayPhoneNumber
@@ -280,6 +290,7 @@ export async function ensureMetaSourceConnection(options: {
       const [linked] = await db
         .update(acquisitionSourceConnections)
         .set({
+          organizationId: organizationId || byOwner.organizationId,
           connectorId: connectorId || byOwner.connectorId,
           channelId: channelId || byOwner.channelId,
           externalAccountId: phoneNumberId || byOwner.externalAccountId,
@@ -296,6 +307,7 @@ export async function ensureMetaSourceConnection(options: {
     .insert(acquisitionSourceConnections)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       provider: META_PROVIDER,
       name: displayPhoneNumber
         ? `WhatsApp (${displayPhoneNumber})`
@@ -328,7 +340,10 @@ async function upsertPageSourceConnection(options: {
   channelId?: string | null;
   claimOwnership?: boolean;
   config?: Record<string, unknown>;
+  organizationId?: string | null;
 }) {
+  const organizationId =
+    options.organizationId ?? (await organizationIdForOwner(options.ownerUserId));
   const {
     ownerUserId,
     provider,
@@ -357,6 +372,7 @@ async function upsertPageSourceConnection(options: {
       .update(acquisitionSourceConnections)
       .set({
         ownerUserId: shouldClaim ? ownerUserId : byExternal.ownerUserId,
+        organizationId: organizationId || byExternal.organizationId,
         connectorId: connectorId || byExternal.connectorId,
         channelId: channelId || byExternal.channelId,
         name,
@@ -407,6 +423,7 @@ async function upsertPageSourceConnection(options: {
     .insert(acquisitionSourceConnections)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       provider,
       name,
       status: 'active',
@@ -580,8 +597,11 @@ async function resolveOrCreatePersonByWhatsApp(options: {
   ownerUserId: string;
   waId: string;
   displayName?: string;
+  organizationId?: string | null;
 }): Promise<typeof acquisitionPersons.$inferSelect | undefined> {
   const { ownerUserId, waId, displayName } = options;
+  const organizationId =
+    options.organizationId ?? (await organizationIdForOwner(ownerUserId));
 
   const [existingIdentity] = await db
     .select()
@@ -608,6 +628,7 @@ async function resolveOrCreatePersonByWhatsApp(options: {
     .insert(acquisitionPersons)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       displayName: displayName || waId,
       primaryPhone: waId,
       status: 'identified',
@@ -618,6 +639,7 @@ async function resolveOrCreatePersonByWhatsApp(options: {
 
   await db.insert(acquisitionPersonIdentities).values({
     ownerUserId,
+    organizationId: organizationId || null,
     personId: person.id,
     provider: 'whatsapp',
     externalId: waId,
@@ -629,6 +651,7 @@ async function resolveOrCreatePersonByWhatsApp(options: {
   try {
     await db.insert(acquisitionPersonIdentities).values({
       ownerUserId,
+      organizationId: organizationId || null,
       personId: person.id,
       provider: 'phone',
       externalId: waId,
@@ -703,6 +726,7 @@ export async function ingestMetaWhatsAppWebhook(options: {
     .insert(acquisitionRawRecords)
     .values({
       ownerUserId: sourceConnection.ownerUserId,
+      organizationId: sourceConnection.organizationId || null,
       sourceConnectionId: sourceConnection.id,
       externalEventId: payload.entry?.[0]?.id,
       eventName: payload.object || 'whatsapp_business_account',
@@ -743,6 +767,7 @@ export async function ingestMetaWhatsAppWebhook(options: {
 
           const person = await resolveOrCreatePersonByWhatsApp({
             ownerUserId: sourceConnection.ownerUserId,
+            organizationId: sourceConnection.organizationId,
             waId: message.from,
             displayName: contactNameByWaId.get(message.from),
           });
@@ -780,6 +805,7 @@ export async function ingestMetaWhatsAppWebhook(options: {
             .insert(acquisitionInteractions)
             .values({
               ownerUserId: sourceConnection.ownerUserId,
+              organizationId: sourceConnection.organizationId || null,
               personId: person.id,
               sourceEventId: event.id,
               kind: 'message',
@@ -802,6 +828,7 @@ export async function ingestMetaWhatsAppWebhook(options: {
             );
             await attributeInboundWhatsAppInterest({
               ownerUserId: sourceConnection.ownerUserId,
+              organizationId: sourceConnection.organizationId || null,
               personId: person.id,
               eventId: event.id,
               textBody,
@@ -820,6 +847,7 @@ export async function ingestMetaWhatsAppWebhook(options: {
           if (status.recipient_id) {
             const person = await resolveOrCreatePersonByWhatsApp({
               ownerUserId: sourceConnection.ownerUserId,
+              organizationId: sourceConnection.organizationId,
               waId: status.recipient_id,
             });
             personId = person?.id ?? null;
@@ -966,8 +994,11 @@ async function resolveOrCreatePersonByMetaMessaging(options: {
   externalId: string;
   displayName?: string;
   surface: 'facebook' | 'instagram';
+  organizationId?: string | null;
 }) {
   const { ownerUserId, externalId, displayName, surface } = options;
+  const organizationId =
+    options.organizationId ?? (await organizationIdForOwner(ownerUserId));
   const identityExternalId = `${surface}:${externalId}`;
 
   const [existingIdentity] = await db
@@ -995,6 +1026,7 @@ async function resolveOrCreatePersonByMetaMessaging(options: {
     .insert(acquisitionPersons)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       displayName: displayName || `${surface} ${externalId.slice(-6)}`,
       status: 'identified',
       relationshipMaturity: 'identified',
@@ -1004,6 +1036,7 @@ async function resolveOrCreatePersonByMetaMessaging(options: {
 
   await db.insert(acquisitionPersonIdentities).values({
     ownerUserId,
+    organizationId: organizationId || null,
     personId: person.id,
     provider: 'meta',
     externalId: identityExternalId,
@@ -1021,8 +1054,11 @@ async function resolveOrCreatePersonFromLead(options: {
   email?: string | null;
   phone?: string | null;
   displayName?: string | null;
+  organizationId?: string | null;
 }) {
   const { ownerUserId, identityKey, email, phone, displayName } = options;
+  const organizationId =
+    options.organizationId ?? (await organizationIdForOwner(ownerUserId));
 
   if (email) {
     const [byEmail] = await db
@@ -1094,6 +1130,7 @@ async function resolveOrCreatePersonFromLead(options: {
     .insert(acquisitionPersons)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       displayName: displayName || email || phone || identityKey,
       primaryEmail: email || null,
       primaryPhone: phone || null,
@@ -1105,6 +1142,7 @@ async function resolveOrCreatePersonFromLead(options: {
 
   await db.insert(acquisitionPersonIdentities).values({
     ownerUserId,
+    organizationId: organizationId || null,
     personId: person.id,
     provider: 'meta',
     externalId: metaExternalId,
@@ -1117,6 +1155,7 @@ async function resolveOrCreatePersonFromLead(options: {
     try {
       await db.insert(acquisitionPersonIdentities).values({
         ownerUserId,
+        organizationId: organizationId || null,
         personId: person.id,
         provider: 'email',
         externalId: email.toLowerCase(),
@@ -1132,6 +1171,7 @@ async function resolveOrCreatePersonFromLead(options: {
     try {
       await db.insert(acquisitionPersonIdentities).values({
         ownerUserId,
+        organizationId: organizationId || null,
         personId: person.id,
         provider: 'phone',
         externalId: phone.replace(/\D/g, ''),
@@ -1220,6 +1260,7 @@ export async function ingestMetaPageWebhook(options: {
     .insert(acquisitionRawRecords)
     .values({
       ownerUserId: activeSource.ownerUserId,
+      organizationId: activeSource.organizationId || null,
       sourceConnectionId: activeSource.id,
       externalEventId: payload.entry?.[0]?.id,
       eventName: objectType,
@@ -1252,6 +1293,7 @@ export async function ingestMetaPageWebhook(options: {
 
         const person = await resolveOrCreatePersonByMetaMessaging({
           ownerUserId: activeSource.ownerUserId,
+          organizationId: activeSource.organizationId,
           externalId: senderId,
           surface,
         });
@@ -1261,6 +1303,7 @@ export async function ingestMetaPageWebhook(options: {
           .insert(acquisitionEvents)
           .values({
             ownerUserId: activeSource.ownerUserId,
+            organizationId: activeSource.organizationId || null,
             sourceConnectionId: activeSource.id,
             rawRecordId: rawRecord.id,
             source: surface === 'instagram' ? META_IG_PROVIDER : META_FB_PROVIDER,
@@ -1287,6 +1330,7 @@ export async function ingestMetaPageWebhook(options: {
           .insert(acquisitionInteractions)
           .values({
             ownerUserId: activeSource.ownerUserId,
+            organizationId: activeSource.organizationId || null,
             personId: person.id,
             sourceEventId: event.id,
             kind: 'message',
@@ -1345,6 +1389,7 @@ export async function ingestMetaPageWebhook(options: {
           `lead:${lead.id}`;
         const person = await resolveOrCreatePersonFromLead({
           ownerUserId: activeSource.ownerUserId,
+          organizationId: activeSource.organizationId,
           identityKey,
           email: lead.email,
           phone: lead.phone,
@@ -1362,6 +1407,7 @@ export async function ingestMetaPageWebhook(options: {
           .insert(acquisitionEvents)
           .values({
             ownerUserId: activeSource.ownerUserId,
+            organizationId: activeSource.organizationId || leadSource.organizationId || null,
             sourceConnectionId: leadSource.id,
             rawRecordId: rawRecord.id,
             source: META_LEAD_PROVIDER,
@@ -1391,6 +1437,7 @@ export async function ingestMetaPageWebhook(options: {
           .insert(acquisitionInteractions)
           .values({
             ownerUserId: activeSource.ownerUserId,
+            organizationId: activeSource.organizationId || null,
             personId: person.id,
             sourceEventId: event.id,
             kind: 'submission',

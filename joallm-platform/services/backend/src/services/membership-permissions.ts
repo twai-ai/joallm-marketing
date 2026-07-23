@@ -27,6 +27,7 @@ const ROLE_ORG_PERMISSIONS: Record<MembershipRole, readonly OrgPermission[]> = {
     'studio.view',
     'studio.manage',
     'publishing.execute',
+    'activity.view',
   ],
   admin: [
     'acquisition.view',

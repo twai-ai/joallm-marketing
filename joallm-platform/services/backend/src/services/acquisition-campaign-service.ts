@@ -7,6 +7,8 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { acquisitionCampaigns, acquisitionInitiatives } from '../database/schema.js';
+import { resolveOrganizationIdForUser } from './organization-ownership.js';
+import { auditLog } from '../utils/audit.js';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived';
 
@@ -48,21 +50,32 @@ export async function ensureProgramInitiative(options: {
   ownerUserId: string;
   programId: string;
   programName: string;
+  organizationId?: string | null;
 }): Promise<{ id: string }> {
   const { ownerUserId, programId, programName } = options;
+  const organizationId =
+    options.organizationId ?? (await resolveOrganizationIdForUser(ownerUserId));
 
   const existing = await db
     .select()
     .from(acquisitionInitiatives)
     .where(
       and(
-        eq(acquisitionInitiatives.ownerUserId, ownerUserId),
+        organizationId
+          ? eq(acquisitionInitiatives.organizationId, organizationId)
+          : eq(acquisitionInitiatives.ownerUserId, ownerUserId),
         eq(acquisitionInitiatives.programId, programId),
       ),
     )
     .limit(1);
 
   if (existing[0]) {
+    if (organizationId && !existing[0].organizationId) {
+      await db
+        .update(acquisitionInitiatives)
+        .set({ organizationId, updatedAt: new Date() })
+        .where(eq(acquisitionInitiatives.id, existing[0].id));
+    }
     return { id: existing[0].id };
   }
 
@@ -82,7 +95,11 @@ export async function ensureProgramInitiative(options: {
     try {
       await db
         .update(acquisitionInitiatives)
-        .set({ programId, updatedAt: new Date() })
+        .set({
+          programId,
+          organizationId: organizationId || legacy[0].organizationId,
+          updatedAt: new Date(),
+        })
         .where(eq(acquisitionInitiatives.id, legacy[0].id));
     } catch {
       /* column may not exist yet on very old DBs */
@@ -94,6 +111,7 @@ export async function ensureProgramInitiative(options: {
     .insert(acquisitionInitiatives)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       name: programName,
       description: `program:${programId}`,
       programId,
@@ -156,14 +174,26 @@ export async function createProgramCampaign(options: {
     .insert(acquisitionCampaigns)
     .values({
       ownerUserId: options.ownerUserId,
+      organizationId: (await resolveOrganizationIdForUser(options.ownerUserId)) || null,
       initiativeId: initiative.id,
       programId: options.programId,
       name: options.name.trim(),
       channel: options.channel || null,
       status: options.status || 'draft',
-      metadata,
+      metadata: {
+        ...metadata,
+        createdBy: options.ownerUserId,
+      },
     })
     .returning();
+
+  await auditLog('campaign.created', {
+    userId: options.ownerUserId,
+    organizationId: row.organizationId,
+    resource: 'acquisition_campaign',
+    resourceId: row.id,
+    metadata: { programId: options.programId, name: row.name },
+  });
 
   return mapCampaign(row, options.programId);
 }

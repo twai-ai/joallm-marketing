@@ -8,6 +8,10 @@ import { db } from '../database/connection.js';
 import { publishingProfiles, studioChannels } from '../database/schema.js';
 import { ensureMetaWhatsAppConnector, ensureMetaPageConnector, mapConnector } from './connector-service.js';
 import type { ConnectorProvider } from './connector-registry.js';
+import {
+  buildOrgDualReadScope,
+  resolveOrganizationIdForUser,
+} from './organization-ownership.js';
 
 type ChannelKind =
   | 'meta_ads'
@@ -46,11 +50,24 @@ export function mapChannel(row: typeof studioChannels.$inferSelect) {
   };
 }
 
-export async function listStudioChannels(ownerUserId: string) {
+export async function listStudioChannels(
+  ownerUserId: string,
+  organizationId?: string | null,
+) {
+  const orgId =
+    organizationId === undefined
+      ? await resolveOrganizationIdForUser(ownerUserId)
+      : organizationId;
+  const scope = buildOrgDualReadScope({
+    organizationId: orgId,
+    ownerUserId,
+    organizationColumn: studioChannels.organizationId,
+    ownerColumn: studioChannels.ownerUserId,
+  });
   const rows = await db
     .select()
     .from(studioChannels)
-    .where(eq(studioChannels.ownerUserId, ownerUserId))
+    .where(scope)
     .orderBy(desc(studioChannels.updatedAt));
   return rows.map(mapChannel);
 }
@@ -61,6 +78,7 @@ export async function ensureWhatsAppChannel(options: {
   connectorProvider?: ConnectorProvider;
   phoneNumberId?: string;
   displayPhoneNumber?: string;
+  organizationId?: string | null;
 }) {
   const {
     ownerUserId,
@@ -69,13 +87,17 @@ export async function ensureWhatsAppChannel(options: {
     phoneNumberId,
     displayPhoneNumber,
   } = options;
+  const organizationId =
+    options.organizationId ?? (await resolveOrganizationIdForUser(ownerUserId));
 
   const [existing] = await db
     .select()
     .from(studioChannels)
     .where(
       and(
-        eq(studioChannels.ownerUserId, ownerUserId),
+        organizationId
+          ? eq(studioChannels.organizationId, organizationId)
+          : eq(studioChannels.ownerUserId, ownerUserId),
         eq(studioChannels.kind, 'whatsapp'),
       ),
     )
@@ -85,6 +107,7 @@ export async function ensureWhatsAppChannel(options: {
     const [updated] = await db
       .update(studioChannels)
       .set({
+        organizationId: organizationId || existing.organizationId,
         status: 'active',
         connectorId,
         connectorProvider,
@@ -105,6 +128,7 @@ export async function ensureWhatsAppChannel(options: {
     .insert(studioChannels)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       kind: 'whatsapp',
       name: displayPhoneNumber ? `WhatsApp (${displayPhoneNumber})` : 'WhatsApp',
       status: 'active',
@@ -148,8 +172,11 @@ async function ensureOrganicChannel(options: {
   pageName?: string | null;
   igAccountId?: string | null;
   igUsername?: string | null;
+  organizationId?: string | null;
 }) {
   const { ownerUserId, kind, connectorId, pageId, pageName, igAccountId, igUsername } = options;
+  const organizationId =
+    options.organizationId ?? (await resolveOrganizationIdForUser(ownerUserId));
   const defaultName =
     kind === 'facebook_organic'
       ? pageName
@@ -164,7 +191,9 @@ async function ensureOrganicChannel(options: {
     .from(studioChannels)
     .where(
       and(
-        eq(studioChannels.ownerUserId, ownerUserId),
+        organizationId
+          ? eq(studioChannels.organizationId, organizationId)
+          : eq(studioChannels.ownerUserId, ownerUserId),
         eq(studioChannels.kind, kind),
       ),
     )
@@ -174,6 +203,7 @@ async function ensureOrganicChannel(options: {
     const [updated] = await db
       .update(studioChannels)
       .set({
+        organizationId: organizationId || existing.organizationId,
         status: 'active',
         connectorId,
         connectorProvider: 'meta',
@@ -196,6 +226,7 @@ async function ensureOrganicChannel(options: {
     .insert(studioChannels)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       kind,
       name: defaultName,
       status: 'active',
@@ -277,8 +308,11 @@ export async function listPublishingProfiles(ownerUserId: string) {
 export async function ensureDefaultWhatsAppPublishingProfile(options: {
   ownerUserId: string;
   channelId: string;
+  organizationId?: string | null;
 }) {
   const { ownerUserId, channelId } = options;
+  const organizationId =
+    options.organizationId ?? (await resolveOrganizationIdForUser(ownerUserId));
   const [existing] = await db
     .select()
     .from(publishingProfiles)
@@ -291,10 +325,16 @@ export async function ensureDefaultWhatsAppPublishingProfile(options: {
     .limit(1);
 
   if (existing) {
+    if (organizationId && !existing.organizationId) {
+      await db
+        .update(publishingProfiles)
+        .set({ organizationId, updatedAt: new Date() })
+        .where(eq(publishingProfiles.id, existing.id));
+    }
     return {
       id: existing.id,
       ownerUserId: existing.ownerUserId,
-      organizationId: existing.organizationId ?? null,
+      organizationId: organizationId || existing.organizationId || null,
       name: existing.name,
       status: existing.status,
       channelId: existing.channelId,
@@ -312,6 +352,7 @@ export async function ensureDefaultWhatsAppPublishingProfile(options: {
     .insert(publishingProfiles)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       name: 'ATRISI WhatsApp',
       status: 'active',
       channelId,
@@ -357,20 +398,33 @@ export async function ensureStudioChannelByKind(options: {
   ownerUserId: string;
   kind: ChannelKind;
   name?: string;
+  organizationId?: string | null;
 }) {
   const { ownerUserId, kind } = options;
+  const organizationId =
+    options.organizationId ?? (await resolveOrganizationIdForUser(ownerUserId));
   const [existing] = await db
     .select()
     .from(studioChannels)
     .where(
       and(
-        eq(studioChannels.ownerUserId, ownerUserId),
+        organizationId
+          ? eq(studioChannels.organizationId, organizationId)
+          : eq(studioChannels.ownerUserId, ownerUserId),
         eq(studioChannels.kind, kind),
       ),
     )
     .limit(1);
 
   if (existing) {
+    if (organizationId && !existing.organizationId) {
+      const [updated] = await db
+        .update(studioChannels)
+        .set({ organizationId, updatedAt: new Date() })
+        .where(eq(studioChannels.id, existing.id))
+        .returning();
+      return mapChannel(updated);
+    }
     return mapChannel(existing);
   }
 
@@ -378,6 +432,7 @@ export async function ensureStudioChannelByKind(options: {
     .insert(studioChannels)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       kind,
       name: options.name || CHANNEL_KIND_LABELS[kind] || kind,
       status: 'active',

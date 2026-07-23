@@ -13,6 +13,11 @@ import {
   getRegistryEntry,
   type ConnectorProvider,
 } from './connector-registry.js';
+import {
+  buildOrgDualReadScope,
+  orgMetaConnectorConfig,
+  resolveOrganizationIdForUser,
+} from './organization-ownership.js';
 
 type ConnectorStatus = 'disconnected' | 'connecting' | 'connected' | 'error' | 'revoked';
 
@@ -46,11 +51,24 @@ export function listConnectorRegistry() {
   return CONNECTOR_REGISTRY;
 }
 
-export async function listPlatformConnectors(ownerUserId: string) {
+export async function listPlatformConnectors(
+  ownerUserId: string,
+  organizationId?: string | null,
+) {
+  const orgId =
+    organizationId === undefined
+      ? await resolveOrganizationIdForUser(ownerUserId)
+      : organizationId;
+  const scope = buildOrgDualReadScope({
+    organizationId: orgId,
+    ownerUserId,
+    organizationColumn: platformConnectors.organizationId,
+    ownerColumn: platformConnectors.ownerUserId,
+  });
   const rows = await db
     .select()
     .from(platformConnectors)
-    .where(eq(platformConnectors.ownerUserId, ownerUserId))
+    .where(scope)
     .orderBy(desc(platformConnectors.updatedAt));
   return rows.map(mapConnector);
 }
@@ -63,8 +81,11 @@ export async function ensureMetaWhatsAppConnector(options: {
   ownerUserId: string;
   phoneNumberId?: string;
   displayPhoneNumber?: string;
+  organizationId?: string | null;
 }) {
   const { ownerUserId, phoneNumberId, displayPhoneNumber } = options;
+  const organizationId =
+    options.organizationId ?? (await resolveOrganizationIdForUser(ownerUserId));
   const registry = getRegistryEntry('meta_whatsapp');
   const capabilities = defaultCapabilitiesFor('meta_whatsapp');
   const externalAccountId = phoneNumberId || config.metaPhoneNumberId || null;
@@ -78,39 +99,59 @@ export async function ensureMetaWhatsAppConnector(options: {
     : externalAccountId || probe.tokenConfigured
       ? 'error'
       : 'connecting';
-  const sharedConfig = {
-    displayPhoneNumber: displayPhoneNumber || probe.displayPhoneNumber || null,
-    phoneNumberId: externalAccountId,
-    verifiedName: probe.verifiedName,
-    qualityRating: probe.qualityRating,
-    verifyTokenConfigured: probe.verifyTokenConfigured,
-    lastProbeAt: new Date().toISOString(),
-  };
+  const sharedConfig = orgMetaConnectorConfig(null, {
+    boundByUserId: ownerUserId,
+    extra: {
+      displayPhoneNumber: displayPhoneNumber || probe.displayPhoneNumber || null,
+      phoneNumberId: externalAccountId,
+      verifiedName: probe.verifiedName,
+      qualityRating: probe.qualityRating,
+      verifyTokenConfigured: probe.verifyTokenConfigured,
+      lastProbeAt: new Date().toISOString(),
+    },
+  });
 
   if (externalAccountId) {
-    const [byAccount] = await db
-      .select()
-      .from(platformConnectors)
-      .where(
-        and(
-          eq(platformConnectors.ownerUserId, ownerUserId),
-          eq(platformConnectors.provider, 'meta_whatsapp'),
-          eq(platformConnectors.externalAccountId, externalAccountId),
-        ),
-      )
-      .limit(1);
+    const orgMatch = organizationId
+      ? await db
+          .select()
+          .from(platformConnectors)
+          .where(
+            and(
+              eq(platformConnectors.organizationId, organizationId),
+              eq(platformConnectors.provider, 'meta_whatsapp'),
+              eq(platformConnectors.externalAccountId, externalAccountId),
+            ),
+          )
+          .limit(1)
+      : [];
+    const [byAccount] =
+      orgMatch[0]
+        ? orgMatch
+        : await db
+            .select()
+            .from(platformConnectors)
+            .where(
+              and(
+                eq(platformConnectors.ownerUserId, ownerUserId),
+                eq(platformConnectors.provider, 'meta_whatsapp'),
+                eq(platformConnectors.externalAccountId, externalAccountId),
+              ),
+            )
+            .limit(1);
     if (byAccount) {
       const [updated] = await db
         .update(platformConnectors)
         .set({
+          organizationId: organizationId || byAccount.organizationId,
           status: liveStatus,
           name: registry?.displayName || byAccount.name,
           apiVersion: 'v20.0',
           capabilities,
-          config: {
-            ...((byAccount.config as Record<string, unknown>) || {}),
-            ...sharedConfig,
-          },
+          config: orgMetaConnectorConfig(
+            byAccount.config as Record<string, unknown>,
+            { boundByUserId: ownerUserId, extra: sharedConfig },
+          ),
           lastValidatedAt: probe.ok ? new Date() : byAccount.lastValidatedAt,
           lastErrorAt: probe.ok ? null : new Date(),
           lastErrorMessage: probe.ok ? null : probe.error,
@@ -138,15 +179,16 @@ export async function ensureMetaWhatsAppConnector(options: {
     const [updated] = await db
       .update(platformConnectors)
       .set({
+        organizationId: organizationId || existing.organizationId,
         status: liveStatus,
         externalAccountId: externalAccountId || existing.externalAccountId,
         name: registry?.displayName || existing.name,
         apiVersion: 'v20.0',
         capabilities,
-        config: {
-          ...((existing.config as Record<string, unknown>) || {}),
-          ...sharedConfig,
-        },
+        config: orgMetaConnectorConfig(
+          existing.config as Record<string, unknown>,
+          { boundByUserId: ownerUserId, extra: sharedConfig },
+        ),
         lastValidatedAt: probe.ok ? new Date() : existing.lastValidatedAt,
         lastErrorAt: probe.ok ? null : new Date(),
         lastErrorMessage: probe.ok ? null : probe.error,
@@ -161,6 +203,7 @@ export async function ensureMetaWhatsAppConnector(options: {
     .insert(platformConnectors)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       provider: 'meta_whatsapp',
       name: registry?.displayName || 'Meta WhatsApp Cloud API',
       apiVersion: 'v20.0',
@@ -183,8 +226,11 @@ export async function ensureMetaWhatsAppConnector(options: {
 export async function ensureMetaPageConnector(options: {
   ownerUserId: string;
   pageId?: string;
+  organizationId?: string | null;
 }) {
   const { ownerUserId } = options;
+  const organizationId =
+    options.organizationId ?? (await resolveOrganizationIdForUser(ownerUserId));
   const registry = getRegistryEntry('meta');
   const capabilities = defaultCapabilitiesFor('meta');
   const externalAccountId = options.pageId || config.metaPageId || null;
@@ -198,41 +244,61 @@ export async function ensureMetaPageConnector(options: {
     : externalAccountId || probe.tokenConfigured
       ? 'error'
       : 'connecting';
-  const sharedConfig = {
-    pageId: probe.pageId || externalAccountId,
-    pageName: probe.pageName,
-    igAccountId: probe.igAccountId,
-    igUsername: probe.igUsername,
-    verifyTokenConfigured: probe.verifyTokenConfigured,
-    lastProbeAt: new Date().toISOString(),
-  };
+  const sharedConfig = orgMetaConnectorConfig(null, {
+    boundByUserId: ownerUserId,
+    extra: {
+      pageId: probe.pageId || externalAccountId,
+      pageName: probe.pageName,
+      igAccountId: probe.igAccountId,
+      igUsername: probe.igUsername,
+      verifyTokenConfigured: probe.verifyTokenConfigured,
+      lastProbeAt: new Date().toISOString(),
+    },
+  });
 
   if (externalAccountId) {
-    const [byAccount] = await db
-      .select()
-      .from(platformConnectors)
-      .where(
-        and(
-          eq(platformConnectors.ownerUserId, ownerUserId),
-          eq(platformConnectors.provider, 'meta'),
-          eq(platformConnectors.externalAccountId, externalAccountId),
-        ),
-      )
-      .limit(1);
+    const orgMatch = organizationId
+      ? await db
+          .select()
+          .from(platformConnectors)
+          .where(
+            and(
+              eq(platformConnectors.organizationId, organizationId),
+              eq(platformConnectors.provider, 'meta'),
+              eq(platformConnectors.externalAccountId, externalAccountId),
+            ),
+          )
+          .limit(1)
+      : [];
+    const [byAccount] =
+      orgMatch[0]
+        ? orgMatch
+        : await db
+            .select()
+            .from(platformConnectors)
+            .where(
+              and(
+                eq(platformConnectors.ownerUserId, ownerUserId),
+                eq(platformConnectors.provider, 'meta'),
+                eq(platformConnectors.externalAccountId, externalAccountId),
+              ),
+            )
+            .limit(1);
     if (byAccount) {
       const [updated] = await db
         .update(platformConnectors)
         .set({
+          organizationId: organizationId || byAccount.organizationId,
           status: liveStatus,
           name: probe.pageName
             ? `Meta Page (${probe.pageName})`
             : registry?.displayName || byAccount.name,
           apiVersion: 'v20.0',
           capabilities,
-          config: {
-            ...((byAccount.config as Record<string, unknown>) || {}),
-            ...sharedConfig,
-          },
+          config: orgMetaConnectorConfig(
+            byAccount.config as Record<string, unknown>,
+            { boundByUserId: ownerUserId, extra: sharedConfig },
+          ),
           lastValidatedAt: probe.ok ? new Date() : byAccount.lastValidatedAt,
           lastErrorAt: probe.ok ? null : new Date(),
           lastErrorMessage: probe.ok ? null : probe.error,
@@ -260,6 +326,7 @@ export async function ensureMetaPageConnector(options: {
     const [updated] = await db
       .update(platformConnectors)
       .set({
+        organizationId: organizationId || existing.organizationId,
         status: liveStatus,
         externalAccountId: externalAccountId || existing.externalAccountId,
         name: probe.pageName
@@ -267,10 +334,10 @@ export async function ensureMetaPageConnector(options: {
           : registry?.displayName || existing.name,
         apiVersion: 'v20.0',
         capabilities,
-        config: {
-          ...((existing.config as Record<string, unknown>) || {}),
-          ...sharedConfig,
-        },
+        config: orgMetaConnectorConfig(
+          existing.config as Record<string, unknown>,
+          { boundByUserId: ownerUserId, extra: sharedConfig },
+        ),
         lastValidatedAt: probe.ok ? new Date() : existing.lastValidatedAt,
         lastErrorAt: probe.ok ? null : new Date(),
         lastErrorMessage: probe.ok ? null : probe.error,
@@ -285,6 +352,7 @@ export async function ensureMetaPageConnector(options: {
     .insert(platformConnectors)
     .values({
       ownerUserId,
+      organizationId: organizationId || null,
       provider: 'meta',
       name: probe.pageName
         ? `Meta Page (${probe.pageName})`

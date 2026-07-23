@@ -84,6 +84,7 @@ export async function listProgramInterests(options: {
 
 export async function createProgramInterest(options: {
   ownerUserId: string;
+  organizationId?: string | null;
   personId: string;
   programId: string;
   programName?: string;
@@ -101,6 +102,7 @@ export async function createProgramInterest(options: {
     .insert(programInterests)
     .values({
       ownerUserId: options.ownerUserId,
+      organizationId: options.organizationId || null,
       personId: options.personId,
       programId: options.programId,
       programName: options.programName || null,
@@ -265,6 +267,7 @@ export async function recordInterestFromPublishedJob(options: {
  */
 export async function attributeInboundWhatsAppInterest(options: {
   ownerUserId: string;
+  organizationId?: string | null;
   personId: string;
   eventId: string;
   textBody?: string;
@@ -299,6 +302,7 @@ export async function attributeInboundWhatsAppInterest(options: {
 
   return createProgramInterest({
     ownerUserId: options.ownerUserId,
+    organizationId: options.organizationId || match.job.organizationId || null,
     personId: options.personId,
     programId,
     confidence: 0.75,

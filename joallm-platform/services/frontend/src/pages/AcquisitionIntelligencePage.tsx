@@ -178,6 +178,16 @@ export function AcquisitionIntelligencePage() {
   const [events, setEvents] = useState<AcquisitionEvent[]>([]);
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<AcquisitionPerson | null>(null);
+  const [teamActivity, setTeamActivity] = useState<
+    Array<{
+      id: string;
+      action: string;
+      actorName: string | null;
+      actorEmail: string | null;
+      createdAt: string;
+      resource: string | null;
+    }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [connectingPage, setConnectingPage] = useState(false);
@@ -195,6 +205,25 @@ export function AcquisitionIntelligencePage() {
       setOverview(overviewRes.data);
       setPeople(peopleRes.data || []);
       setEvents(eventsRes.data || []);
+
+      const canViewActivity =
+        overviewRes.data?.tenant?.permissions?.includes('activity.view') ||
+        overviewRes.data?.tenant?.role === 'admin' ||
+        overviewRes.data?.tenant?.role === 'owner' ||
+        overviewRes.data?.tenant?.role === 'member';
+      if (canViewActivity) {
+        try {
+          const activityRes = await apiClient.get<{
+            success: boolean;
+            data: { items: typeof teamActivity };
+          }>('/api/operations/activity?limit=12');
+          setTeamActivity(activityRes.data?.items || []);
+        } catch {
+          setTeamActivity([]);
+        }
+      } else {
+        setTeamActivity([]);
+      }
     } catch (error) {
       showError(error instanceof Error ? error.message : 'Failed to load Acquisition Intelligence');
     } finally {
@@ -556,6 +585,35 @@ export function AcquisitionIntelligencePage() {
           ))}
         </div>
       </section>
+
+      {teamActivity.length > 0 && (
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Team activity</h2>
+              <p className="mt-0.5 text-sm text-slate-600">
+                Institutional evidence — who logged in, bound Meta, or created campaigns.
+              </p>
+            </div>
+          </div>
+          <ul className="mt-4 divide-y divide-slate-100">
+            {teamActivity.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2.5 text-sm">
+                <div>
+                  <span className="font-medium text-slate-900">
+                    {item.actorName || item.actorEmail || 'Someone'}
+                  </span>
+                  <span className="text-slate-500"> · {item.action}</span>
+                  {item.resource ? (
+                    <span className="text-slate-400"> · {item.resource}</span>
+                  ) : null}
+                </div>
+                <time className="text-xs text-slate-500">{formatWhen(item.createdAt)}</time>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className={`mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm ${metaAuthenticated ? 'opacity-95' : ''}`}>
         <div className="flex flex-wrap items-start justify-between gap-3">

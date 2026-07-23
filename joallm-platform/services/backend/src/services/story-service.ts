@@ -253,9 +253,68 @@ function findBeatOrThrow(beats: StoryBeat[], beatId: string): StoryBeat {
   return beat;
 }
 
+export type StoryBrandKit = {
+  logoFileId?: string | null;
+  styleFileIds?: string[];
+};
+
+export function getStoryBrandKit(metadata: Record<string, unknown> | null | undefined): StoryBrandKit {
+  const raw = metadata?.brandKit;
+  if (!raw || typeof raw !== 'object') return { logoFileId: null, styleFileIds: [] };
+  const kit = raw as Record<string, unknown>;
+  const styleFileIds = Array.isArray(kit.styleFileIds)
+    ? kit.styleFileIds.filter((id): id is string => typeof id === 'string').slice(0, 3)
+    : [];
+  return {
+    logoFileId: typeof kit.logoFileId === 'string' ? kit.logoFileId : null,
+    styleFileIds,
+  };
+}
+
+function brandReferenceIds(kit: StoryBrandKit, beatFileId: string): string[] {
+  const ids: string[] = [];
+  if (kit.logoFileId) ids.push(kit.logoFileId);
+  for (const id of kit.styleFileIds || []) {
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  if (!ids.includes(beatFileId)) ids.push(beatFileId);
+  return ids.slice(0, 4);
+}
+
 /**
- * Brand this beat — Creative AI remix with ATRISI brand theme (edit mode).
- * Replaces the beat image; clears vision cache so Propose re-reads it.
+ * Exact on-image text only when short and clean — otherwise images stay text-light
+ * and Story captions carry the copy (avoids Creative AI inventing gibberish).
+ */
+function safeMustIncludeText(onImageText?: string | null): string | undefined {
+  if (!onImageText?.trim()) return undefined;
+  const cleaned = onImageText.trim().replace(/\s+/g, ' ');
+  if (cleaned.length > 80) return undefined;
+  // Skip likely OCR noise
+  if (/[|]{2,}|\uFFFD|{.*}/.test(cleaned)) return undefined;
+  return cleaned;
+}
+
+export async function setStoryBrandKit(
+  ownerUserId: string,
+  storyId: string,
+  kit: StoryBrandKit,
+): Promise<StorySessionDto> {
+  const existing = await getOwnedStory(ownerUserId, storyId);
+  const nextKit: StoryBrandKit = {
+    logoFileId: kit.logoFileId ?? null,
+    styleFileIds: [...new Set(kit.styleFileIds || [])].slice(0, 3),
+  };
+  return updateStory(ownerUserId, storyId, {
+    metadata: {
+      ...(existing.metadata as Record<string, unknown>),
+      brandKit: nextKit,
+    },
+  });
+}
+
+/**
+ * Brand this beat — Creative AI remix with ATRISI theme + optional brand kit refs.
+ * Prefer clean visuals; Story titles/captions hold messaging (not invented poster text).
  */
 export async function brandStoryBeat(
   ownerUserId: string,
@@ -264,25 +323,32 @@ export async function brandStoryBeat(
 ): Promise<{ story: StorySessionDto; provider: string; fileId: string }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
+  const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
+  const exactText = safeMustIncludeText(beat.vision?.onImageText);
 
   const promptParts = [
-    'Restyle this reference creative into an ATRISI Marketing institutional acquisition visual.',
+    'Restyle the subject reference into an ATRISI Marketing institutional acquisition visual.',
     'Keep the core subject and composition recognizable.',
     'Apply ATRISI teal and slate brand, premium institutional look, clean hierarchy.',
-    'Do not invent program names, prices, or stats that are not in the reference.',
+    exactText
+      ? `If you render text, use EXACTLY this copy and nothing else: "${exactText}".`
+      : 'Do NOT invent headlines, CTAs, stats, or program names on the image. Prefer a clean photographic/illustrative composition with empty safe area for later text overlay.',
+    'Do not add fake logos unless a logo reference image is provided.',
   ];
-  if (beat.title) promptParts.push(`Beat title context: ${beat.title}.`);
-  if (beat.caption) promptParts.push(`Caption context: ${beat.caption}.`);
-  if (beat.vision?.onImageText) promptParts.push(`Preserve readable text where possible: ${beat.vision.onImageText}.`);
+  if (kit.logoFileId) {
+    promptParts.push('Incorporate the provided ATRISI logo reference subtly (corner / clear space).');
+  }
+  if (beat.title) promptParts.push(`Narrative beat (for mood only, not on-image text): ${beat.title}.`);
 
   const generated = await generateCreativeImages({
     ownerUserId,
     prompt: promptParts.join(' '),
-    style: 'marketing_poster',
+    // marketing_poster guidance pushes invented headlines — use photo when text-light
+    style: exactText ? 'marketing_poster' : 'photo_realistic',
     quality: 'standard',
     aspectRatio: '16x9',
     titleHint: beat.title || 'ATRISI branded beat',
-    referenceFileIds: [beat.fileId!],
+    referenceFileIds: brandReferenceIds(kit, beat.fileId!),
     referenceMode: 'edit',
     analyzeReferences: true,
     variantCount: 1,
@@ -291,13 +357,16 @@ export async function brandStoryBeat(
       storyId,
       beatId,
       originalFileId: beat.fileId,
+      usedBrandKit: Boolean(kit.logoFileId || (kit.styleFileIds && kit.styleFileIds.length)),
     },
     precision: {
       institutionName: 'ATRISI',
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
-      avoid: 'neon colors, purple glow, cluttered stickers, fake logos, watermarks',
-      mustIncludeText: beat.vision?.onImageText || undefined,
+      useLogoReference: Boolean(kit.logoFileId),
+      avoid:
+        'invented text, misspelled words, fake logos, neon, purple glow, cluttered stickers, watermarks, random CTAs, readable letters of any kind when no exact copy is provided',
+      mustIncludeText: exactText,
     },
   });
 
@@ -312,7 +381,10 @@ export async function brandStoryBeat(
           ...b,
           fileId: newFileId,
           vision: null,
-          notes: b.notes || 'Branded with ATRISI Creative AI',
+          // Keep story copy — do not replace with AI-invented poster text
+          title: b.title,
+          caption: b.caption,
+          notes: 'Branded with ATRISI Creative AI (copy stays in Story fields)',
         }
       : b,
   );
@@ -322,7 +394,8 @@ export async function brandStoryBeat(
 }
 
 /**
- * Generate similar — Creative AI style-reference variants appended after the beat.
+ * Generate similar — style-reference variants.
+ * Images stay text-light; titles/captions inherit from the source beat.
  */
 export async function generateSimilarStoryBeats(
   ownerUserId: string,
@@ -332,26 +405,36 @@ export async function generateSimilarStoryBeats(
 ): Promise<{ story: StorySessionDto; provider: string; addedBeatIds: string[] }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
+  const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
   const count = Math.min(Math.max(options?.count || 1, 1), 3);
+  const exactText = safeMustIncludeText(beat.vision?.onImageText);
 
   const promptParts = [
-    'Create a similar institutional acquisition creative inspired by the reference.',
+    'Create a similar institutional acquisition scene inspired by the reference.',
     'Same subject world and mood, fresh composition — not a duplicate.',
     'ATRISI Marketing look: teal + slate, premium, trustworthy, sparse layout.',
-    'Suitable as a Story beat for Context / Proof / Ask narratives.',
+    exactText
+      ? `If any text appears, it must be EXACTLY: "${exactText}". No other words.`
+      : 'CRITICAL: Do not put any readable text, headlines, CTAs, or logos on the image. Clean visual only — typography will be added in the Story editor.',
   ];
   if (beat.vision?.what) promptParts.push(`Reference scene: ${beat.vision.what}.`);
-  if (beat.vision?.claimHint) promptParts.push(`Claim direction: ${beat.vision.claimHint}.`);
-  if (beat.title) promptParts.push(`Related to: ${beat.title}.`);
+  if (beat.vision?.mood) promptParts.push(`Mood: ${beat.vision.mood}.`);
+
+  const refs = brandReferenceIds(kit, beat.fileId!);
+  // For similar, put beat first as primary style, then brand kit
+  const similarRefs = [
+    beat.fileId!,
+    ...refs.filter((id) => id !== beat.fileId),
+  ].slice(0, 4);
 
   const generated = await generateCreativeImages({
     ownerUserId,
     prompt: promptParts.join(' '),
-    style: 'social_media',
+    style: 'photo_realistic',
     quality: 'standard',
     aspectRatio: '16x9',
-    titleHint: beat.title ? `Similar · ${beat.title}` : 'Similar beat',
-    referenceFileIds: [beat.fileId!],
+    titleHint: beat.title || 'Similar beat',
+    referenceFileIds: similarRefs,
     referenceMode: 'style',
     analyzeReferences: true,
     variantCount: count,
@@ -365,7 +448,10 @@ export async function generateSimilarStoryBeats(
       institutionName: 'ATRISI',
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
-      avoid: 'exact copy of reference, neon, clutter, wrong logos',
+      useLogoReference: Boolean(kit.logoFileId),
+      avoid:
+        'invented text, gibberish letters, readable words of any kind, fake logos, watermarks, neon, clutter, exact duplicate of reference',
+      mustIncludeText: exactText,
     },
   });
 
@@ -378,9 +464,10 @@ export async function generateSimilarStoryBeats(
   const added: StoryBeat[] = newFileIds.map((fileId, index) => ({
     id: randomUUID(),
     fileId,
-    title: beat.title ? `${beat.title} · similar` : `Similar ${index + 1}`,
+    // Inherit story copy from source — do not invent new poster text
+    title: beat.title || `Similar ${index + 1}`,
     caption: beat.caption || '',
-    notes: 'Generated similar via Creative AI',
+    notes: 'Similar visual · copy inherited from source beat',
     order: insertAt + 1 + index,
     arcRole: beat.arcRole || 'other',
     vision: null,

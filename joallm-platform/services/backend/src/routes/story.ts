@@ -15,8 +15,10 @@ import {
   exportStoryPptx,
   generateSimilarStoryBeats,
   getStory,
+  getStoryBrandKit,
   listStories,
   proposeStoryline,
+  setStoryBrandKit,
   updateStory,
 } from '../services/story-service.js';
 import { logger } from '../utils/logger.js';
@@ -296,6 +298,39 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
       return reply.status(statusFromError(error)).send({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to generate beat',
+      });
+    }
+  });
+
+  fastify.put('/:storyId/brand-kit', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Set Story brand kit (logo + up to 3 style references) for Brand / Similar',
+      tags: ['story'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as { user: { id: string } }).user.id;
+      const { storyId } = request.params as { storyId: string };
+      const body = z
+        .object({
+          logoFileId: z.string().uuid().nullable().optional(),
+          styleFileIds: z.array(z.string().uuid()).max(3).optional(),
+        })
+        .parse(request.body || {});
+      const data = await setStoryBrandKit(userId, storyId, {
+        logoFileId: body.logoFileId ?? null,
+        styleFileIds: body.styleFileIds || [],
+      });
+      return reply.send({
+        success: true,
+        data,
+        brandKit: getStoryBrandKit(data.metadata),
+      });
+    } catch (error) {
+      return reply.status(statusFromError(error)).send({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to save brand kit',
       });
     }
   });

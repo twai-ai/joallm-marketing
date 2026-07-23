@@ -26,6 +26,8 @@ const ARC_LABEL: Record<string, string> = {
 export function StorySessionPage() {
   const { storyId } = useParams<{ storyId: string }>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const styleInputRef = useRef<HTMLInputElement>(null);
   const {
     story,
     isLoading,
@@ -39,6 +41,9 @@ export function StorySessionPage() {
     isBranding,
     generateSimilar,
     isGeneratingSimilar,
+    saveBrandKit,
+    isSavingBrandKit,
+    brandKit,
     exportPptx,
   } = useStorySession(storyId);
   const { uploadMultiple, isUploading } = useDocuments();
@@ -69,13 +74,16 @@ export function StorySessionPage() {
     await saveStory({ beats: next.map((b, order) => ({ ...b, order })) });
   };
 
+  const extractFileIds = (uploaded: unknown[]) =>
+    uploaded
+      .map((f) => (f as { id?: string; fileId?: string }).id || (f as { fileId?: string }).fileId)
+      .filter(Boolean) as string[];
+
   const handleUpload = async (files: FileList | null) => {
     if (!files?.length || !storyId) return;
     try {
       const uploaded = await uploadMultiple(Array.from(files), true);
-      const fileIds = uploaded
-        .map((f) => (f as { id?: string; fileId?: string }).id || (f as { fileId?: string }).fileId)
-        .filter(Boolean) as string[];
+      const fileIds = extractFileIds(uploaded);
       if (fileIds.length === 0) {
         showError('Upload finished but no file ids returned');
         return;
@@ -84,6 +92,46 @@ export function StorySessionPage() {
     } catch {
       showError('Upload failed');
     }
+  };
+
+  const handleLogoUpload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    try {
+      const uploaded = await uploadMultiple([files[0]], true);
+      const [logoFileId] = extractFileIds(uploaded);
+      if (!logoFileId) {
+        showError('Logo upload failed');
+        return;
+      }
+      await saveBrandKit({
+        logoFileId,
+        styleFileIds: brandKit.styleFileIds || [],
+      });
+    } catch {
+      showError('Logo upload failed');
+    }
+  };
+
+  const handleStyleUpload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    try {
+      const uploaded = await uploadMultiple(Array.from(files).slice(0, 3), true);
+      const styleFileIds = extractFileIds(uploaded).slice(0, 3);
+      if (styleFileIds.length === 0) {
+        showError('Style upload failed');
+        return;
+      }
+      await saveBrandKit({
+        logoFileId: brandKit.logoFileId ?? null,
+        styleFileIds,
+      });
+    } catch {
+      showError('Style upload failed');
+    }
+  };
+
+  const clearBrandKit = async () => {
+    await saveBrandKit({ logoFileId: null, styleFileIds: [] });
   };
 
   const updateSelected = (patch: Partial<StoryBeat>) => {
@@ -383,9 +431,91 @@ export function StorySessionPage() {
                     >
                       {isGeneratingSimilar ? 'Generating similar…' : 'Generate similar'}
                     </button>
+                    <p className="pt-1 text-[11px] leading-relaxed text-slate-400">
+                      Visuals stay text-light. Titles and captions live here — not invented on the image.
+                    </p>
                   </div>
                 ) : null}
-                {isSaving ? (
+
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
+                    Brand refs
+                  </p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                    Logo + 1–3 on-brand examples guide Brand and Generate similar.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {brandKit.logoFileId ? (
+                      <div className="relative h-12 w-12 overflow-hidden rounded-md bg-slate-100">
+                        <AuthPreviewImage
+                          fileId={brandKit.logoFileId}
+                          className="h-full w-full object-contain p-1"
+                        />
+                        <span className="absolute bottom-0 inset-x-0 bg-black/50 py-0.5 text-center text-[9px] text-white">
+                          Logo
+                        </span>
+                      </div>
+                    ) : null}
+                    {(brandKit.styleFileIds || []).map((id) => (
+                      <div key={id} className="h-12 w-12 overflow-hidden rounded-md bg-slate-100">
+                        <AuthPreviewImage fileId={id} className="h-full w-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      disabled={isUploading || isSavingBrandKit}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="text-left text-sm text-slate-600 transition hover:text-slate-900 disabled:opacity-40"
+                    >
+                      {brandKit.logoFileId ? 'Replace logo' : 'Upload logo'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isUploading || isSavingBrandKit}
+                      onClick={() => styleInputRef.current?.click()}
+                      className="text-left text-sm text-slate-600 transition hover:text-slate-900 disabled:opacity-40"
+                    >
+                      {(brandKit.styleFileIds || []).length > 0
+                        ? 'Replace style refs'
+                        : 'Upload style refs'}
+                    </button>
+                    {brandKit.logoFileId || (brandKit.styleFileIds || []).length > 0 ? (
+                      <button
+                        type="button"
+                        disabled={isSavingBrandKit}
+                        onClick={() => void clearBrandKit()}
+                        className="text-left text-sm text-slate-400 transition hover:text-rose-600 disabled:opacity-40"
+                      >
+                        Clear brand refs
+                      </button>
+                    ) : null}
+                  </div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      void handleLogoUpload(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                  <input
+                    ref={styleInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      void handleStyleUpload(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+
+                {isSaving || isSavingBrandKit ? (
                   <p className="text-xs text-slate-400">Saving…</p>
                 ) : null}
               </div>

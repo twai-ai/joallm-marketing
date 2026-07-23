@@ -41,3 +41,20 @@ export type StorySession = {
   updatedAt: string;
   attached: boolean;
 };
+
+export type StoryBrandKit = {
+  logoFileId?: string | null;
+  styleFileIds?: string[];
+};
+
+export function readStoryBrandKit(metadata?: Record<string, unknown> | null): StoryBrandKit {
+  const raw = metadata?.brandKit;
+  if (!raw || typeof raw !== 'object') return { logoFileId: null, styleFileIds: [] };
+  const kit = raw as Record<string, unknown>;
+  return {
+    logoFileId: typeof kit.logoFileId === 'string' ? kit.logoFileId : null,
+    styleFileIds: Array.isArray(kit.styleFileIds)
+      ? kit.styleFileIds.filter((id): id is string => typeof id === 'string').slice(0, 3)
+      : [],
+  };
+}

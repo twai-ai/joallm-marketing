@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../config/api';
-import type { StoryBeat, StorySession } from '../types/story';
+import type { StoryBeat, StoryBrandKit, StorySession } from '../types/story';
+import { readStoryBrandKit } from '../types/story';
 import { apiClient } from '../utils/api-client';
 import { showError, showSuccess } from '../utils/toast';
 
@@ -179,10 +180,30 @@ export function useStorySession(storyId: string | undefined) {
       queryClient.setQueryData(['story', storyId], res.data);
       const n = res.addedBeatIds?.length || 1;
       showSuccess(
-        n > 1 ? `${n} similar beats added` : 'Similar beat added',
+        n > 1
+          ? `${n} similar visuals added — copy inherited from source`
+          : 'Similar visual added — copy inherited from source',
       );
     },
     onError: () => showError('Could not generate similar — check Creative AI keys'),
+  });
+
+  const brandKitMutation = useMutation({
+    mutationFn: async (kit: StoryBrandKit) => {
+      const res = await apiClient.put<ApiOk<StorySession> & { brandKit?: StoryBrandKit }>(
+        API_ENDPOINTS.story.brandKit(storyId!),
+        {
+          logoFileId: kit.logoFileId ?? null,
+          styleFileIds: kit.styleFileIds || [],
+        },
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['story', storyId], data);
+      showSuccess('Brand references saved');
+    },
+    onError: () => showError('Could not save brand references'),
   });
 
   const exportPptx = useCallback(async () => {
@@ -221,6 +242,9 @@ export function useStorySession(storyId: string | undefined) {
     isBranding: brandBeatMutation.isPending,
     generateSimilar: similarBeatMutation.mutateAsync,
     isGeneratingSimilar: similarBeatMutation.isPending,
+    saveBrandKit: brandKitMutation.mutateAsync,
+    isSavingBrandKit: brandKitMutation.isPending,
+    brandKit: readStoryBrandKit(storyQuery.data?.metadata),
     exportPptx,
   };
 }

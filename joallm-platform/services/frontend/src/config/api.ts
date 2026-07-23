@@ -106,6 +106,7 @@ export const API_ENDPOINTS = {
       `${API_BASE_URL}/api/story/${storyId}/beats/${beatId}/brand`,
     similarBeat: (storyId: string, beatId: string) =>
       `${API_BASE_URL}/api/story/${storyId}/beats/${beatId}/similar`,
+    brandKit: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/brand-kit`,
     exportPptx: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/pptx`,
   },
 };

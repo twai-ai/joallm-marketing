@@ -1,7 +1,7 @@
 /**
  * Canonical ATRISI institute brand for Story / Creative AI.
  * Mirrors ATRISI App.css `:root` “Professional Research Institute Colors”
- * and the live UI (teal + slate-950 institutional shell).
+ * and the live institutional UI (teal + slate-950 shell, Inter, light content bands).
  */
 
 import type { BrandThemeInput } from './creative-brand-theme.js';
@@ -36,7 +36,7 @@ export const ATRISI_CREATIVE_PALETTE = [
   ATRISI_COLORS.white,
 ] as const;
 
-/** Default Story Creative AI brand theme — applied unless a story brand kit overrides look. */
+/** Default Story Creative AI brand theme — applied on Brand + More visuals. */
 export const ATRISI_INSTITUTE_BRAND_THEME: BrandThemeInput = {
   palette: {
     primary: ATRISI_COLORS.teal,
@@ -47,12 +47,19 @@ export const ATRISI_INSTITUTE_BRAND_THEME: BrandThemeInput = {
     colors: [...ATRISI_CREATIVE_PALETTE],
   },
   theme: {
-    mood: 'premium research institute — trustworthy, calm authority, teal on deep slate',
-    typography: 'clean Inter-like sans-serif; bold high-contrast headlines when copy is provided',
-    layout: 'minimal, generous whitespace, clear hierarchy, balanced margins',
-    imagery: 'real institutional life — campus, researchers, learners, mentors; not stock-ad clichés',
+    mood: 'premium research institute — trustworthy, calm authority; teal accents on deep slate-950',
+    typography:
+      'Inter-like geometric sans-serif only; bold high-contrast headlines; short supporting lines; never decorative script, never gothic, never handwritten',
+    layout:
+      'institutional marketing layout: generous whitespace, clear hierarchy, safe margins, optional navy or white content band; hero can use navy→blue 135deg gradient fields behind subject',
+    imagery:
+      'real institutional life — campus, researchers, learners, mentors; photoreal or clean editorial; not stock-ad clichés',
     density: 'sparse',
     notes:
-      'ATRISI institute brand: teal (#0F766E) + navy (#0F172A) + blue (#1E40AF). No neon, no purple glow, no fuchsia/cyan cyberpunk flair, no gold seals, no cluttered badge stacks.',
+      'ATRISI institute brand (App.css): teal #0F766E, navy #0F172A, blue #1E40AF, slate body #334155/#475569, ground #F1F5F9. Primary gradient navy→blue; light sections white/slate-50. No neon, purple glow, fuchsia/cyan cyberpunk flair, gold seals, or cluttered badge stacks. Amplify amber is out of scope for institute Story creatives.',
   },
 };
+
+/** Locked-copy typeface line injected when Story title is rendered on-image. */
+export const ATRISI_EXACT_TYPE_DIRECTION =
+  'Typeface: Inter-like geometric sans-serif, letter-perfect kerning, high contrast (navy #0F172A or white on dark), large readable headline — no script, no outline gimmicks, no extra labels.';

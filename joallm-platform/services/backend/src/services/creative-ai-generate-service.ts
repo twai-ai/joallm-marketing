@@ -26,6 +26,7 @@ import { userApiKeyRepository } from '../repositories/user-api-key-repository.js
 import { resolvePaletteColors } from './creative-palettes.js';
 import { parseBrandTheme, type BrandThemeInput } from './creative-brand-theme.js';
 import { canActorAccessOwnerResource } from './organization-ownership.js';
+import { ATRISI_EXACT_TYPE_DIRECTION } from './atrisi-brand.js';
 
 const EXECUTABLE_PROVIDERS = ['ideogram', 'flux'] as const;
 type ExecutableProvider = (typeof EXECUTABLE_PROVIDERS)[number];
@@ -323,6 +324,7 @@ export function buildEnhancedPrompt(options: {
     parts.push(
       'No other words, numbers-as-text, buttons, badges, watermarks, signage, or gibberish. Blank surfaces everywhere else.',
     );
+    parts.push(ATRISI_EXACT_TYPE_DIRECTION);
   }
 
   // Visual brief after text — keeps Ideogram focused on the quoted copy
@@ -353,11 +355,18 @@ export function buildEnhancedPrompt(options: {
   }
 
   if (parsedTheme?.promptLines.length) {
-    const themeLines = textFree || exact
-      ? parsedTheme.promptLines.filter(
-          (line) => !/typograph|headline|copy|font|wordmark|cta/i.test(line),
-        )
-      : parsedTheme.promptLines;
+    const themeLines =
+      textFree
+        ? // Text-free: keep mood/layout/imagery/colors — drop type/copy directions
+          parsedTheme.promptLines.filter(
+            (line) => !/typograph|headline|copy|font|wordmark|cta|typeface/i.test(line),
+          )
+        : exact
+          ? // Exact copy: keep Inter/type feel + layout/mood; drop anything that invents extra slogans
+            parsedTheme.promptLines.filter(
+              (line) => !/\binvent\b|extra slogan|CTA button|wordmark lettering/i.test(line),
+            )
+          : parsedTheme.promptLines;
     if (themeLines.length) parts.push(...themeLines);
   }
 
@@ -390,7 +399,7 @@ export function buildEnhancedPrompt(options: {
     );
   } else if (exact) {
     parts.push(
-      'Clean institutional photo-led layout: one large exact headline, optional short exact supporting line, generous empty margins, no invented CTA buttons or badge clusters.',
+      'Clean ATRISI institutional photo-led layout: one large exact headline in Inter-like sans, generous empty margins, optional navy→blue gradient field or teal accent bar, no invented CTA buttons or badge clusters.',
     );
   } else {
     parts.push(STYLE_PROMPT_GUIDANCE[options.style] || STYLE_PROMPT_GUIDANCE.other);

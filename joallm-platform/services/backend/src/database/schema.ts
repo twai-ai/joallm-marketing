@@ -1514,6 +1514,8 @@ export type StoryBeat = {
   arcRole?: 'context' | 'proof' | 'ask' | 'other';
   /** Cached Groq vision card from See → Structure → Speak */
   vision?: StoryBeatVision | null;
+  /** When Brand/Similar creates a variant, points at the source asset file */
+  sourceFileId?: string | null;
 };
 
 export const storySessions = pgTable('story_sessions', {

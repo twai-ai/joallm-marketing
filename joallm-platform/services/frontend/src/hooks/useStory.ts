@@ -127,9 +127,12 @@ export function useStorySession(storyId: string | undefined) {
         bits.push('Heuristic storyline');
       }
       if (res.reordered) bits.push('beats rearranged');
+      const warn = (res.warnings || []).length;
+      if (warn) bits.push(`${warn} note${warn === 1 ? '' : 's'}`);
       showSuccess(bits.join(' · '));
-      for (const warning of res.warnings || []) {
-        showError(warning);
+      // Surface first warning gently in the success string context — avoid error toasts for soft warns
+      if (res.warnings?.[0]) {
+        showSuccess(res.warnings[0]);
       }
     },
     onError: (error: unknown) => {
@@ -170,9 +173,12 @@ export function useStorySession(storyId: string | undefined) {
 
   const brandBeatMutation = useMutation({
     mutationFn: async (input: { beatId: string; textMode?: 'none' | 'title' }) => {
-      const res = await apiClient.post<ApiOk<StorySession> & { provider?: string }>(
+      const res = await apiClient.post<
+        ApiOk<StorySession> & { provider?: string; addedBeatId?: string }
+      >(
         API_ENDPOINTS.story.brandBeat(storyId!, input.beatId),
-        { textMode: input.textMode || 'none' },
+        // Default title = branding text from Story fields; none = visual-only
+        { textMode: input.textMode || 'title' },
         { showErrorToast: false },
       );
       return res;
@@ -180,7 +186,9 @@ export function useStorySession(storyId: string | undefined) {
     onSuccess: (res) => {
       queryClient.setQueryData(['story', storyId], res.data);
       showSuccess(
-        res.provider ? `Beat branded with ${res.provider}` : 'Beat branded with ATRISI look',
+        res.provider
+          ? `Branded variant added (${res.provider}) — original kept`
+          : 'Branded variant added — original kept',
       );
     },
     onError: (error: unknown) => {

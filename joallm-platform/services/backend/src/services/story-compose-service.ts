@@ -265,19 +265,44 @@ function visionCacheValid(beat: StoryBeat): boolean {
   );
 }
 
-/** Stage 1 — See: Groq vision cards per beat (cached unless refresh or prompt version bump). */
+/** Stage 1 — See: vision cards per beat (Groq preferred, OpenAI fallback). */
 export async function seeBeatVisionCards(
   ownerUserId: string,
   beats: StoryBeat[],
   refreshVision = false,
-): Promise<{ beats: StoryBeat[]; visionCount: number }> {
-  if (!isUsableKey(config.groqApiKey)) {
-    return { beats, visionCount: 0 };
+): Promise<{
+  beats: StoryBeat[];
+  visionCount: number;
+  diag?: string;
+}> {
+  let groqKey = config.groqApiKey;
+  let openaiKey = config.openaiApiKey;
+  try {
+    const { userApiKeyRepository } = await import('../repositories/user-api-key-repository.js');
+    const byok = await userApiKeyRepository.getDecryptedApiKeys(ownerUserId);
+    if (byok.groq?.trim()) groqKey = byok.groq.trim();
+    if (byok.openai?.trim()) openaiKey = byok.openai.trim();
+  } catch {
+    // Platform env keys only
   }
 
-  const client = new Groq({ apiKey: config.groqApiKey });
+  const hasGroq = isUsableKey(groqKey);
+  const hasOpenAI = isUsableKey(openaiKey);
+  if (!hasGroq && !hasOpenAI) {
+    return {
+      beats,
+      visionCount: 0,
+      diag: 'No vision API key — set GROQ_API_KEY or OpenAI key (platform or Settings BYOK). Using upload-order arc.',
+    };
+  }
+
+  const groqClient = hasGroq ? new Groq({ apiKey: groqKey }) : null;
+  const openaiClient = hasOpenAI ? new OpenAI({ apiKey: openaiKey }) : null;
   const next: StoryBeat[] = [];
   let visionCount = 0;
+  let loadFails = 0;
+  let apiFails = 0;
+  let tooLarge = 0;
 
   for (const beat of beats) {
     if (!refreshVision && visionCacheValid(beat)) {
@@ -294,20 +319,40 @@ export async function seeBeatVisionCards(
     try {
       const image = await loadBeatImage(ownerUserId, beat.fileId);
       if (!image) {
+        loadFails += 1;
         next.push({ ...beat, vision: null });
         continue;
       }
-      const card = await seeOneImage(
-        client,
-        image.mime,
-        image.base64,
-        beat.fileId,
-        image.originalName,
-      );
+      if (image.base64.length * 0.75 > MAX_IMAGE_BYTES) {
+        // base64 expands ~4/3; loadBeatImage already gates buffer size — keep counter for diag
+        tooLarge += 1;
+      }
+
+      let card: StoryBeatVision | null = null;
+      if (groqClient) {
+        card = await seeOneImage(
+          groqClient,
+          image.mime,
+          image.base64,
+          beat.fileId,
+          image.originalName,
+        );
+      }
+      if (!card && openaiClient) {
+        card = await seeOneImageOpenAI(
+          openaiClient,
+          image.mime,
+          image.base64,
+          beat.fileId,
+          image.originalName,
+        );
+      }
       if (card) visionCount += 1;
+      else apiFails += 1;
       next.push({ ...beat, vision: card });
       await delay(VISION_DELAY_MS);
     } catch (error) {
+      apiFails += 1;
       logger.warn('Story see beat failed', {
         beatId: beat.id,
         error: error instanceof Error ? error.message : String(error),
@@ -316,7 +361,83 @@ export async function seeBeatVisionCards(
     }
   }
 
-  return { beats: next, visionCount };
+  let diag: string | undefined;
+  if (visionCount === 0 && beats.some((b) => b.fileId)) {
+    const parts: string[] = [];
+    if (loadFails) parts.push(`${loadFails} image(s) missing from storage — re-upload`);
+    if (tooLarge) parts.push(`${tooLarge} image(s) may be too large for vision`);
+    if (apiFails) parts.push(`vision API failed on ${apiFails} beat(s)`);
+    if (!hasGroq) parts.push('GROQ key missing (OpenAI tried or unavailable)');
+    diag = parts.length
+      ? `Vision unavailable (${parts.join('; ')}). Built arc from upload order.`
+      : 'Vision unavailable. Built arc from upload order.';
+  }
+
+  return { beats: next, visionCount, diag };
+}
+
+async function seeOneImageOpenAI(
+  client: OpenAI,
+  mime: string,
+  base64: string,
+  fileId: string,
+  filenameHint?: string,
+): Promise<StoryBeatVision | null> {
+  const seeUserText = filenameHint
+    ? `${SEE_PROMPT}\n\nFilename hint (may be noisy): ${filenameHint}`
+    : SEE_PROMPT;
+  try {
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.1,
+      max_tokens: 420,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
+            { type: 'text', text: seeUserText },
+          ],
+        },
+      ],
+      response_format: { type: 'json_object' },
+    });
+    const parsed = parseJsonObject(response.choices[0]?.message?.content || '{}');
+    const signals = Array.isArray(parsed.signals)
+      ? parsed.signals.filter((s): s is string => typeof s === 'string').slice(0, 8)
+      : [];
+    const what = typeof parsed.what === 'string' ? parsed.what.trim() : '';
+    if (!what) return null;
+    return {
+      fileId,
+      what,
+      onImageText:
+        typeof parsed.onImageText === 'string' && parsed.onImageText.trim()
+          ? parsed.onImageText.trim()
+          : null,
+      claimHint:
+        typeof parsed.claimHint === 'string' && parsed.claimHint.trim()
+          ? parsed.claimHint.trim()
+          : null,
+      audienceHint:
+        typeof parsed.audienceHint === 'string' && parsed.audienceHint.trim()
+          ? parsed.audienceHint.trim()
+          : null,
+      narrativeFit: asNarrativeFit(parsed.narrativeFit),
+      signals,
+      mood: typeof parsed.mood === 'string' ? parsed.mood.trim() : 'premium institutional',
+      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.55,
+      model: 'gpt-4o-mini',
+      analyzedAt: new Date().toISOString(),
+      promptVersion: STORY_VISION_PROMPT_VERSION,
+    };
+  } catch (error) {
+    logger.warn('Story OpenAI vision see failed', {
+      fileId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 export type StoryCombineResult = {
@@ -755,12 +876,13 @@ export type StoryArcValidation = {
 };
 
 /**
- * Force a Context → Proof → Ask spine, then reject Propose when vision
- * cannot place assets on an acquisition arc.
+ * Force a Context → Proof → Ask spine.
+ * Vision failures become warnings + heuristic fallback — do not block Propose.
+ * Hard-fail only when vision DID run and every asset is clearly off-brief.
  */
 export function enforceAndValidateStoryArc(
   beats: StoryBeat[],
-  options?: { visionCount?: number },
+  options?: { visionCount?: number; visionDiag?: string },
 ): StoryArcValidation {
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -808,20 +930,27 @@ export function enforceAndValidateStoryArc(
     : 0;
 
   if (next.length >= 2 && visionCount === 0) {
-    errors.push(
-      'Vision could not analyse these images. Check Creative AI / Groq vision keys, re-upload clearer assets, then Propose again.',
+    warnings.push(
+      options?.visionDiag ||
+        'Vision could not read these images — built Context → Proof → Ask from upload order. Set GROQ_API_KEY (or OpenAI), re-upload if assets 404, then Propose again for smarter ordering.',
     );
   }
 
-  if (next.length >= 2 && withVision.length > 0 && unusable.length === withVision.length) {
+  // Only hard-fail when vision actually classified everything as unusable
+  if (
+    next.length >= 2 &&
+    withVision.length >= 2 &&
+    unusable.length === withVision.length &&
+    visionCount > 0
+  ) {
     errors.push(
-      'These images are not aligned for Context → Proof → Ask (decorative or off-brief). Upload acquisition creatives that open a frame, show proof, and close with an ask — then Propose again.',
+      'These images look decorative or off-brief for an acquisition story. Upload creatives that open a frame (Context), show evidence (Proof), and close with an ask — then Propose again.',
     );
   }
 
   if (next.length >= 3 && withVision.length > 0 && avgConf > 0 && avgConf < 0.22) {
-    errors.push(
-      'Vision confidence is too low to build a reliable story arc. Use sharper, on-message creatives and Propose again.',
+    warnings.push(
+      'Vision confidence is low — review arc roles and captions after Propose.',
     );
   }
 

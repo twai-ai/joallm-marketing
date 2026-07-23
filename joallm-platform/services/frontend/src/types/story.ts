@@ -25,6 +25,7 @@ export type StoryBeat = {
   order: number;
   arcRole?: StoryArcRole;
   vision?: StoryBeatVision | null;
+  sourceFileId?: string | null;
 };
 
 export type StorySession = {

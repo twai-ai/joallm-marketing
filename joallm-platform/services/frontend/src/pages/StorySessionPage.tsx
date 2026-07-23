@@ -217,31 +217,34 @@ export function StorySessionPage() {
           className="min-w-0 flex-1 border-0 bg-transparent text-lg font-semibold tracking-tight text-slate-950 outline-none"
           placeholder="Story title"
         />
-        <label className="sr-only" htmlFor="story-format">
-          Output format
-        </label>
-        <select
-          id="story-format"
-          value={format}
-          onChange={(e) => void setFormat(e.target.value as StoryFormatId)}
-          className="hidden rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none sm:block"
-          title="Output size for Brand, Similar, and exports"
-        >
-          {STORY_FORMAT_OPTIONS.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label} · {opt.aspect}
-            </option>
-          ))}
-        </select>
+        <div className="hidden items-center gap-1.5 sm:flex">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Size
+          </span>
+          <select
+            id="story-format"
+            value={format}
+            onChange={(e) => void setFormat(e.target.value as StoryFormatId)}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 outline-none"
+            title="Output size for Brand, Similar, and exports"
+          >
+            {STORY_FORMAT_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label} · {opt.aspect}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             disabled={beats.length === 0 || isProposing}
             onClick={() => void proposeStoryline({})}
             className="inline-flex items-center gap-2 rounded-full bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-40"
+            title="Vision builds Context → Proof → Ask from your images"
           >
             {isProposing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            <span className="hidden sm:inline">{isProposing ? 'Reading…' : 'Propose'}</span>
+            <span className="hidden sm:inline">{isProposing ? 'Building…' : 'Build story'}</span>
           </button>
           <button
             type="button"
@@ -446,34 +449,49 @@ export function StorySessionPage() {
             ) : null}
           </div>
           {selected?.fileId ? (
-            <div className="flex flex-wrap items-center justify-center gap-2 border-t border-white/10 px-4 py-3">
+            <div className="border-t border-white/10 px-4 py-3">
+              <div className="mx-auto flex max-w-xl flex-col gap-2 sm:flex-row sm:items-stretch sm:justify-center">
+                <button
+                  type="button"
+                  disabled={isBranding || isGeneratingSimilar || !selected.title?.trim()}
+                  onClick={() => void brandBeat({ beatId: selected.id, textMode: 'title' })}
+                  className="inline-flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-teal-600 px-4 py-2.5 text-white transition hover:bg-teal-500 disabled:opacity-40"
+                >
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                    {isBranding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    {isBranding ? 'Branding…' : 'Brand this beat'}
+                  </span>
+                  <span className="text-[10px] font-medium text-teal-100">
+                    ATRISI look + your title · keeps original
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isBranding || isGeneratingSimilar}
+                  onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
+                  className="inline-flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 text-white transition hover:bg-white/10 disabled:opacity-40"
+                >
+                  <span className="text-sm font-semibold">
+                    {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
+                  </span>
+                  <span className="text-[10px] font-medium text-slate-300">
+                    Similar scene · no text on image
+                  </span>
+                </button>
+              </div>
               <button
                 type="button"
                 disabled={isBranding || isGeneratingSimilar}
                 onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
-                className="inline-flex items-center gap-2 rounded-full bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:opacity-40"
+                className="mx-auto mt-2 block text-center text-[11px] text-slate-400 underline-offset-2 transition hover:text-slate-200 hover:underline disabled:opacity-40"
               >
-                {isBranding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {isBranding ? 'Branding…' : 'Brand · text-free'}
+                Brand look only (no on-image text)
               </button>
-              <button
-                type="button"
-                disabled={isBranding || isGeneratingSimilar || !selected.title?.trim()}
-                onClick={() => void brandBeat({ beatId: selected.id, textMode: 'title' })}
-                className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-40"
-                title="Burn the Edit beat title onto the image exactly"
-              >
-                Brand · with title
-              </button>
-              <button
-                type="button"
-                disabled={isBranding || isGeneratingSimilar}
-                onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
-                className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-40"
-              >
-                {isGeneratingSimilar ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {isGeneratingSimilar ? 'Generating…' : 'Generate similar'}
-              </button>
+              {!selected.title?.trim() ? (
+                <p className="mt-2 text-center text-[11px] text-amber-200/90">
+                  Add a title in Edit beat to Brand with copy
+                </p>
+              ) : null}
             </div>
           ) : null}
           {beats.length > 1 ? (
@@ -483,7 +501,7 @@ export function StorySessionPage() {
                   key={beat.id}
                   type="button"
                   onClick={() => setSelectedId(beat.id)}
-                  className={`h-14 w-20 shrink-0 overflow-hidden rounded-md transition ${
+                  className={`relative h-14 w-20 shrink-0 overflow-hidden rounded-md transition ${
                     selected?.id === beat.id
                       ? 'ring-2 ring-teal-400 ring-offset-2 ring-offset-slate-950'
                       : 'opacity-60 hover:opacity-100'
@@ -494,6 +512,11 @@ export function StorySessionPage() {
                   ) : (
                     <div className="h-full bg-slate-800" />
                   )}
+                  {beat.sourceFileId ? (
+                    <span className="absolute bottom-0 inset-x-0 bg-teal-700/90 py-0.5 text-center text-[8px] font-semibold uppercase tracking-wide text-white">
+                      Branded
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -510,8 +533,11 @@ export function StorySessionPage() {
               <p className="mt-3 text-xs leading-relaxed text-slate-500">{story.metadata.lastThesis}</p>
             ) : null}
             {selected ? (
-              <div className="mt-5 space-y-4">
+              <div className="mt-5 space-y-5">
                 <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    1 · Size &amp; arc
+                  </p>
                   <label className="sr-only" htmlFor="story-format-edit">
                     Output format
                   </label>
@@ -519,7 +545,7 @@ export function StorySessionPage() {
                     id="story-format-edit"
                     value={format}
                     onChange={(e) => void setFormat(e.target.value as StoryFormatId)}
-                    className="w-full border-0 border-b border-slate-200 bg-transparent py-2 text-sm text-slate-800 outline-none focus:border-teal-500 sm:hidden"
+                    className="mt-2 w-full border-0 border-b border-slate-200 bg-transparent py-2 text-sm text-slate-800 outline-none focus:border-teal-500 sm:hidden"
                   >
                     {STORY_FORMAT_OPTIONS.map((opt) => (
                       <option key={opt.id} value={opt.id}>
@@ -527,11 +553,6 @@ export function StorySessionPage() {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-[11px] text-slate-400 sm:hidden">
-                    Brand / Similar / exports use this size
-                  </p>
-                </div>
-                <div>
                   <label className="sr-only" htmlFor="story-arc">
                     Arc
                   </label>
@@ -542,15 +563,19 @@ export function StorySessionPage() {
                       updateSelected({ arcRole: e.target.value as StoryBeat['arcRole'] })
                     }
                     onBlur={() => void commitSelected()}
-                    className="w-full border-0 border-b border-slate-200 bg-transparent py-2 text-sm text-slate-800 outline-none focus:border-teal-500"
+                    className="mt-1 w-full border-0 border-b border-slate-200 bg-transparent py-2 text-sm text-slate-800 outline-none focus:border-teal-500"
                   >
-                    <option value="context">Context</option>
-                    <option value="proof">Proof</option>
-                    <option value="ask">Ask</option>
-                    <option value="other">Beat</option>
+                    <option value="context">Context — set the frame</option>
+                    <option value="proof">Proof — build trust</option>
+                    <option value="ask">Ask — next step</option>
+                    <option value="other">Unassigned beat</option>
                   </select>
                 </div>
+
                 <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    2 · Copy for Brand
+                  </p>
                   <label className="sr-only" htmlFor="story-beat-title">
                     Title
                   </label>
@@ -559,11 +584,9 @@ export function StorySessionPage() {
                     value={selected.title}
                     onChange={(e) => updateSelected({ title: e.target.value })}
                     onBlur={() => void commitSelected()}
-                    placeholder="Title"
-                    className="w-full border-0 border-b border-slate-200 bg-transparent py-2 text-base font-semibold text-slate-950 outline-none placeholder:text-slate-300 focus:border-teal-500"
+                    placeholder="Headline (used on Brand)"
+                    className="mt-2 w-full border-0 border-b border-slate-200 bg-transparent py-2 text-base font-semibold text-slate-950 outline-none placeholder:text-slate-300 focus:border-teal-500"
                   />
-                </div>
-                <div>
                   <label className="sr-only" htmlFor="story-caption">
                     Caption
                   </label>
@@ -572,52 +595,65 @@ export function StorySessionPage() {
                     value={selected.caption}
                     onChange={(e) => updateSelected({ caption: e.target.value })}
                     onBlur={() => void commitSelected()}
-                    placeholder="Caption"
-                    rows={4}
-                    className="w-full resize-none border-0 bg-transparent py-2 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300"
+                    placeholder="Caption / supporting line"
+                    rows={3}
+                    className="mt-1 w-full resize-none border-0 bg-transparent py-2 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300"
                   />
+                  {selected.vision?.what ? (
+                    <p className="text-xs leading-relaxed text-slate-400">{selected.vision.what}</p>
+                  ) : null}
                 </div>
-                {selected.vision?.what ? (
-                  <p className="text-xs leading-relaxed text-slate-400">{selected.vision.what}</p>
-                ) : null}
+
                 {selected.fileId ? (
-                  <div className="flex flex-col gap-2 pt-2">
-                    <button
-                      type="button"
-                      disabled={isBranding || isGeneratingSimilar}
-                      onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
-                      className="w-full rounded-full bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-40"
-                    >
-                      {isBranding ? 'Branding…' : 'Brand · text-free'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isBranding || isGeneratingSimilar || !selected.title?.trim()}
-                      onClick={() => void brandBeat({ beatId: selected.id, textMode: 'title' })}
-                      className="w-full rounded-full border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
-                    >
-                      Brand · with title
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isBranding || isGeneratingSimilar}
-                      onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
-                      className="w-full rounded-full border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
-                    >
-                      {isGeneratingSimilar ? 'Generating similar…' : 'Generate similar'}
-                    </button>
-                    <p className="pt-1 text-[11px] leading-relaxed text-slate-400">
-                      Prefer text-free visuals. Use “with title” only when you want the Edit title burned in letter-perfect — captions stay in Story, not invented by the model.
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      3 · Create
                     </p>
+                    <div className="mt-2 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        disabled={isBranding || isGeneratingSimilar || !selected.title?.trim()}
+                        onClick={() => void brandBeat({ beatId: selected.id, textMode: 'title' })}
+                        className="w-full rounded-xl bg-teal-700 px-4 py-2.5 text-left transition hover:bg-teal-800 disabled:opacity-40"
+                      >
+                        <span className="block text-sm font-semibold text-white">
+                          {isBranding ? 'Branding…' : 'Brand this beat'}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-teal-100">
+                          Look + title/caption on image · original kept
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBranding || isGeneratingSimilar}
+                        onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+                      >
+                        <span className="block text-sm font-semibold text-slate-800">
+                          {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] text-slate-500">
+                          Similar scene · no text on image
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBranding || isGeneratingSimilar}
+                        onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
+                        className="text-left text-[11px] text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline disabled:opacity-40"
+                      >
+                        Brand look only (no on-image text)
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 
                 <div className="border-t border-slate-100 pt-4">
-                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
-                    Brand refs
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    4 · Brand kit
                   </p>
                   <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-                    Logo + 1–3 on-brand examples guide Brand and Generate similar. Logo also watermarks gens and exports when enabled.
+                    Logo + up to 3 style examples. Logo watermarks Brand, Similar, and exports when on.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {brandKit.logoFileId ? (

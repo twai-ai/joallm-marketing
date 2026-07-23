@@ -36,6 +36,7 @@ const BeatSchema = z.object({
   notes: z.string().max(2000),
   order: z.number().int().min(0),
   arcRole: z.enum(['context', 'proof', 'ask', 'other']).optional(),
+  sourceFileId: z.string().uuid().nullable().optional(),
   vision: z
     .object({
       fileId: z.string(),
@@ -276,6 +277,11 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
           format: getStoryFormat(story.metadata as Record<string, unknown>).id,
         },
         variantCount: 1,
+        precision: {
+          textFree: true,
+          avoid:
+            'any readable text, gibberish letters, headlines, CTAs, captions, fake logos, signage',
+        },
       });
 
       const fileId = generated.files[0]?.fileId;
@@ -374,6 +380,7 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
         data: result.story,
         provider: result.provider,
         fileId: result.fileId,
+        addedBeatId: result.addedBeatId,
       });
     } catch (error) {
       logger.error('Story brand beat failed', {

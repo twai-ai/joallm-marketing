@@ -325,24 +325,29 @@ export async function setStoryBrandKit(
 export type StoryBrandTextMode = 'none' | 'title';
 
 /**
- * Brand this beat — Creative AI remix with ATRISI theme + optional brand kit refs.
- * textMode=none → text-free visual; textMode=title → exact Story title (no OCR garbage).
+ * Brand this beat — ATRISI look + brand kit.
+ * Branding typography from Story title/caption is intentional (default).
+ * textMode=none is optional visual-only branding.
+ * Keeps the original beat; inserts a branded variant after it.
  */
 export async function brandStoryBeat(
   ownerUserId: string,
   storyId: string,
   beatId: string,
   options?: { textMode?: StoryBrandTextMode },
-): Promise<{ story: StorySessionDto; provider: string; fileId: string }> {
+): Promise<{ story: StorySessionDto; provider: string; fileId: string; addedBeatId: string }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
+  if (!beat.fileId) {
+    throw Object.assign(new Error('Beat has no image to brand'), { statusCode: 400 });
+  }
   const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
   const headline = cleanStoryTypography(beat.title, 72);
-  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 36);
-  // Default text-free — Ideogram invents gibberish when left to invent copy.
-  // Pass textMode=title only when the user wants exact Story title typography.
-  const textMode: StoryBrandTextMode = options?.textMode || 'none';
-  const useTitleCopy = textMode === 'title' && Boolean(headline);
+  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 48);
+  // Branding may include text. Default to Story title when present; Generate similar stays text-free.
+  const textMode: StoryBrandTextMode =
+    options?.textMode || (headline ? 'title' : 'none');
+  const useBrandCopy = textMode === 'title' && Boolean(headline);
   const watermark = Boolean(kit.logoFileId) && kit.watermark !== false;
 
   const promptParts = [
@@ -351,23 +356,25 @@ export async function brandStoryBeat(
     'Apply ATRISI teal and slate brand, premium institutional look, clean visual hierarchy.',
   ];
 
-  if (useTitleCopy && headline) {
+  if (useBrandCopy && headline) {
     promptParts.push(
-      `Render ONLY this headline letter-perfect, large high-contrast sans-serif: "${headline}".`,
+      `Brand typography — render this headline letter-perfect, large high-contrast sans-serif: "${headline}".`,
     );
     if (cta && cta !== headline) {
-      promptParts.push(`Optional short supporting line exactly: "${cta}".`);
+      promptParts.push(`Optional supporting line exactly: "${cta}".`);
     }
-    promptParts.push('Do not invent any other words, dates, stats, or slogans.');
+    promptParts.push(
+      'Do not invent other slogans, fake stats, dates, or program names. Only the Story copy above.',
+    );
   } else {
     promptParts.push(
-      'TEXT-FREE: zero readable text on the image — no headlines, CTAs, captions, signs, or gibberish letters. Empty safe margins for later overlay.',
+      'TEXT-FREE visual brand pass: no readable text, headlines, CTAs, or gibberish letters. Empty margins for later overlay.',
     );
   }
 
   if (watermark) {
     promptParts.push(
-      'Place the official logo reference as a small corner watermark (bottom-right preferred), about 8–12% of frame width, clean clear-space, no invented seals or wordmarks.',
+      'Place the official logo reference as a small corner mark (bottom-right preferred), about 8–12% of frame width. Prefer the logo graphic; do not invent extra seals.',
     );
   } else if (kit.logoFileId) {
     promptParts.push('Do not invent logos. Logo reference may inform brand color only.');
@@ -378,11 +385,11 @@ export async function brandStoryBeat(
   const generated = await generateCreativeImages({
     ownerUserId,
     prompt: promptParts.join(' '),
-    style: useTitleCopy ? 'marketing_poster' : 'photo_realistic',
+    style: useBrandCopy ? 'marketing_poster' : 'photo_realistic',
     quality: 'standard',
     aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
     titleHint: beat.title || 'ATRISI branded beat',
-    referenceFileIds: brandReferenceIds(kit, beat.fileId!),
+    referenceFileIds: brandReferenceIds(kit, beat.fileId),
     referenceMode: 'style',
     analyzeReferences: true,
     variantCount: 1,
@@ -397,15 +404,15 @@ export async function brandStoryBeat(
       format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
     },
     precision: {
-      textFree: !useTitleCopy,
-      headline: useTitleCopy ? headline : undefined,
-      cta: useTitleCopy ? cta : undefined,
-      mustIncludeText: useTitleCopy ? headline : undefined,
+      textFree: !useBrandCopy,
+      headline: useBrandCopy ? headline : undefined,
+      cta: useBrandCopy ? cta : undefined,
+      mustIncludeText: useBrandCopy ? headline : undefined,
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
       useLogoReference: watermark,
-      avoid: useTitleCopy
-        ? 'gibberish, misspellings, extra slogans, fake logos, neon, purple glow, clutter'
+      avoid: useBrandCopy
+        ? 'gibberish, misspellings, extra slogans beyond the given headline/CTA, fake logos, neon, purple glow, clutter'
         : 'any readable text, gibberish letters, misspelled words, fake logos, neon, purple glow, cluttered stickers, CTAs, captions, signage',
     },
   });
@@ -415,23 +422,28 @@ export async function brandStoryBeat(
     throw Object.assign(new Error('Creative AI returned no branded image'), { statusCode: 502 });
   }
 
-  const beats = existing.beats.map((b) =>
-    b.id === beatId
-      ? {
-          ...b,
-          fileId: newFileId,
-          vision: null,
-          title: b.title,
-          caption: b.caption,
-          notes: useTitleCopy
-            ? 'Branded with ATRISI · title typography from Story field'
-            : 'Branded with ATRISI · text-free visual (copy in Story fields)',
-        }
-      : b,
-  );
+  const insertAt = existing.beats.findIndex((b) => b.id === beatId);
+  const addedBeatId = randomUUID();
+  const brandedBeat: StoryBeat = {
+    id: addedBeatId,
+    fileId: newFileId,
+    sourceFileId: beat.fileId,
+    title: beat.title,
+    caption: beat.caption,
+    notes: useBrandCopy
+      ? 'Branded variant · Story title/caption on image · original kept'
+      : 'Branded variant · visual only · original kept',
+    order: insertAt + 1,
+    arcRole: beat.arcRole || 'other',
+    vision: null,
+  };
+
+  const before = existing.beats.slice(0, insertAt + 1);
+  const after = existing.beats.slice(insertAt + 1);
+  const beats = [...before, brandedBeat, ...after].map((b, order) => ({ ...b, order }));
 
   const story = await updateStory(ownerUserId, storyId, { beats });
-  return { story, provider: generated.provider, fileId: newFileId };
+  return { story, provider: generated.provider, fileId: newFileId, addedBeatId };
 }
 
 /**
@@ -508,10 +520,11 @@ export async function generateSimilarStoryBeats(
   const added: StoryBeat[] = newFileIds.map((fileId, index) => ({
     id: randomUUID(),
     fileId,
+    sourceFileId: beat.fileId,
     // Inherit story copy from source — do not invent new poster text
     title: beat.title || `Similar ${index + 1}`,
     caption: beat.caption || '',
-    notes: 'Similar visual · copy inherited from source beat',
+    notes: 'Similar visual · copy inherited from source beat · original kept',
     order: insertAt + 1 + index,
     arcRole: beat.arcRole || 'other',
     vision: null,
@@ -627,9 +640,10 @@ export async function proposeStoryline(
     source = seen.visionCount > 0 ? 'vision-heuristic' : 'heuristic';
   }
 
-  // 4) Enforce Context → Proof → Ask; error when assets cannot align
+  // 4) Enforce Context → Proof → Ask; warn (don't block) when vision unavailable
   const validated = enforceAndValidateStoryArc(proposal.beats, {
     visionCount: seen.visionCount,
+    visionDiag: seen.diag,
   });
   if (!validated.ok) {
     throw Object.assign(new Error(validated.errors.join(' ')), {

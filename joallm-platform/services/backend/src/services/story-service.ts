@@ -6,9 +6,9 @@
 
 import { randomUUID } from 'crypto';
 import { createRequire } from 'module';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../database/connection.js';
-import { files, storySessions, type StoryBeat } from '../database/schema.js';
+import { files, storySessions, users, type StoryBeat } from '../database/schema.js';
 import { generateCreativeImages } from './creative-ai-generate-service.js';
 import type { BrandThemeInput } from './creative-brand-theme.js';
 import {
@@ -21,7 +21,9 @@ import {
 } from './story-compose-service.js';
 import { getStoryAspectRatio, getStoryFormat, isStoryFormatId } from './story-format.js';
 import {
-  buildOrgDualReadScope,
+  buildOrgTeamOwnerReadScope,
+  canActorAccessOwnerResource,
+  listOrganizationMemberUserIds,
   resolveOrganizationIdForUser,
 } from './organization-ownership.js';
 import { logger } from '../utils/logger.js';
@@ -73,6 +75,10 @@ export type StorySessionDto = {
   createdAt: string;
   updatedAt: string;
   attached: boolean;
+  ownerUserId: string;
+  ownerName: string | null;
+  ownerEmail: string | null;
+  isOwner: boolean;
 };
 
 const ARC_LABELS: Record<string, string> = {
@@ -82,7 +88,13 @@ const ARC_LABELS: Record<string, string> = {
   other: 'Beat',
 };
 
-function toDto(row: typeof storySessions.$inferSelect): StorySessionDto {
+type OwnerProfile = { name: string; email: string };
+
+function toDto(
+  row: typeof storySessions.$inferSelect,
+  actorUserId: string,
+  owner?: OwnerProfile | null,
+): StorySessionDto {
   const beats = Array.isArray(row.beats) ? row.beats : [];
   return {
     id: row.id,
@@ -97,24 +109,55 @@ function toDto(row: typeof storySessions.$inferSelect): StorySessionDto {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     attached: Boolean(row.programId || row.campaignId),
+    ownerUserId: row.ownerUserId,
+    ownerName: owner?.name ?? null,
+    ownerEmail: owner?.email ?? null,
+    isOwner: row.ownerUserId === actorUserId,
   };
 }
 
-async function scopeForUser(ownerUserId: string) {
-  const organizationId = await resolveOrganizationIdForUser(ownerUserId);
+async function loadOwnerProfiles(ownerIds: string[]): Promise<Map<string, OwnerProfile>> {
+  const unique = [...new Set(ownerIds.filter(Boolean))];
+  const map = new Map<string, OwnerProfile>();
+  if (unique.length === 0) return map;
+  const rows = await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(users)
+    .where(inArray(users.id, unique));
+  for (const row of rows) {
+    map.set(row.id, { name: row.name, email: row.email });
+  }
+  return map;
+}
+
+async function toDtoWithOwner(
+  row: typeof storySessions.$inferSelect,
+  actorUserId: string,
+): Promise<StorySessionDto> {
+  const owners = await loadOwnerProfiles([row.ownerUserId]);
+  return toDto(row, actorUserId, owners.get(row.ownerUserId));
+}
+
+async function scopeForUser(actorUserId: string) {
+  const organizationId = await resolveOrganizationIdForUser(actorUserId);
+  const memberUserIds = organizationId
+    ? await listOrganizationMemberUserIds(organizationId)
+    : [actorUserId];
   return {
     organizationId,
-    scope: buildOrgDualReadScope({
+    memberUserIds,
+    scope: buildOrgTeamOwnerReadScope({
       organizationId,
-      ownerUserId,
+      actorUserId,
+      memberUserIds,
       organizationColumn: storySessions.organizationId,
       ownerColumn: storySessions.ownerUserId,
     }),
   };
 }
 
-async function getOwnedStory(ownerUserId: string, storyId: string) {
-  const { scope } = await scopeForUser(ownerUserId);
+async function getOwnedStory(actorUserId: string, storyId: string) {
+  const { scope } = await scopeForUser(actorUserId);
   const [row] = await db
     .select()
     .from(storySessions)
@@ -126,19 +169,20 @@ async function getOwnedStory(ownerUserId: string, storyId: string) {
   return row;
 }
 
-export async function listStories(ownerUserId: string): Promise<StorySessionDto[]> {
-  const { scope } = await scopeForUser(ownerUserId);
+export async function listStories(actorUserId: string): Promise<StorySessionDto[]> {
+  const { scope } = await scopeForUser(actorUserId);
   const rows = await db
     .select()
     .from(storySessions)
     .where(scope!)
     .orderBy(desc(storySessions.updatedAt))
     .limit(100);
-  return rows.map(toDto);
+  const owners = await loadOwnerProfiles(rows.map((r) => r.ownerUserId));
+  return rows.map((row) => toDto(row, actorUserId, owners.get(row.ownerUserId)));
 }
 
-export async function getStory(ownerUserId: string, storyId: string): Promise<StorySessionDto> {
-  return toDto(await getOwnedStory(ownerUserId, storyId));
+export async function getStory(actorUserId: string, storyId: string): Promise<StorySessionDto> {
+  return toDtoWithOwner(await getOwnedStory(actorUserId, storyId), actorUserId);
 }
 
 export async function createStory(
@@ -163,7 +207,7 @@ export async function createStory(
       },
     })
     .returning();
-  return toDto(row);
+  return toDtoWithOwner(row, ownerUserId);
 }
 
 export async function updateStory(
@@ -212,11 +256,16 @@ export async function updateStory(
     .where(eq(storySessions.id, storyId))
     .returning();
 
-  return toDto(row);
+  return toDtoWithOwner(row, ownerUserId);
 }
 
-export async function deleteStory(ownerUserId: string, storyId: string): Promise<void> {
-  await getOwnedStory(ownerUserId, storyId);
+export async function deleteStory(actorUserId: string, storyId: string): Promise<void> {
+  const existing = await getOwnedStory(actorUserId, storyId);
+  if (existing.ownerUserId !== actorUserId) {
+    throw Object.assign(new Error('Only the story creator can delete this story'), {
+      statusCode: 403,
+    });
+  }
   await db.delete(storySessions).where(eq(storySessions.id, storyId));
 }
 
@@ -226,18 +275,24 @@ export async function addBeatsFromFiles(
   fileIds: string[],
 ): Promise<StorySessionDto> {
   const existing = await getOwnedStory(ownerUserId, storyId);
-  const { scope } = await scopeForUser(ownerUserId);
+  const uniqueIds = [...new Set(fileIds.filter(Boolean))];
+  const candidateFiles =
+    uniqueIds.length === 0
+      ? []
+      : await db
+          .select({ id: files.id, originalName: files.originalName, userId: files.userId })
+          .from(files)
+          .where(inArray(files.id, uniqueIds));
 
-  const ownedFiles = await db
-    .select({ id: files.id, originalName: files.originalName })
-    .from(files)
-    .where(and(eq(files.userId, ownerUserId)));
+  const accessible: Array<{ id: string; originalName: string | null }> = [];
+  for (const file of candidateFiles) {
+    if (await canActorAccessOwnerResource(ownerUserId, file.userId)) {
+      accessible.push({ id: file.id, originalName: file.originalName });
+    }
+  }
 
-  // Prefer dual-read when org-scoped files exist; fall back to user-owned list above.
-  void scope;
-
-  const ownedIdSet = new Set(ownedFiles.map((f) => f.id));
-  const nameById = new Map(ownedFiles.map((f) => [f.id, f.originalName || 'Asset']));
+  const ownedIdSet = new Set(accessible.map((f) => f.id));
+  const nameById = new Map(accessible.map((f) => [f.id, f.originalName || 'Asset']));
 
   const startOrder = existing.beats.length;
   const added: StoryBeat[] = fileIds
@@ -747,7 +802,7 @@ function storySafeFilename(title: string, ext: string): string {
 }
 
 async function loadBeatImageForExport(
-  ownerUserId: string,
+  actorUserId: string,
   fileId: string,
   options?: { allowWebp?: boolean },
 ): Promise<{ mime: string; base64: string } | null> {
@@ -755,9 +810,10 @@ async function loadBeatImageForExport(
     const [fileRow] = await db
       .select()
       .from(files)
-      .where(and(eq(files.id, fileId), eq(files.userId, ownerUserId)))
+      .where(eq(files.id, fileId))
       .limit(1);
     if (!fileRow) return null;
+    if (!(await canActorAccessOwnerResource(actorUserId, fileRow.userId))) return null;
     const mime = (fileRow.mimetype || '').toLowerCase();
     const isPng = mime.includes('png');
     const isJpeg = mime.includes('jpeg') || mime.includes('jpg');

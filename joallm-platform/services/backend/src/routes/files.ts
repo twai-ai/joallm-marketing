@@ -17,6 +17,7 @@ import { config } from '../config/config.js';
 import { renderMediaClip } from '../services/render-service.js';
 import type { MediaIntelligenceMode } from '../services/media-insight-service.js';
 import { resolveMediaIntelligenceMode } from '../services/media-intelligence-profiles.js';
+import { canActorAccessOwnerResource } from '../services/organization-ownership.js';
 
 type TranscriptSegmentRow = typeof transcriptSegments.$inferSelect;
 type MediaInsightRow = typeof mediaInsights.$inferSelect;
@@ -1157,7 +1158,10 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
       }
 
       if (fileRecord.userId && fileRecord.userId !== userId) {
-        return reply.status(403).send({ error: 'Access denied', message: 'You do not own this file' });
+        const allowed = await canActorAccessOwnerResource(userId, fileRecord.userId);
+        if (!allowed) {
+          return reply.status(403).send({ error: 'Access denied', message: 'You do not own this file' });
+        }
       }
 
       const storageKey = (fileRecord as any).storageKey as string | null | undefined;
@@ -1231,7 +1235,10 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
       }
 
       if (fileRecord.userId && fileRecord.userId !== userId) {
-        return reply.status(403).send({ error: 'Access denied', message: 'You do not own this file' });
+        const allowed = await canActorAccessOwnerResource(userId, fileRecord.userId);
+        if (!allowed) {
+          return reply.status(403).send({ error: 'Access denied', message: 'You do not own this file' });
+        }
       }
 
       const storageKey = (fileRecord as any).storageKey as string | null | undefined;

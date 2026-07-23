@@ -5,11 +5,12 @@
 
 import Groq from 'groq-sdk';
 import OpenAI from 'openai';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { config } from '../config/config.js';
 import { db } from '../database/connection.js';
 import { files, type StoryBeat, type StoryBeatVision } from '../database/schema.js';
 import { storageProvider } from './file-storage.js';
+import { canActorAccessOwnerResource } from './organization-ownership.js';
 import { logger } from '../utils/logger.js';
 
 const VISION_MODELS = [
@@ -143,15 +144,16 @@ async function chatJson(options: {
 }
 
 async function loadBeatImage(
-  ownerUserId: string,
+  actorUserId: string,
   fileId: string,
 ): Promise<{ mime: string; base64: string; originalName?: string } | null> {
   const [fileRow] = await db
     .select()
     .from(files)
-    .where(and(eq(files.id, fileId), eq(files.userId, ownerUserId)))
+    .where(eq(files.id, fileId))
     .limit(1);
   if (!fileRow) return null;
+  if (!(await canActorAccessOwnerResource(actorUserId, fileRow.userId))) return null;
   try {
     const { resolveFileImageBytes } = await import('./file-bytes.js');
     const resolved = await resolveFileImageBytes({

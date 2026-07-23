@@ -41,6 +41,10 @@ export type StorySession = {
   createdAt: string;
   updatedAt: string;
   attached: boolean;
+  ownerUserId?: string;
+  ownerName?: string | null;
+  ownerEmail?: string | null;
+  isOwner?: boolean;
 };
 
 export type StoryBrandKit = {

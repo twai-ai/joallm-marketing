@@ -57,7 +57,10 @@ export function StoryPage() {
       secondaryPanelContent={null}
     >
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">Your stories</h2>
+        <h2 className="text-lg font-semibold text-slate-950">Team stories</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Stories shared across your organization. Creator shown on each row.
+        </p>
 
         {isLoading ? (
           <div className="mt-8 flex items-center gap-2 text-sm text-slate-500">
@@ -75,12 +78,19 @@ export function StoryPage() {
           </button>
         ) : (
           <ul className="mt-6 divide-y divide-slate-100">
-            {stories.map((story) => (
+            {stories.map((story) => {
+              const creatorLabel =
+                story.isOwner
+                  ? 'You'
+                  : story.ownerName || story.ownerEmail || 'Teammate';
+              return (
               <li key={story.id} className="flex items-center gap-4 py-4 first:pt-0">
                 <Link to={`/studio/story/${story.id}`} className="min-w-0 flex-1">
                   <p className="truncate font-medium text-slate-900">{story.title}</p>
                   <p className="mt-0.5 text-sm text-slate-500">
                     {story.beats.length} {story.beats.length === 1 ? 'beat' : 'beats'}
+                    <span className="text-slate-300"> · </span>
+                    Created by {creatorLabel}
                   </p>
                 </Link>
                 <Link
@@ -89,15 +99,18 @@ export function StoryPage() {
                 >
                   Open
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => void deleteStory(story.id)}
-                  className="text-sm text-slate-400 hover:text-rose-600"
-                >
-                  Delete
-                </button>
+                {story.isOwner !== false ? (
+                  <button
+                    type="button"
+                    onClick={() => void deleteStory(story.id)}
+                    className="text-sm text-slate-400 hover:text-rose-600"
+                  >
+                    Delete
+                  </button>
+                ) : null}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>

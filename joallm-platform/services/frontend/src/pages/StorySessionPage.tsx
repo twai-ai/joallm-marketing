@@ -217,6 +217,13 @@ export function StorySessionPage() {
           className="min-w-0 flex-1 border-0 bg-transparent text-lg font-semibold tracking-tight text-slate-950 outline-none"
           placeholder="Story title"
         />
+        {story.ownerName || story.ownerEmail ? (
+          <p className="hidden shrink-0 text-xs text-slate-500 sm:block">
+            {story.isOwner
+              ? 'Created by you'
+              : `Created by ${story.ownerName || story.ownerEmail}`}
+          </p>
+        ) : null}
         <div className="hidden items-center gap-1.5 sm:flex">
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
             Size

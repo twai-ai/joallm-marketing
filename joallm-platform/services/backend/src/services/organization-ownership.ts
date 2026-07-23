@@ -3,7 +3,7 @@
  * organizationId owns the record; actor userId attributes the action.
  */
 
-import { and, eq, isNull, or, SQL } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, SQL } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { memberships } from '../database/schema.js';
 
@@ -25,6 +25,36 @@ export async function resolveOrganizationIdForUser(
   return row?.organizationId ?? null;
 }
 
+/** Active member user ids for an organization. */
+export async function listOrganizationMemberUserIds(
+  organizationId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ userId: memberships.userId })
+    .from(memberships)
+    .where(
+      and(eq(memberships.organizationId, organizationId), eq(memberships.status, 'active')),
+    );
+  return rows.map((r) => r.userId);
+}
+
+/**
+ * Actor may access a user-owned resource (file / story asset) when they own it
+ * or share an active organization with the owner.
+ */
+export async function canActorAccessOwnerResource(
+  actorUserId: string,
+  resourceOwnerUserId: string | null | undefined,
+): Promise<boolean> {
+  if (!resourceOwnerUserId) return true;
+  if (resourceOwnerUserId === actorUserId) return true;
+  const [actorOrg, ownerOrg] = await Promise.all([
+    resolveOrganizationIdForUser(actorUserId),
+    resolveOrganizationIdForUser(resourceOwnerUserId),
+  ]);
+  return Boolean(actorOrg && ownerOrg && actorOrg === ownerOrg);
+}
+
 /**
  * Dual-read scope: org-owned rows OR legacy rows still bound to the actor.
  * Pure builder so isolation behavior is unit-testable without a live DB.
@@ -43,6 +73,28 @@ export function buildOrgDualReadScope(options: {
     );
   }
   return eq(ownerColumn, ownerUserId);
+}
+
+/**
+ * Story team read: org-tagged stories + any story owned by an org teammate
+ * (covers legacy rows with null organizationId).
+ */
+export function buildOrgTeamOwnerReadScope(options: {
+  organizationId: string | null | undefined;
+  actorUserId: string;
+  memberUserIds: string[];
+  organizationColumn: SQL | any;
+  ownerColumn: SQL | any;
+}): SQL | undefined {
+  const { organizationId, actorUserId, memberUserIds, organizationColumn, ownerColumn } =
+    options;
+  if (organizationId && memberUserIds.length > 0) {
+    return or(
+      eq(organizationColumn, organizationId),
+      inArray(ownerColumn, memberUserIds),
+    );
+  }
+  return eq(ownerColumn, actorUserId);
 }
 
 /**

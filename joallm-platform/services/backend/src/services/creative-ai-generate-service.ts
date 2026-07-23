@@ -7,7 +7,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { files } from '../database/schema.js';
 import { config } from '../config/config.js';
@@ -25,6 +25,7 @@ import { describeCreativeReferenceImages } from './vision-analysis-service.js';
 import { userApiKeyRepository } from '../repositories/user-api-key-repository.js';
 import { resolvePaletteColors } from './creative-palettes.js';
 import { parseBrandTheme, type BrandThemeInput } from './creative-brand-theme.js';
+import { canActorAccessOwnerResource } from './organization-ownership.js';
 
 const EXECUTABLE_PROVIDERS = ['ideogram', 'flux'] as const;
 type ExecutableProvider = (typeof EXECUTABLE_PROVIDERS)[number];
@@ -546,9 +547,9 @@ async function downloadImage(url: string): Promise<{ buffer: Buffer; contentType
   return { buffer: Buffer.from(arrayBuffer), contentType };
 }
 
-/** Load owned image files from Platform storage for Creative AI reference inputs. */
+/** Load image files the actor owns or can access via shared organization. */
 export async function loadReferenceImages(
-  ownerUserId: string,
+  actorUserId: string,
   referenceFileIds: string[] | undefined,
 ): Promise<ReferenceImageBlob[]> {
   const ids = [...new Set((referenceFileIds || []).filter(Boolean))].slice(0, MAX_REFERENCE_IMAGES);
@@ -557,8 +558,14 @@ export async function loadReferenceImages(
   const rows = await db
     .select()
     .from(files)
-    .where(and(eq(files.userId, ownerUserId), inArray(files.id, ids)));
-  const byId = new Map(rows.map((row) => [row.id, row]));
+    .where(inArray(files.id, ids));
+  const accessibleRows: typeof rows = [];
+  for (const row of rows) {
+    if (await canActorAccessOwnerResource(actorUserId, row.userId)) {
+      accessibleRows.push(row);
+    }
+  }
+  const byId = new Map(accessibleRows.map((row) => [row.id, row]));
   const loaded: ReferenceImageBlob[] = [];
   const missing: string[] = [];
 

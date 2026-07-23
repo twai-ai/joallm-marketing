@@ -52,6 +52,8 @@ export class GoogleAuthService {
         include_granted_scopes: true,
         prompt: 'select_account',
         redirect_uri: resolvedRedirect,
+        // UX hint only — server still validates verified email via Organization Admission
+        hd: process.env.GOOGLE_OAUTH_HD || 'atrisi.org',
       });
 
       logger.info('Generated Google OAuth URL', {

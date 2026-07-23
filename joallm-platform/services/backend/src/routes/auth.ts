@@ -139,18 +139,25 @@ async function register(request: FastifyRequest, reply: FastifyReply) {
       createdAt: users.createdAt
     });
 
-    // Generate tokens
-    const accessToken = generateToken({
-      id: newUser.id,
+    const { issueInstitutionSession } = await import('../services/institution-session.js');
+    const session = await issueInstitutionSession({
+      userId: newUser.id,
       email: newUser.email,
       name: newUser.name,
-      role: newUser.role || 'casual'
+      platformRole: newUser.role || 'casual',
+      authMethod: 'password',
+      request,
     });
-    
-    const refreshToken = generateRefreshToken({
-      id: newUser.id,
-      email: newUser.email
-    });
+
+    if (!session.ok) {
+      await db.delete(users).where(eq(users.id, newUser.id));
+      reply.status(403).send({
+        error: 'Membership denied',
+        message: session.reason,
+        code: 'membership_denied',
+      });
+      return;
+    }
 
     reply.status(201).send({
       message: 'User registered successfully',
@@ -167,11 +174,16 @@ async function register(request: FastifyRequest, reply: FastifyReply) {
           totalFiles: 0,
           lastReset: new Date().toISOString(),
         },
+        organizationId: session.admission.organizationId,
+        organizationCode: session.admission.organizationCode,
+        membershipRole: session.admission.role,
+        permissions: session.admission.permissions,
+        experiences: session.admission.experiences,
         createdAt: newUser.createdAt.toISOString(),
         updatedAt: newUser.createdAt.toISOString()
       },
-      token: accessToken,
-      refreshToken
+      token: session.accessToken,
+      refreshToken: session.refreshToken
     });
 
   } catch (error) {
@@ -272,20 +284,25 @@ async function login(request: FastifyRequest, reply: FastifyReply) {
     const finalRole = effectiveAccess.role;
     const finalTier = effectiveAccess.subscriptionTier;
 
-    // Generate tokens
-    const accessToken = generateToken({
-      id: user.id,
+    const { issueInstitutionSession } = await import('../services/institution-session.js');
+    const session = await issueInstitutionSession({
+      userId: user.id,
       email: user.email,
       name: user.name,
-      role: finalRole || 'casual'
-    });
-    
-    const refreshToken = generateRefreshToken({
-      id: user.id,
-      email: user.email
+      platformRole: finalRole || 'casual',
+      authMethod: 'password',
+      request,
     });
 
-    await auditLog('login', { userId: user.id, request });
+    if (!session.ok) {
+      reply.status(403).send({
+        error: 'Membership denied',
+        message: session.reason,
+        code: 'membership_denied',
+      });
+      return;
+    }
+
     reply.send({
       message: 'Login successful',
       user: {
@@ -301,11 +318,16 @@ async function login(request: FastifyRequest, reply: FastifyReply) {
           totalFiles: 0,
           lastReset: new Date().toISOString(),
         },
+        organizationId: session.admission.organizationId,
+        organizationCode: session.admission.organizationCode,
+        membershipRole: session.admission.role,
+        permissions: session.admission.permissions,
+        experiences: session.admission.experiences,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString()
       },
-      token: accessToken,
-      refreshToken
+      token: session.accessToken,
+      refreshToken: session.refreshToken
     });
 
   } catch (error) {
@@ -432,11 +454,29 @@ async function getProfile(request: FastifyRequest, reply: FastifyReply) {
       user.subscriptionTier || 'free',
     );
 
+    const { admitUserToOrganization } = await import('../services/organization-admission.js');
+    const admission = await admitUserToOrganization({
+      userId: user.id,
+      email: user.email,
+      authMethod: 'google',
+    });
+
     reply.send({
       user: {
         ...user,
         role: effectiveAccess.role as any,
         subscriptionTier: effectiveAccess.subscriptionTier as any,
+        ...(admission.ok
+          ? {
+              organizationId: admission.organizationId,
+              organizationCode: admission.organizationCode,
+              organizationSlug: admission.organizationSlug,
+              membershipId: admission.membershipId,
+              membershipRole: admission.role,
+              permissions: admission.permissions,
+              experiences: admission.experiences,
+            }
+          : {}),
       }
     });
 
@@ -741,26 +781,33 @@ async function googleCallback(request: FastifyRequest, reply: FastifyReply) {
       user.subscriptionTier || 'free',
     );
 
-    // Generate JWT tokens
-    const accessToken = generateToken({
-      id: user.id,
+    const { issueInstitutionSession } = await import('../services/institution-session.js');
+    const session = await issueInstitutionSession({
+      userId: user.id,
       email: user.email,
       name: user.name,
-      role: effectiveAccess.role || 'casual'
-    });
-    
-    const refreshToken = generateRefreshToken({
-      id: user.id,
-      email: user.email
+      platformRole: effectiveAccess.role || 'casual',
+      authMethod: 'google',
+      request,
     });
 
-    // One-time code avoids JWTs in the URL/browser history (Redis preferred; memory fallback)
+    if (!session.ok) {
+      reply.redirect(
+        `${getFrontendUrl()}/auth/error?message=${encodeURIComponent(session.reason)}`,
+      );
+      return;
+    }
+
     const oauthCode = randomUUID();
-    await storeOAuthCode(oauthCode, { accessToken, refreshToken });
+    await storeOAuthCode(oauthCode, {
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+    });
     const redirectUrl = `${getFrontendUrl()}/auth/callback?code=${oauthCode}`;
     logger.info('Google OAuth success, redirecting to frontend', {
       frontendUrl: getFrontendUrl(),
       redis: isRedisAvailable,
+      organizationId: session.admission.organizationId,
     });
     reply.redirect(redirectUrl);
 

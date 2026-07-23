@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import { z } from 'zod';
 import { authenticateApiKey, authenticateToken } from '../middleware/auth.js';
+import { attachTenantContext } from '../middleware/tenant-context.js';
 import { config } from '../config/config.js';
 import {
   getAcquisitionOverview,
@@ -130,18 +131,36 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
   });
 
   fastify.get('/overview', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateToken, attachTenantContext],
   }, async (request, reply) => {
     const userId = (request as any).user.id as string;
-    const overview = await getAcquisitionOverview(userId);
-    return reply.send({ success: true, data: overview });
+    const organizationId = request.tenantContext?.organizationId;
+    const overview = await getAcquisitionOverview(userId, organizationId);
+    return reply.send({
+      success: true,
+      data: {
+        ...overview,
+        tenant: request.tenantContext
+          ? {
+              organizationId: request.tenantContext.organizationId,
+              organizationCode: request.tenantContext.organizationCode,
+              role: request.tenantContext.role,
+              permissions: request.tenantContext.permissions,
+              experiences: request.tenantContext.experiences,
+            }
+          : null,
+      },
+    });
   });
 
   fastify.get('/sources', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateToken, attachTenantContext],
   }, async (request, reply) => {
     const userId = (request as any).user.id as string;
-    const sources = await listSourceConnections(userId);
+    const sources = await listSourceConnections(
+      userId,
+      request.tenantContext?.organizationId,
+    );
     return reply.send({ success: true, data: sources });
   });
 
@@ -187,12 +206,16 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
   });
 
   fastify.get('/people', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateToken, attachTenantContext],
   }, async (request, reply) => {
     const userId = (request as any).user.id as string;
     const query = request.query as { limit?: string };
     const limit = Math.min(Number(query.limit) || 50, 200);
-    const people = await listAcquisitionPeople(userId, limit);
+    const people = await listAcquisitionPeople(
+      userId,
+      limit,
+      request.tenantContext?.organizationId,
+    );
     return reply.send({ success: true, data: people });
   });
 
@@ -235,12 +258,16 @@ export async function acquisitionRoutes(fastify: FastifyInstance, _options: Fast
   });
 
   fastify.get('/events', {
-    preHandler: [authenticateToken],
+    preHandler: [authenticateToken, attachTenantContext],
   }, async (request, reply) => {
     const userId = (request as any).user.id as string;
     const query = request.query as { limit?: string };
     const limit = Math.min(Number(query.limit) || 50, 200);
-    const events = await listRecentEvents(userId, limit);
+    const events = await listRecentEvents(
+      userId,
+      limit,
+      request.tenantContext?.organizationId,
+    );
     return reply.send({ success: true, data: events });
   });
 

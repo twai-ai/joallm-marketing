@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import {
   acquisitionEvents,
@@ -1516,11 +1516,25 @@ export async function ingestMetaPageWebhook(options: {
   }
 }
 
-export async function listAcquisitionPeople(ownerUserId: string, limit = 50) {
+export async function listAcquisitionPeople(
+  ownerUserId: string,
+  limit = 50,
+  organizationId?: string | null,
+) {
+  const scope = organizationId
+    ? or(
+        eq(acquisitionPersons.organizationId, organizationId),
+        and(
+          eq(acquisitionPersons.ownerUserId, ownerUserId),
+          isNull(acquisitionPersons.organizationId),
+        ),
+      )
+    : eq(acquisitionPersons.ownerUserId, ownerUserId);
+
   return db
     .select()
     .from(acquisitionPersons)
-    .where(eq(acquisitionPersons.ownerUserId, ownerUserId))
+    .where(scope)
     .orderBy(desc(acquisitionPersons.updatedAt))
     .limit(limit);
 }
@@ -1539,60 +1553,112 @@ export async function getPersonTimeline(ownerUserId: string, personId: string, l
   };
 }
 
-export async function listSourceConnections(ownerUserId: string) {
+export async function listSourceConnections(
+  ownerUserId: string,
+  organizationId?: string | null,
+) {
+  const scope = organizationId
+    ? or(
+        eq(acquisitionSourceConnections.organizationId, organizationId),
+        and(
+          eq(acquisitionSourceConnections.ownerUserId, ownerUserId),
+          isNull(acquisitionSourceConnections.organizationId),
+        ),
+      )
+    : eq(acquisitionSourceConnections.ownerUserId, ownerUserId);
+
   return db
     .select()
     .from(acquisitionSourceConnections)
-    .where(eq(acquisitionSourceConnections.ownerUserId, ownerUserId))
+    .where(scope)
     .orderBy(desc(acquisitionSourceConnections.updatedAt));
 }
 
-export async function listRecentEvents(ownerUserId: string, limit = 50) {
+export async function listRecentEvents(
+  ownerUserId: string,
+  limit = 50,
+  organizationId?: string | null,
+) {
+  const scope = organizationId
+    ? or(
+        eq(acquisitionEvents.organizationId, organizationId),
+        and(
+          eq(acquisitionEvents.ownerUserId, ownerUserId),
+          isNull(acquisitionEvents.organizationId),
+        ),
+      )
+    : eq(acquisitionEvents.ownerUserId, ownerUserId);
+
   return db
     .select()
     .from(acquisitionEvents)
-    .where(eq(acquisitionEvents.ownerUserId, ownerUserId))
+    .where(scope)
     .orderBy(desc(acquisitionEvents.occurredAt))
     .limit(limit);
 }
 
-export async function getAcquisitionOverview(ownerUserId: string) {
+export async function getAcquisitionOverview(
+  ownerUserId: string,
+  organizationId?: string | null,
+) {
+  const personScope = organizationId
+    ? or(
+        eq(acquisitionPersons.organizationId, organizationId),
+        and(
+          eq(acquisitionPersons.ownerUserId, ownerUserId),
+          isNull(acquisitionPersons.organizationId),
+        ),
+      )
+    : eq(acquisitionPersons.ownerUserId, ownerUserId);
+
+  const eventScope = organizationId
+    ? or(
+        eq(acquisitionEvents.organizationId, organizationId),
+        and(
+          eq(acquisitionEvents.ownerUserId, ownerUserId),
+          isNull(acquisitionEvents.organizationId),
+        ),
+      )
+    : eq(acquisitionEvents.ownerUserId, ownerUserId);
+
+  const interactionScope = organizationId
+    ? or(
+        eq(acquisitionInteractions.organizationId, organizationId),
+        and(
+          eq(acquisitionInteractions.ownerUserId, ownerUserId),
+          isNull(acquisitionInteractions.organizationId),
+        ),
+      )
+    : eq(acquisitionInteractions.ownerUserId, ownerUserId);
+
   const [peopleCount] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(acquisitionPersons)
-    .where(eq(acquisitionPersons.ownerUserId, ownerUserId));
+    .where(personScope);
 
   const [eventCount] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(acquisitionEvents)
-    .where(eq(acquisitionEvents.ownerUserId, ownerUserId));
+    .where(eventScope);
 
   const [whatsappEventCount] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(acquisitionEvents)
-    .where(
-      and(
-        eq(acquisitionEvents.ownerUserId, ownerUserId),
-        eq(acquisitionEvents.channel, 'whatsapp'),
-      ),
-    );
+    .where(and(eventScope!, eq(acquisitionEvents.channel, 'whatsapp')));
 
   const [pageEventCount] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(acquisitionEvents)
     .where(
-      and(
-        eq(acquisitionEvents.ownerUserId, ownerUserId),
-        inArray(acquisitionEvents.channel, ['facebook', 'instagram']),
-      ),
+      and(eventScope!, inArray(acquisitionEvents.channel, ['facebook', 'instagram'])),
     );
 
   const [interactionCount] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(acquisitionInteractions)
-    .where(eq(acquisitionInteractions.ownerUserId, ownerUserId));
+    .where(interactionScope);
 
-  const sources = await listSourceConnections(ownerUserId);
+  const sources = await listSourceConnections(ownerUserId, organizationId);
 
   let channels: Awaited<ReturnType<typeof listStudioChannels>> = [];
   let connectors: Awaited<ReturnType<typeof listPlatformConnectors>> = [];

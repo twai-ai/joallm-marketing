@@ -48,6 +48,8 @@ export const organizations = pgTable('organizations', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
+  /** Immutable institutional identity (e.g. ATRISI). Slug is URL-facing. */
+  code: text('code').unique(),
   domain: text('domain'),
   plan: text('plan', { enum: ['starter', 'team', 'enterprise'] }).default('starter'),
   settings: jsonb('settings').$type<Record<string, any>>().default({}),
@@ -56,6 +58,22 @@ export const organizations = pgTable('organizations', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
   createdByIdx: index('organizations_created_by_idx').on(table.createdBy),
+  codeIdx: index('organizations_code_idx').on(table.code),
+}));
+
+export const organizationDomains = pgTable('organization_domains', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  domain: text('domain').notNull(),
+  isVerified: boolean('is_verified').default(false).notNull(),
+  autoJoinEnabled: boolean('auto_join_enabled').default(false).notNull(),
+  allowedAuthMethods: jsonb('allowed_auth_methods').$type<string[]>().default(['google', 'password']),
+  defaultRole: text('default_role', { enum: ['owner', 'admin', 'member', 'viewer'] }).default('member').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  organizationIdIdx: index('organization_domains_organization_id_idx').on(table.organizationId),
+  domainUnique: unique('organization_domains_domain_unique').on(table.domain),
 }));
 
 export const workspaces = pgTable('workspaces', {
@@ -80,7 +98,7 @@ export const memberships = pgTable('memberships', {
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
   role: text('role', { enum: ['owner', 'admin', 'member', 'viewer'] }).default('member').notNull(),
-  status: text('status', { enum: ['active', 'invited', 'suspended'] }).default('active').notNull(),
+  status: text('status', { enum: ['active', 'invited', 'suspended', 'revoked'] }).default('active').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -473,7 +491,15 @@ export const organizationsRelations = relations(organizations, ({ one, many }) =
   }),
   workspaces: many(workspaces),
   memberships: many(memberships),
+  domains: many(organizationDomains),
   inferenceRuns: many(inferenceRuns),
+}));
+
+export const organizationDomainsRelations = relations(organizationDomains, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationDomains.organizationId],
+    references: [organizations.id],
+  }),
 }));
 
 export const workspacesRelations = relations(workspaces, ({ one, many }) => ({

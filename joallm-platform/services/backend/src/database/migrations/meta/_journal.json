@@ -218,6 +218,13 @@
       "when": 1775520000000,
       "tag": "0030_integration_platform_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1775606400000,
+      "tag": "0031_institution_identity",
+      "breakpoints": true
     }
   ]
 }

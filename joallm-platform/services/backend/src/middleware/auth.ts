@@ -105,6 +105,14 @@ export interface AuthenticatedUser {
   email: string;
   name?: string;
   role: 'casual' | 'premium' | 'admin' | 'superuser' | 'pending_2fa';
+  /** Institution tenant claims (Platform Identity) */
+  organizationId?: string;
+  organizationCode?: string;
+  organizationSlug?: string;
+  membershipId?: string;
+  membershipRole?: 'owner' | 'admin' | 'member' | 'viewer';
+  permissions?: string[];
+  experiences?: string[];
   iat?: number;
   exp?: number;
 }
@@ -113,9 +121,23 @@ export interface AuthenticatedRequest extends FastifyRequest {
   user?: AuthenticatedUser;
 }
 
+export type SessionClaims = {
+  id: string;
+  email: string;
+  role: string;
+  name?: string;
+  organizationId?: string;
+  organizationCode?: string;
+  organizationSlug?: string;
+  membershipId?: string;
+  membershipRole?: string;
+  permissions?: string[];
+  experiences?: string[];
+};
+
 // JWT token generation
 export function generateToken(
-  user: { id: string; email: string; role: string; name?: string },
+  user: SessionClaims,
   expiresIn: SignOptions['expiresIn'] = '24h'
 ): string {
   return jwt.sign(
@@ -123,7 +145,14 @@ export function generateToken(
       id: user.id,
       email: user.email,
       role: user.role,
-      name: user.name
+      name: user.name,
+      organizationId: user.organizationId,
+      organizationCode: user.organizationCode,
+      organizationSlug: user.organizationSlug,
+      membershipId: user.membershipId,
+      membershipRole: user.membershipRole,
+      permissions: user.permissions,
+      experiences: user.experiences,
     },
     config.jwtSecret,
     { expiresIn } // default 24 hour access token

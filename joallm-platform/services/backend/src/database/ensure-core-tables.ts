@@ -363,6 +363,7 @@ export async function ensureCorePlatformTables(): Promise<void> {
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
         "name" text NOT NULL,
         "slug" text NOT NULL,
+        "code" text,
         "domain" text,
         "plan" text DEFAULT 'starter',
         "settings" jsonb DEFAULT '{}'::jsonb,
@@ -370,6 +371,29 @@ export async function ensureCorePlatformTables(): Promise<void> {
         "created_at" timestamp DEFAULT NOW() NOT NULL,
         "updated_at" timestamp DEFAULT NOW() NOT NULL,
         CONSTRAINT "organizations_slug_unique" UNIQUE ("slug")
+      )
+    `,
+  );
+  await exec('organizations.code', sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "code" text`);
+  await exec(
+    'organizations.code_idx',
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "organizations_code_unique" ON "organizations" ("code") WHERE "code" IS NOT NULL`,
+  );
+
+  await exec(
+    'organization_domains',
+    sql`
+      CREATE TABLE IF NOT EXISTS "organization_domains" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "organization_id" uuid NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
+        "domain" text NOT NULL,
+        "is_verified" boolean NOT NULL DEFAULT false,
+        "auto_join_enabled" boolean NOT NULL DEFAULT false,
+        "allowed_auth_methods" jsonb DEFAULT '["google","password"]'::jsonb,
+        "default_role" text NOT NULL DEFAULT 'member',
+        "created_at" timestamp NOT NULL DEFAULT NOW(),
+        "updated_at" timestamp NOT NULL DEFAULT NOW(),
+        CONSTRAINT "organization_domains_domain_unique" UNIQUE ("domain")
       )
     `,
   );
@@ -755,4 +779,14 @@ export async function ensureCorePlatformTables(): Promise<void> {
   );
 
   logger.info('✓ Core platform tables ensured');
+
+  try {
+    const { ensureAtrisiInstitution } = await import('../services/organization-admission.js');
+    await ensureAtrisiInstitution();
+    logger.info('✓ ATRISI institution admission seed ensured');
+  } catch (error) {
+    logger.warn('ATRISI institution seed skipped', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

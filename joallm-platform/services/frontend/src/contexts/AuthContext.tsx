@@ -16,6 +16,13 @@ export interface User {
     totalFiles: number;
     lastReset: string;
   };
+  organizationId?: string;
+  organizationCode?: string;
+  organizationSlug?: string;
+  membershipId?: string;
+  membershipRole?: 'owner' | 'admin' | 'member' | 'viewer';
+  permissions?: string[];
+  experiences?: string[];
   createdAt: string;
   updatedAt: string;
 }

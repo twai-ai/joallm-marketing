@@ -155,6 +155,8 @@ export function useStorySession(storyId: string | undefined) {
     mutationFn: async (beatId: string) => {
       const res = await apiClient.post<ApiOk<StorySession> & { provider?: string }>(
         API_ENDPOINTS.story.brandBeat(storyId!, beatId),
+        undefined,
+        { showErrorToast: false },
       );
       return res;
     },
@@ -164,7 +166,17 @@ export function useStorySession(storyId: string | undefined) {
         res.provider ? `Beat branded with ${res.provider}` : 'Beat branded with ATRISI look',
       );
     },
-    onError: () => showError('Could not brand beat — check Creative AI keys'),
+    onError: (error: unknown) => {
+      const message =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message: string }).message)
+          : 'Could not brand beat';
+      if (/402|insufficient credits/i.test(message)) {
+        showError('Creative AI credits exhausted — add Ideogram key in Settings (or top up FLUX)');
+      } else {
+        showError(message || 'Could not brand beat — check Creative AI keys');
+      }
+    },
   });
 
   const similarBeatMutation = useMutation({
@@ -173,7 +185,7 @@ export function useStorySession(storyId: string | undefined) {
         ApiOk<StorySession> & { provider?: string; addedBeatIds?: string[] }
       >(API_ENDPOINTS.story.similarBeat(storyId!, input.beatId), {
         count: input.count || 1,
-      });
+      }, { showErrorToast: false });
       return res;
     },
     onSuccess: (res) => {
@@ -185,7 +197,13 @@ export function useStorySession(storyId: string | undefined) {
           : 'Similar visual added — copy inherited from source',
       );
     },
-    onError: () => showError('Could not generate similar — check Creative AI keys'),
+    onError: (error: unknown) => {
+      const message =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message: string }).message)
+          : 'Could not generate similar';
+      showError(message || 'Could not generate similar — check Creative AI keys');
+    },
   });
 
   const brandKitMutation = useMutation({
@@ -206,24 +224,66 @@ export function useStorySession(storyId: string | undefined) {
     onError: () => showError('Could not save brand references'),
   });
 
-  const exportPptx = useCallback(async () => {
-    if (!storyId) return;
-    try {
-      const { blob, filename } = await apiClient.downloadBlob(
-        API_ENDPOINTS.story.exportPptx(storyId),
-        'atrisi-story.pptx',
+  const downloadExport = useCallback(
+    async (
+      endpoint: string,
+      fallbackFilename: string,
+      successLabel: string,
+    ) => {
+      if (!storyId) return;
+      try {
+        const { blob, filename } = await apiClient.downloadBlob(endpoint, fallbackFilename);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        showSuccess(successLabel);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : `Could not export ${successLabel}`;
+        showError(message);
+      }
+    },
+    [storyId],
+  );
+
+  const exportStory = useCallback(
+    async (format: 'pptx' | 'markdown' | 'json' | 'html') => {
+      if (!storyId) return;
+      if (format === 'pptx') {
+        await downloadExport(
+          API_ENDPOINTS.story.exportPptx(storyId),
+          'atrisi-story.pptx',
+          'Deck (PPTX) downloaded',
+        );
+        return;
+      }
+      if (format === 'markdown') {
+        await downloadExport(
+          API_ENDPOINTS.story.exportMarkdown(storyId),
+          'atrisi-story.md',
+          'Carousel brief downloaded',
+        );
+        return;
+      }
+      if (format === 'json') {
+        await downloadExport(
+          API_ENDPOINTS.story.exportJson(storyId),
+          'atrisi-story.json',
+          'Story JSON downloaded',
+        );
+        return;
+      }
+      await downloadExport(
+        API_ENDPOINTS.story.exportHtml(storyId),
+        'atrisi-story.html',
+        'Visual HTML pack downloaded',
       );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      showSuccess('PPTX downloaded');
-    } catch {
-      showError('Could not export PPTX');
-    }
-  }, [storyId]);
+    },
+    [downloadExport, storyId],
+  );
 
   return {
     story: storyQuery.data,
@@ -245,6 +305,6 @@ export function useStorySession(storyId: string | undefined) {
     saveBrandKit: brandKitMutation.mutateAsync,
     isSavingBrandKit: brandKitMutation.isPending,
     brandKit: readStoryBrandKit(storyQuery.data?.metadata),
-    exportPptx,
+    exportStory,
   };
 }

@@ -769,7 +769,7 @@ async function generateWithFlux(options: {
   throw new Error('FLUX generation timed out');
 }
 
-async function pickProvider(
+async function listExecutableProviders(
   userId: string,
   style: ImageGenerationStyle,
   override?: ImageGenerationProviderId | null,
@@ -777,11 +777,10 @@ async function pickProvider(
     hasReferences?: boolean;
     referenceMode?: 'style' | 'edit';
     transparentBackground?: boolean;
-    /** Prefer Ideogram when the brief has exact headline/CTA (better typography) */
     preferLegibleText?: boolean;
   },
-): Promise<{ provider: ExecutableProvider; apiKey: string; source: 'byok' | 'platform' }> {
-  const candidates: ExecutableProvider[] = [];
+): Promise<Array<{ provider: ExecutableProvider; apiKey: string; source: 'byok' | 'platform' }>> {
+  const order: ExecutableProvider[] = [];
 
   if (override && override !== 'auto') {
     if (!isExecutable(override)) {
@@ -792,40 +791,49 @@ async function pickProvider(
     if (options?.transparentBackground && override === 'flux') {
       throw new Error('Transparent PNG is Ideogram-only. Switch provider to Ideogram or Auto.');
     }
-    candidates.push(override);
+    order.push(override);
   } else if (options?.transparentBackground) {
-    candidates.push('ideogram');
+    order.push('ideogram');
   } else if (options?.preferLegibleText) {
-    // FLUX is weak at letter-perfect poster text — Ideogram first
-    candidates.push('ideogram', 'flux');
+    order.push('ideogram', 'flux');
   } else if (options?.hasReferences) {
-    // Style match → Ideogram; edit/remix → FLUX
-    if (options.referenceMode === 'edit') {
-      candidates.push('flux', 'ideogram');
-    } else {
-      candidates.push('ideogram', 'flux');
-    }
+    // Ideogram first for both style + edit — FLUX remix is nice but often credit-limited
+    order.push('ideogram', 'flux');
   } else {
     for (const id of preferredProvidersForStyle(style)) {
-      if (isExecutable(id) && !candidates.includes(id)) candidates.push(id);
+      if (isExecutable(id) && !order.includes(id)) order.push(id);
     }
     for (const id of EXECUTABLE_PROVIDERS) {
-      if (!candidates.includes(id)) candidates.push(id);
+      if (!order.includes(id)) order.push(id);
     }
   }
 
+  const resolved: Array<{ provider: ExecutableProvider; apiKey: string; source: 'byok' | 'platform' }> = [];
   const missing: string[] = [];
-  for (const provider of candidates) {
-    const resolved = await resolveCreativeProviderApiKey(userId, provider);
-    if (resolved.key) {
-      return { provider, apiKey: resolved.key, source: resolved.source === 'byok' ? 'byok' : 'platform' };
+  for (const provider of order) {
+    const key = await resolveCreativeProviderApiKey(userId, provider);
+    if (key.key) {
+      resolved.push({
+        provider,
+        apiKey: key.key,
+        source: key.source === 'byok' ? 'byok' : 'platform',
+      });
+    } else {
+      missing.push(provider);
     }
-    missing.push(provider);
   }
 
-  throw new Error(
-    `No Creative AI key configured for ${missing.join(' / ')}. Set IDEOGRAM_API_KEY and/or BFL_API_KEY on the backend, or add BYOK in Settings.`,
-  );
+  if (resolved.length === 0) {
+    throw new Error(
+      `No Creative AI key configured for ${missing.join(' / ') || 'ideogram / flux'}. Set IDEOGRAM_API_KEY and/or BFL_API_KEY on the backend, or add BYOK in Settings.`,
+    );
+  }
+  return resolved;
+}
+
+function isProviderBillingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /402|insufficient credits|out of credits|billing|payment required|quota/i.test(message);
 }
 
 /**
@@ -937,7 +945,7 @@ export async function generateCreativeImages(
 
   const preferLegibleText = hasExactText(input.precision);
   const dims = resolveDimensions(style, input.aspectRatio);
-  const { provider, apiKey, source } = await pickProvider(
+  const providerCandidates = await listExecutableProviders(
     input.ownerUserId,
     style,
     input.providerOverride,
@@ -953,62 +961,87 @@ export async function generateCreativeImages(
   const fluxSized = scaleFluxSize(dims.width, dims.height, quality);
 
   const started = Date.now();
-  logger.info('Creative AI generate start', {
-    userId: input.ownerUserId,
-    provider,
-    keySource: source,
-    style,
-    quality,
-    aspect: dims.label,
-    ideogramResolution: ideogramResolution || dims.ideogramAspect,
-    fluxSize: provider === 'flux' ? `${fluxSized.width}x${fluxSized.height}` : undefined,
-    magicPrompt: enhanced.magicPrompt,
-    styleType: enhanced.styleType,
-    palette: enhanced.paletteHex,
-    visionRefs: visionNotes.length,
-    referenceCount: references.length,
-    referenceMode: references.length ? referenceMode : undefined,
-    transparentBackground,
-    variantCount,
-  });
-
   let outputs: Array<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }> = [];
+  let provider: ExecutableProvider = providerCandidates[0].provider;
+  let source: 'byok' | 'platform' = providerCandidates[0].source;
+  let lastError: unknown;
 
-  try {
-    if (provider === 'ideogram') {
-      outputs = await generateWithIdeogram({
-        apiKey,
-        prompt,
-        quality,
-        ideogramAspect: dims.ideogramAspect,
-        magicPrompt: enhanced.magicPrompt,
-        styleType: enhanced.styleType,
-        paletteHex: enhanced.paletteHex,
-        references,
-        transparentBackground,
-        variantCount,
-      });
-    } else {
-      // FLUX has no native multi-variant in one call — loop for variants
-      for (let i = 0; i < variantCount; i += 1) {
-        const one = await generateWithFlux({
-          apiKey,
+  for (const candidate of providerCandidates) {
+    provider = candidate.provider;
+    source = candidate.source;
+    logger.info('Creative AI generate start', {
+      userId: input.ownerUserId,
+      provider,
+      keySource: source,
+      style,
+      quality,
+      aspect: dims.label,
+      ideogramResolution: ideogramResolution || dims.ideogramAspect,
+      fluxSize: provider === 'flux' ? `${fluxSized.width}x${fluxSized.height}` : undefined,
+      magicPrompt: enhanced.magicPrompt,
+      styleType: enhanced.styleType,
+      palette: enhanced.paletteHex,
+      visionRefs: visionNotes.length,
+      referenceCount: references.length,
+      referenceMode: references.length ? referenceMode : undefined,
+      transparentBackground,
+      variantCount,
+    });
+
+    try {
+      if (provider === 'ideogram') {
+        outputs = await generateWithIdeogram({
+          apiKey: candidate.apiKey,
           prompt,
           quality,
-          width: dims.width,
-          height: dims.height,
-          style,
+          ideogramAspect: dims.ideogramAspect,
+          magicPrompt: enhanced.magicPrompt,
+          styleType: enhanced.styleType,
+          paletteHex: enhanced.paletteHex,
           references,
+          transparentBackground,
+          variantCount,
         });
-        outputs.push(one);
+      } else {
+        outputs = [];
+        for (let i = 0; i < variantCount; i += 1) {
+          const one = await generateWithFlux({
+            apiKey: candidate.apiKey,
+            prompt,
+            quality,
+            width: dims.width,
+            height: dims.height,
+            style,
+            references,
+          });
+          outputs.push(one);
+        }
+      }
+      lastError = undefined;
+      break;
+    } catch (error) {
+      lastError = error;
+      logger.error('Creative AI generate failed', {
+        provider,
+        error: error instanceof Error ? error.message : String(error),
+        willRetry: isProviderBillingError(error) && providerCandidates.indexOf(candidate) < providerCandidates.length - 1,
+      });
+      if (!isProviderBillingError(error) || providerCandidates.indexOf(candidate) >= providerCandidates.length - 1) {
+        // Non-billing errors: still try next provider when available (e.g. FLUX down)
+        const hasNext = providerCandidates.indexOf(candidate) < providerCandidates.length - 1;
+        if (!hasNext) throw error;
+        logger.warn('Creative AI trying next provider after failure', {
+          failed: provider,
+          next: providerCandidates[providerCandidates.indexOf(candidate) + 1]?.provider,
+        });
       }
     }
-  } catch (error) {
-    logger.error('Creative AI generate failed', {
-      provider,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
+  }
+
+  if (outputs.length === 0) {
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('Creative AI returned no images');
   }
 
   const safeTitle = (input.titleHint || 'creative')

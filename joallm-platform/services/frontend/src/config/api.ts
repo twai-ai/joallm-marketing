@@ -108,5 +108,8 @@ export const API_ENDPOINTS = {
       `${API_BASE_URL}/api/story/${storyId}/beats/${beatId}/similar`,
     brandKit: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/brand-kit`,
     exportPptx: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/pptx`,
+    exportMarkdown: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/markdown`,
+    exportJson: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/json`,
+    exportHtml: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/html`,
   },
 };

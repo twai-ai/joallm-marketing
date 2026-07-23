@@ -349,7 +349,8 @@ export async function brandStoryBeat(
     aspectRatio: '16x9',
     titleHint: beat.title || 'ATRISI branded beat',
     referenceFileIds: brandReferenceIds(kit, beat.fileId!),
-    referenceMode: 'edit',
+    // Style refs → Ideogram first; auto-falls back if Ideogram fails / FLUX if needed
+    referenceMode: 'style',
     analyzeReferences: true,
     variantCount: 1,
     metadata: {
@@ -602,6 +603,45 @@ export async function proposeStoryline(
   return { story, source, visionCount: seen.visionCount, reordered, thesis: thesis || undefined };
 }
 
+function storySafeFilename(title: string, ext: string): string {
+  const safeName = (title || 'story')
+    .replace(/[^a-z0-9-_]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return `${safeName || 'atrisi-story'}.${ext}`;
+}
+
+async function loadBeatImageForExport(
+  ownerUserId: string,
+  fileId: string,
+  options?: { allowWebp?: boolean },
+): Promise<{ mime: string; base64: string } | null> {
+  try {
+    const [fileRow] = await db
+      .select()
+      .from(files)
+      .where(and(eq(files.id, fileId), eq(files.userId, ownerUserId)))
+      .limit(1);
+    if (!fileRow?.storageKey) return null;
+    const mime = (fileRow.mimetype || '').toLowerCase();
+    const isPng = mime.includes('png');
+    const isJpeg = mime.includes('jpeg') || mime.includes('jpg');
+    const isWebp = mime.includes('webp');
+    if (!isPng && !isJpeg && !(options?.allowWebp && isWebp)) {
+      return null;
+    }
+    const fileBuffer = await storageProvider.downloadFile(fileRow.storageKey);
+    const normalized = isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg';
+    return { mime: normalized, base64: fileBuffer.toString('base64') };
+  } catch (error) {
+    logger.warn('Story export image load failed', {
+      fileId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 export async function exportStoryPptx(
   ownerUserId: string,
   storyId: string,
@@ -613,8 +653,11 @@ export async function exportStoryPptx(
     throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
   }
 
-  const PptxGenJS = (await import('pptxgenjs')).default;
-  const pptx = new PptxGenJS();
+  const pptxMod = await import('pptxgenjs');
+  // CJS/ESM interop across Node + bundlers
+  const PptxCtor = (pptxMod as unknown as { default?: new () => any }).default
+    || (pptxMod as unknown as new () => any);
+  const pptx = new PptxCtor();
   pptx.author = 'ATRISI Marketing';
   pptx.title = story.title;
   pptx.subject = 'Story export — Studio creates. Products operate. Platform remembers.';
@@ -643,11 +686,15 @@ export async function exportStoryPptx(
       fontFace: 'Arial',
       bold: true,
     });
-    slide.addText('Story · Studio create workspace', {
+    const thesis =
+      typeof (story.metadata as Record<string, unknown>)?.lastThesis === 'string'
+        ? String((story.metadata as Record<string, unknown>).lastThesis)
+        : 'Story · Context → Proof → Ask';
+    slide.addText(thesis, {
       x: 0.5,
       y: 3.4,
       w: 9,
-      h: 0.4,
+      h: 0.8,
       fontSize: 14,
       color: '94A3B8',
       fontFace: 'Arial',
@@ -658,7 +705,7 @@ export async function exportStoryPptx(
     const slide = pptx.addSlide();
     slide.background = { color: 'F8FAFC' };
 
-    const role = ARC_LABELS[beat.arcRole || 'other'];
+    const role = ARC_LABELS[beat.arcRole || 'other'] || 'Beat';
     slide.addText(role.toUpperCase(), {
       x: 0.4,
       y: 0.25,
@@ -681,36 +728,23 @@ export async function exportStoryPptx(
     });
 
     if (beat.fileId) {
-      try {
-        const [fileRow] = await db
-          .select()
-          .from(files)
-          .where(and(eq(files.id, beat.fileId), eq(files.userId, ownerUserId)))
-          .limit(1);
-        const storageKey = fileRow?.storageKey;
-        if (storageKey) {
-          const fileBuffer = await storageProvider.downloadFile(storageKey);
-          const mime = fileRow.mimetype || 'image/png';
-          const ext = mime.includes('jpeg') || mime.includes('jpg')
-            ? 'jpg'
-            : mime.includes('webp')
-              ? 'webp'
-              : 'png';
+      const image = await loadBeatImageForExport(ownerUserId, beat.fileId);
+      if (image) {
+        try {
           slide.addImage({
-            data: `data:${mime};base64,${fileBuffer.toString('base64')}`,
+            data: `data:${image.mime};base64,${image.base64}`,
             x: 0.4,
             y: 1.15,
             w: 9.2,
             h: 3.6,
             sizing: { type: 'contain', w: 9.2, h: 3.6 },
           });
-          void ext;
+        } catch (error) {
+          logger.warn('Story PPTX addImage failed', {
+            beatId: beat.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
-      } catch (error) {
-        logger.warn('Story PPTX image skip', {
-          beatId: beat.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
       }
     }
 
@@ -727,13 +761,197 @@ export async function exportStoryPptx(
     }
   }
 
-  const output = (await pptx.write({ outputType: 'nodebuffer' })) as Buffer;
-  const safeName = (story.title || 'story')
-    .replace(/[^a-z0-9-_]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
+  try {
+    const output = (await pptx.write({ outputType: 'nodebuffer' })) as Buffer;
+    return {
+      buffer: Buffer.isBuffer(output) ? output : Buffer.from(output),
+      filename: storySafeFilename(story.title, 'pptx'),
+    };
+  } catch (error) {
+    logger.error('Story PPTX write failed', {
+      storyId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw Object.assign(
+      new Error(
+        error instanceof Error
+          ? `PPTX export failed: ${error.message}`
+          : 'PPTX export failed',
+      ),
+      { statusCode: 500 },
+    );
+  }
+}
+
+/** Carousel / social copy brief aligned to Context → Proof → Ask */
+export async function exportStoryMarkdown(
+  ownerUserId: string,
+  storyId: string,
+): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  const story = await getOwnedStory(ownerUserId, storyId);
+  const beats = [...story.beats].sort((a, b) => a.order - b.order);
+  if (beats.length === 0) {
+    throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
+  }
+
+  const thesis =
+    typeof (story.metadata as Record<string, unknown>)?.lastThesis === 'string'
+      ? String((story.metadata as Record<string, unknown>).lastThesis)
+      : '';
+
+  const lines = [
+    `# ${story.title || 'Untitled story'}`,
+    '',
+    `> ATRISI Marketing · Story export`,
+    thesis ? `> Thesis: ${thesis}` : '',
+    '',
+    '## Arc',
+    '',
+  ].filter((line, index, arr) => !(line === '' && arr[index - 1] === ''));
+
+  for (const [index, beat] of beats.entries()) {
+    const role = ARC_LABELS[beat.arcRole || 'other'] || 'Beat';
+    lines.push(`### ${index + 1}. ${role} — ${beat.title || 'Untitled beat'}`);
+    lines.push('');
+    if (beat.caption) {
+      lines.push(beat.caption);
+      lines.push('');
+    }
+    lines.push(`- Arc role: ${role}`);
+    if (beat.fileId) lines.push(`- Asset file: ${beat.fileId}`);
+    lines.push('');
+  }
+
+  lines.push('---');
+  lines.push('_Studio creates · Products operate · Platform remembers_');
+  lines.push('');
+
   return {
-    buffer: Buffer.from(output),
-    filename: `${safeName || 'atrisi-story'}.pptx`,
+    buffer: Buffer.from(lines.join('\n'), 'utf8'),
+    filename: storySafeFilename(story.title, 'md'),
+    contentType: 'text/markdown; charset=utf-8',
   };
+}
+
+export async function exportStoryJson(
+  ownerUserId: string,
+  storyId: string,
+): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  const story = await getOwnedStory(ownerUserId, storyId);
+  const beats = [...story.beats].sort((a, b) => a.order - b.order);
+  if (beats.length === 0) {
+    throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
+  }
+
+  const payload = {
+    format: 'atrisi-story-v1',
+    exportedAt: new Date().toISOString(),
+    title: story.title,
+    arc: story.arc,
+    tone: story.tone,
+    thesis: (story.metadata as Record<string, unknown>)?.lastThesis ?? null,
+    brandKit: getStoryBrandKit(story.metadata as Record<string, unknown>),
+    beats: beats.map((beat, index) => ({
+      order: index + 1,
+      id: beat.id,
+      arcRole: beat.arcRole || 'other',
+      arcLabel: ARC_LABELS[beat.arcRole || 'other'] || 'Beat',
+      title: beat.title,
+      caption: beat.caption,
+      fileId: beat.fileId,
+      notes: beat.notes,
+    })),
+  };
+
+  return {
+    buffer: Buffer.from(JSON.stringify(payload, null, 2), 'utf8'),
+    filename: storySafeFilename(story.title, 'json'),
+    contentType: 'application/json; charset=utf-8',
+  };
+}
+
+/** Self-contained HTML carousel pack for review / handoff */
+export async function exportStoryHtml(
+  ownerUserId: string,
+  storyId: string,
+): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  const story = await getOwnedStory(ownerUserId, storyId);
+  const beats = [...story.beats].sort((a, b) => a.order - b.order);
+  if (beats.length === 0) {
+    throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
+  }
+
+  const thesis =
+    typeof (story.metadata as Record<string, unknown>)?.lastThesis === 'string'
+      ? String((story.metadata as Record<string, unknown>).lastThesis)
+      : '';
+
+  const cards: string[] = [];
+  for (const [index, beat] of beats.entries()) {
+    const role = ARC_LABELS[beat.arcRole || 'other'] || 'Beat';
+    let img = '';
+    if (beat.fileId) {
+      const image = await loadBeatImageForExport(ownerUserId, beat.fileId, { allowWebp: true });
+      if (image) {
+        img = `<img src="data:${image.mime};base64,${image.base64}" alt="" />`;
+      }
+    }
+    cards.push(`
+<article class="beat">
+  <p class="role">${escapeHtml(role)} · ${index + 1}/${beats.length}</p>
+  <h2>${escapeHtml(beat.title || 'Beat')}</h2>
+  ${img}
+  <p class="caption">${escapeHtml(beat.caption || '')}</p>
+</article>`);
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(story.title || 'ATRISI Story')}</title>
+<style>
+  :root { color-scheme: light; --ink:#0f172a; --muted:#64748b; --teal:#0d9488; --bg:#f1f5f9; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Georgia, "Times New Roman", serif; background:var(--bg); color:var(--ink); }
+  header { padding:2.5rem 1.5rem 1rem; max-width:720px; margin:0 auto; }
+  header .brand { font-family: system-ui, sans-serif; letter-spacing:.18em; text-transform:uppercase; font-size:.7rem; color:var(--teal); font-weight:700; }
+  header h1 { font-size:2rem; margin:.5rem 0; }
+  header .thesis { color:var(--muted); line-height:1.5; }
+  main { max-width:720px; margin:0 auto; padding:0 1.5rem 3rem; display:grid; gap:1.5rem; }
+  .beat { background:#fff; padding:1.25rem; border-radius:4px; }
+  .beat .role { font-family: system-ui, sans-serif; font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--teal); margin:0 0 .5rem; }
+  .beat h2 { margin:0 0 1rem; font-size:1.35rem; }
+  .beat img { width:100%; height:auto; display:block; margin:0 0 1rem; background:#e2e8f0; }
+  .beat .caption { margin:0; color:#334155; line-height:1.55; font-size:1rem; }
+  footer { text-align:center; padding:2rem; color:var(--muted); font-size:.8rem; font-family:system-ui,sans-serif; }
+</style>
+</head>
+<body>
+<header>
+  <p class="brand">ATRISI · Story</p>
+  <h1>${escapeHtml(story.title || 'Untitled story')}</h1>
+  ${thesis ? `<p class="thesis">${escapeHtml(thesis)}</p>` : ''}
+</header>
+<main>
+${cards.join('\n')}
+</main>
+<footer>Studio creates · Products operate · Platform remembers</footer>
+</body>
+</html>`;
+
+  return {
+    buffer: Buffer.from(html, 'utf8'),
+    filename: storySafeFilename(story.title, 'html'),
+    contentType: 'text/html; charset=utf-8',
+  };
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

@@ -44,7 +44,7 @@ export function StorySessionPage() {
     saveBrandKit,
     isSavingBrandKit,
     brandKit,
-    exportPptx,
+    exportStory,
   } = useStorySession(storyId);
   const { uploadMultiple, isUploading } = useDocuments();
 
@@ -54,6 +54,8 @@ export function StorySessionPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (!story) return;
@@ -208,15 +210,51 @@ export function StorySessionPage() {
           >
             Preview
           </button>
-          <button
-            type="button"
-            disabled={beats.length === 0}
-            onClick={() => void exportPptx()}
-            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-40"
-          >
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              disabled={beats.length === 0 || isExporting}
+              onClick={() => setExportOpen((open) => !open)}
+              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-40"
+            >
+              {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              <span className="hidden sm:inline">Export</span>
+            </button>
+            {exportOpen ? (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-40 cursor-default"
+                  aria-label="Close export menu"
+                  onClick={() => setExportOpen(false)}
+                />
+                <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                  {(
+                    [
+                      { id: 'pptx' as const, label: 'Deck (PPTX)', hint: 'Slides by arc' },
+                      { id: 'html' as const, label: 'Visual pack (HTML)', hint: 'Images + copy' },
+                      { id: 'markdown' as const, label: 'Carousel brief (MD)', hint: 'Titles & captions' },
+                      { id: 'json' as const, label: 'Story JSON', hint: 'Structured handoff' },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="flex w-full flex-col items-start px-4 py-2.5 text-left transition hover:bg-slate-50"
+                      onClick={() => {
+                        setExportOpen(false);
+                        setIsExporting(true);
+                        void exportStory(option.id).finally(() => setIsExporting(false));
+                      }}
+                    >
+                      <span className="text-sm font-medium text-slate-900">{option.label}</span>
+                      <span className="text-[11px] text-slate-400">{option.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
       </header>
 

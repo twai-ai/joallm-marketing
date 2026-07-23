@@ -12,6 +12,9 @@ import {
   brandStoryBeat,
   createStory,
   deleteStory,
+  exportStoryHtml,
+  exportStoryJson,
+  exportStoryMarkdown,
   exportStoryPptx,
   generateSimilarStoryBeats,
   getStory,
@@ -397,7 +400,7 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
   fastify.get('/:storyId/export/pptx', {
     preHandler: [authenticateToken],
     schema: {
-      description: 'Export Story as PPTX (Studio create → downloadable pack)',
+      description: 'Export Story as PPTX deck (Context → Proof → Ask slides)',
       tags: ['story'],
     },
   }, async (request, reply) => {
@@ -410,9 +413,81 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
         .header('Content-Disposition', `attachment; filename="${filename}"`)
         .send(buffer);
     } catch (error) {
+      logger.error('Story PPTX export failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return reply.status(statusFromError(error)).send({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to export PPTX',
+      });
+    }
+  });
+
+  fastify.get('/:storyId/export/markdown', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Export Story as markdown carousel brief',
+      tags: ['story'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as { user: { id: string } }).user.id;
+      const { storyId } = request.params as { storyId: string };
+      const { buffer, filename, contentType } = await exportStoryMarkdown(userId, storyId);
+      return reply
+        .header('Content-Type', contentType)
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(buffer);
+    } catch (error) {
+      return reply.status(statusFromError(error)).send({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to export markdown',
+      });
+    }
+  });
+
+  fastify.get('/:storyId/export/json', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Export Story as structured JSON pack',
+      tags: ['story'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as { user: { id: string } }).user.id;
+      const { storyId } = request.params as { storyId: string };
+      const { buffer, filename, contentType } = await exportStoryJson(userId, storyId);
+      return reply
+        .header('Content-Type', contentType)
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(buffer);
+    } catch (error) {
+      return reply.status(statusFromError(error)).send({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to export JSON',
+      });
+    }
+  });
+
+  fastify.get('/:storyId/export/html', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Export Story as self-contained HTML visual pack',
+      tags: ['story'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as { user: { id: string } }).user.id;
+      const { storyId } = request.params as { storyId: string };
+      const { buffer, filename, contentType } = await exportStoryHtml(userId, storyId);
+      return reply
+        .header('Content-Type', contentType)
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(buffer);
+    } catch (error) {
+      return reply.status(statusFromError(error)).send({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to export HTML',
       });
     }
   });

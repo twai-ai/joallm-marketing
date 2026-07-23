@@ -7,6 +7,7 @@ import { eq, desc, sql, and, inArray } from 'drizzle-orm';
 import { documentProcessingQueue, mediaProcessingQueue, isQueueAvailable } from '../services/queue.js';
 import { storageProvider } from '../services/file-storage.js';
 import { LocalFileStorage } from '../services/local-file-storage.js';
+import { buildInlineImageMetadata, resolveFileImageBytes } from '../services/file-bytes.js';
 import { DocumentProcessor } from '../services/document-processor.js';
 import { EmbeddingService } from '../services/embedding-service.js';
 import { logger } from '../utils/logger.js';
@@ -932,7 +933,8 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
       const shouldPersistOriginal = isMediaFile || isImageFile || storeOriginal;
       let persistedStorageKey: string | undefined;
       if (shouldPersistOriginal) {
-        const ext = data.filename.split('.').pop() || (isImageFile ? 'png' : 'bin');
+        const rawExt = (data.filename.split('.').pop() || (isImageFile ? 'png' : 'bin')).toLowerCase();
+        const ext = /^[a-z0-9]{1,8}$/.test(rawExt) ? rawExt : isImageFile ? 'png' : 'bin';
         const folder = isMediaFile ? 'media' : isImageFile ? 'images' : 'originals';
         persistedStorageKey = `${folder}/${userId}/${fileId}/original.${ext}`;
         const objectMeta: Record<string, string> = {
@@ -941,24 +943,73 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
           'original-filename': encodeURIComponent(data.filename),
           'uploaded-at': new Date().toISOString(),
         };
-        const storageUrl = await storageProvider.uploadFile(
-          buffer,
-          persistedStorageKey,
-          data.mimetype,
-          objectMeta,
-        );
-        await db.update(files)
-          .set({
-            storageKey: persistedStorageKey,
-            storageUrl,
-            storageProvider: config.storageProvider as 'volume' | 'cloudflare-r2' | 'aws-s3',
-            metadata: {
+        try {
+          const storageUrl = await storageProvider.uploadFile(
+            buffer,
+            persistedStorageKey,
+            data.mimetype,
+            objectMeta,
+          );
+          // Verify volume write — fail early if STORAGE_PATH is ephemeral / unwritable
+          const verify = await storageProvider.downloadFile(persistedStorageKey);
+          if (!verify?.length) {
+            throw new Error('Upload verify returned empty bytes');
+          }
+          const meta = isImageFile
+            ? buildInlineImageMetadata(buffer, data.mimetype, {
+                storeOriginal: true,
+                retainedFor: 'creative_ai_or_preview',
+              })
+            : {
+                storeOriginal: true,
+                retainedFor: isMediaFile ? 'media' : 'original',
+              };
+          await db.update(files)
+            .set({
+              storageKey: persistedStorageKey,
+              storageUrl,
+              storageProvider: config.storageProvider as 'volume' | 'cloudflare-r2' | 'aws-s3',
+              metadata: meta as any,
+            })
+            .where(eq(files.id, fileId));
+          logger.info(`Persisted original bytes for file ${fileId} at ${persistedStorageKey}`, {
+            inlineFallback: Boolean((meta as { inlineBase64?: string }).inlineBase64),
+            bytes: buffer.length,
+          });
+        } catch (storageError) {
+          logger.error(`Failed to persist original for ${fileId}`, {
+            key: persistedStorageKey,
+            storagePath: config.storagePath,
+            error: storageError instanceof Error ? storageError.message : String(storageError),
+          });
+          // Images: still keep DB-inline bytes so Story Brand/Similar can work without volume
+          if (isImageFile) {
+            const meta = buildInlineImageMetadata(buffer, data.mimetype, {
               storeOriginal: true,
-              retainedFor: isImageFile ? 'creative_ai_or_preview' : isMediaFile ? 'media' : 'original',
-            } as any,
-          })
-          .where(eq(files.id, fileId));
-        logger.info(`Persisted original bytes for file ${fileId} at ${persistedStorageKey}`);
+              retainedFor: 'creative_ai_or_preview',
+              storageWriteFailed: true,
+            });
+            if (!(meta as { inlineBase64?: string }).inlineBase64) {
+              throw Object.assign(
+                new Error(
+                  'Could not save image to storage. Mount a Railway volume and set STORAGE_PATH to that mount (e.g. /app/data/uploads), then re-upload.',
+                ),
+                { statusCode: 503 },
+              );
+            }
+            await db.update(files)
+              .set({
+                storageKey: persistedStorageKey,
+                storageProvider: config.storageProvider as 'volume' | 'cloudflare-r2' | 'aws-s3',
+                metadata: meta as any,
+                status: 'processed',
+              })
+              .where(eq(files.id, fileId));
+            logger.warn(`Image ${fileId} saved with DB-inline fallback only (volume write failed)`);
+          } else {
+            throw storageError;
+          }
+        }
       }
 
       // Queue file for background processing if queue is available
@@ -1184,24 +1235,33 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
       }
 
       const storageKey = (fileRecord as any).storageKey as string | null | undefined;
-      if (!storageKey) {
+      if (!storageKey && !(fileRecord.metadata as { inlineBase64?: string } | null)?.inlineBase64) {
         return reply.status(404).send({
           error: 'File not available',
           message: 'Original bytes were not retained. Re-generate or re-upload this creative.',
         });
       }
 
-      const fileBuffer = await storageProvider.downloadFile(storageKey);
-      const mime = fileRecord.mimetype?.startsWith('image/')
-        ? fileRecord.mimetype
-        : 'image/png';
+      const resolved = await resolveFileImageBytes({
+        id: fileRecord.id,
+        originalName: fileRecord.originalName,
+        filename: fileRecord.filename,
+        mimetype: fileRecord.mimetype,
+        storageKey,
+        metadata: fileRecord.metadata as Record<string, unknown> | null,
+      });
+      const mime = resolved.contentType.startsWith('image/')
+        ? resolved.contentType
+        : fileRecord.mimetype?.startsWith('image/')
+          ? fileRecord.mimetype
+          : 'image/png';
 
       reply
         .header('Content-Type', mime)
         .header('Content-Disposition', 'inline')
         .header('Cache-Control', 'private, max-age=3600')
-        .header('Content-Length', String(fileBuffer.length))
-        .send(fileBuffer);
+        .header('Content-Length', String(resolved.buffer.length))
+        .send(resolved.buffer);
     } catch (error) {
       logger.error('File preview error:', error);
       const status =

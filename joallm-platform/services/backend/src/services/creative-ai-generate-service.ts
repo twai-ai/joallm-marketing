@@ -13,6 +13,7 @@ import { files } from '../database/schema.js';
 import { config } from '../config/config.js';
 import { logger } from '../utils/logger.js';
 import { storageProvider } from './file-storage.js';
+import { buildInlineImageMetadata, resolveFileImageBytes } from './file-bytes.js';
 import {
   preferredProvidersForStyle,
   type ImageGenerationProviderId,
@@ -478,33 +479,42 @@ async function ingestGeneratedImage(options: {
   // Same layout as Story uploads so previews/export recovery share one tree
   const storageKey = `images/${options.ownerUserId}/${fileId}/original.${ext}`;
   const contentType = options.contentType.startsWith('image/') ? options.contentType : 'image/png';
-  const storageUrl = await storageProvider.uploadFile(
-    options.buffer,
-    storageKey,
-    contentType,
-    {
-      'user-id': options.ownerUserId,
-      'file-id': fileId,
-      'original-filename': encodeURIComponent(filename),
-      source: 'creative_ai',
-    },
-  );
+  let storageUrl: string | undefined;
+  let volumeOk = false;
 
-  // Confirm bytes landed — ephemeral disks / bad mounts fail here instead of later
   try {
-    const verify = await storageProvider.downloadFile(storageKey);
-    if (!verify?.length) {
-      throw new Error('Uploaded creative has zero bytes');
-    }
-  } catch (error) {
-    logger.error('Creative AI ingest verify failed — storage volume may be misconfigured', {
+    storageUrl = await storageProvider.uploadFile(
+      options.buffer,
       storageKey,
-      storagePathHint: 'Set STORAGE_PATH to the Railway volume mount (e.g. /app/data/uploads)',
+      contentType,
+      {
+        'user-id': options.ownerUserId,
+        'file-id': fileId,
+        'original-filename': encodeURIComponent(filename),
+        source: 'creative_ai',
+      },
+    );
+    const verify = await storageProvider.downloadFile(storageKey);
+    volumeOk = Boolean(verify?.length);
+  } catch (error) {
+    logger.error('Creative AI volume write failed — using DB inline fallback', {
+      storageKey,
+      storagePath: config.storagePath,
       error: error instanceof Error ? error.message : String(error),
     });
+  }
+
+  const metadata = buildInlineImageMetadata(options.buffer, contentType, {
+    source: 'creative_ai',
+    storeOriginal: true,
+    ...(options.metadata || {}),
+    ...(volumeOk ? {} : { storageWriteFailed: true }),
+  });
+
+  if (!volumeOk && !(metadata as { inlineBase64?: string }).inlineBase64) {
     throw Object.assign(
       new Error(
-        'Generated image could not be saved to storage. Check Railway volume mount / STORAGE_PATH, then retry.',
+        'Generated image could not be saved. Mount a Railway volume and set STORAGE_PATH, or use a smaller image.',
       ),
       { statusCode: 503 },
     );
@@ -514,8 +524,9 @@ async function ingestGeneratedImage(options: {
     .update(files)
     .set({
       storageKey,
-      storageUrl,
+      storageUrl: storageUrl || null,
       status: 'processed',
+      metadata: metadata as any,
     })
     .where(eq(files.id, fileId));
 
@@ -557,17 +568,20 @@ export async function loadReferenceImages(
     if (!row.mimetype?.startsWith('image/')) {
       throw new Error(`Reference must be an image (${row.originalName || fileId})`);
     }
-    if (!row.storageKey) {
-      missing.push(row.originalName || fileId);
-      continue;
-    }
     try {
-      const buffer = await storageProvider.downloadFile(row.storageKey);
+      const resolved = await resolveFileImageBytes({
+        id: row.id,
+        originalName: row.originalName,
+        filename: row.filename,
+        mimetype: row.mimetype,
+        storageKey: row.storageKey,
+        metadata: row.metadata as Record<string, unknown> | null,
+      });
       loaded.push({
         fileId: row.id,
         filename: row.originalName || row.filename || `reference-${fileId}.png`,
-        contentType: row.mimetype || 'image/png',
-        buffer,
+        contentType: resolved.contentType,
+        buffer: resolved.buffer,
       });
     } catch (error) {
       logger.warn('Creative reference download failed', {

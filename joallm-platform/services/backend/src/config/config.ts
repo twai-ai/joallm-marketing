@@ -147,15 +147,16 @@ if (!parseResult.success) {
 
 export const config = parseResult.data;
 
-// Prefer Railway volume mount when STORAGE_PATH is unset / still on ephemeral default
+// Only honor an explicitly set VOLUME_MOUNT_PATH (ignore zod default).
 {
-  const mount = (config.volumeMountPath || '').trim().replace(/\/$/, '');
-  const path = (config.storagePath || '').trim();
-  if (mount && (!path || path === '/app/data/uploads')) {
+  const mount = (process.env.VOLUME_MOUNT_PATH || '').trim().replace(/\/$/, '');
+  const explicitStorage = (process.env.STORAGE_PATH || '').trim();
+  if (mount && !explicitStorage) {
     const resolved = `${mount}/uploads`;
     (config as { storagePath: string }).storagePath = resolved;
     console.info(`📁 STORAGE_PATH resolved from VOLUME_MOUNT_PATH → ${resolved}`);
   }
+  console.info(`📁 Active file storage: provider=${config.storageProvider} path=${config.storagePath}`);
 }
 
 // Railway often injects host-only values; Google requires an absolute redirect URI.

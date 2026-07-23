@@ -148,19 +148,25 @@ async function loadBeatImage(
     .from(files)
     .where(and(eq(files.id, fileId), eq(files.userId, ownerUserId)))
     .limit(1);
-  if (!fileRow?.storageKey) return null;
+  if (!fileRow) return null;
   try {
-    const buffer = await storageProvider.downloadFile(fileRow.storageKey);
-    if (!buffer?.length) return null;
-    if (buffer.length > MAX_IMAGE_BYTES) {
-      logger.warn('Story vision skip: image too large', { fileId, bytes: buffer.length });
+    const { resolveFileImageBytes } = await import('./file-bytes.js');
+    const resolved = await resolveFileImageBytes({
+      id: fileRow.id,
+      originalName: fileRow.originalName,
+      filename: fileRow.filename,
+      mimetype: fileRow.mimetype,
+      storageKey: fileRow.storageKey,
+      metadata: fileRow.metadata as Record<string, unknown> | null,
+    });
+    if (!resolved.buffer?.length) return null;
+    if (resolved.buffer.length > MAX_IMAGE_BYTES) {
+      logger.warn('Story vision skip: image too large', { fileId, bytes: resolved.buffer.length });
       return null;
     }
-    const mime = fileRow.mimetype || 'image/jpeg';
-    if (!mime.startsWith('image/')) return null;
     return {
-      mime,
-      base64: buffer.toString('base64'),
+      mime: resolved.contentType,
+      base64: resolved.buffer.toString('base64'),
       originalName: fileRow.originalName || undefined,
     };
   } catch (error) {

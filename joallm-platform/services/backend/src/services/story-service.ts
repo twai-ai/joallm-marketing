@@ -9,7 +9,6 @@ import { createRequire } from 'module';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { files, storySessions, type StoryBeat } from '../database/schema.js';
-import { storageProvider } from './file-storage.js';
 import { generateCreativeImages } from './creative-ai-generate-service.js';
 import type { BrandThemeInput } from './creative-brand-theme.js';
 import {
@@ -602,17 +601,27 @@ async function loadBeatImageForExport(
       .from(files)
       .where(and(eq(files.id, fileId), eq(files.userId, ownerUserId)))
       .limit(1);
-    if (!fileRow?.storageKey) return null;
+    if (!fileRow) return null;
     const mime = (fileRow.mimetype || '').toLowerCase();
     const isPng = mime.includes('png');
     const isJpeg = mime.includes('jpeg') || mime.includes('jpg');
     const isWebp = mime.includes('webp');
-    if (!isPng && !isJpeg && !(options?.allowWebp && isWebp)) {
+    if (!isPng && !isJpeg && !(options?.allowWebp && isWebp) && !mime.startsWith('image/')) {
       return null;
     }
-    const fileBuffer = await storageProvider.downloadFile(fileRow.storageKey);
-    const normalized = isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg';
-    return { mime: normalized, base64: fileBuffer.toString('base64') };
+    const { resolveFileImageBytes } = await import('./file-bytes.js');
+    const resolved = await resolveFileImageBytes({
+      id: fileRow.id,
+      originalName: fileRow.originalName,
+      filename: fileRow.filename,
+      mimetype: fileRow.mimetype,
+      storageKey: fileRow.storageKey,
+      metadata: fileRow.metadata as Record<string, unknown> | null,
+    });
+    return {
+      mime: resolved.contentType,
+      base64: resolved.buffer.toString('base64'),
+    };
   } catch (error) {
     logger.warn('Story export image load failed', {
       fileId,

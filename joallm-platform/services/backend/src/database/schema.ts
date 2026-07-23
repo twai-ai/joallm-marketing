@@ -198,6 +198,13 @@ export const files = pgTable('files', {
     keywordSearchAvailable?: boolean;
     vectorSearchAvailable?: boolean;
     storeOriginal?: boolean;
+    retainedFor?: string;
+    /** DB fallback when volume storage is missing (Story / Creative AI images) */
+    inlineBase64?: string;
+    inlineContentType?: string;
+    inlineBytes?: number;
+    inlineStoredAt?: string;
+    inlineSkippedReason?: string;
     // Media fields (audio/video)
     mediaType?: 'video' | 'audio';
     duration?: number;        // seconds

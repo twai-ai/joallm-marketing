@@ -48,15 +48,42 @@ export class LocalFileStorage {
   }
 
   async downloadFile(key: string): Promise<Buffer> {
+    const filePath = this.getFilePath(key);
     try {
-      const filePath = this.getFilePath(key);
       const buffer = await fs.readFile(filePath);
-      
       logger.info(`✓ File downloaded from local storage: ${key} (${buffer.length} bytes)`);
       return buffer;
     } catch (error) {
+      // Extension / filename drift: try other originals in the same folder
+      const recovered = await this.tryRecoverFromFolder(key);
+      if (recovered) {
+        logger.warn(`Recovered storage bytes via sibling file for missing key: ${key}`);
+        return recovered;
+      }
       logger.error(`Failed to download file from local storage (${key}):`, error);
-      throw new Error(`File not found: ${key}`);
+      throw Object.assign(
+        new Error(
+          `File bytes missing from storage (${key}). Re-upload this image — the database record exists but the file is gone from the volume.`,
+        ),
+        { statusCode: 404, code: 'STORAGE_OBJECT_MISSING', storageKey: key },
+      );
+    }
+  }
+
+  /** When original.png is missing, use original.jpg / any image in the same folder. */
+  private async tryRecoverFromFolder(key: string): Promise<Buffer | null> {
+    try {
+      const dir = dirname(this.getFilePath(key));
+      const entries = await fs.readdir(dir);
+      const preferred =
+        entries.find((name) => /^original\./i.test(name)) ||
+        entries.find((name) => /\.(png|jpe?g|webp|gif)$/i.test(name));
+      if (!preferred) return null;
+      const buffer = await fs.readFile(join(dir, preferred));
+      if (!buffer.length) return null;
+      return buffer;
+    } catch {
+      return null;
     }
   }
 

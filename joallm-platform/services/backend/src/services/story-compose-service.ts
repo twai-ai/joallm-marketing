@@ -149,19 +149,28 @@ async function loadBeatImage(
     .where(and(eq(files.id, fileId), eq(files.userId, ownerUserId)))
     .limit(1);
   if (!fileRow?.storageKey) return null;
-  const buffer = await storageProvider.downloadFile(fileRow.storageKey);
-  if (!buffer?.length) return null;
-  if (buffer.length > MAX_IMAGE_BYTES) {
-    logger.warn('Story vision skip: image too large', { fileId, bytes: buffer.length });
+  try {
+    const buffer = await storageProvider.downloadFile(fileRow.storageKey);
+    if (!buffer?.length) return null;
+    if (buffer.length > MAX_IMAGE_BYTES) {
+      logger.warn('Story vision skip: image too large', { fileId, bytes: buffer.length });
+      return null;
+    }
+    const mime = fileRow.mimetype || 'image/jpeg';
+    if (!mime.startsWith('image/')) return null;
+    return {
+      mime,
+      base64: buffer.toString('base64'),
+      originalName: fileRow.originalName || undefined,
+    };
+  } catch (error) {
+    logger.warn('Story vision skip: storage miss', {
+      fileId,
+      storageKey: fileRow.storageKey,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
-  const mime = fileRow.mimetype || 'image/jpeg';
-  if (!mime.startsWith('image/')) return null;
-  return {
-    mime,
-    base64: buffer.toString('base64'),
-    originalName: fileRow.originalName || undefined,
-  };
 }
 
 async function seeOneImage(

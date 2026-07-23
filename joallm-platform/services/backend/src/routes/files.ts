@@ -1135,9 +1135,16 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
 
     } catch (error) {
       logger.error('File download error:', error);
-      reply.status(500).send({
-        error: 'Download failed',
-        message: 'An error occurred while retrieving the file'
+      const status =
+        error && typeof error === 'object' && 'statusCode' in error
+          ? Number((error as { statusCode: number }).statusCode) || 500
+          : 500;
+      reply.status(status).send({
+        error: status === 404 ? 'File not found' : 'Download failed',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'An error occurred while retrieving the file',
       });
     }
   });
@@ -1197,9 +1204,16 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
         .send(fileBuffer);
     } catch (error) {
       logger.error('File preview error:', error);
-      reply.status(500).send({
-        error: 'Preview failed',
-        message: 'An error occurred while retrieving the preview',
+      const status =
+        error && typeof error === 'object' && 'statusCode' in error
+          ? Number((error as { statusCode: number }).statusCode) || 500
+          : 500;
+      reply.status(status).send({
+        error: status === 404 ? 'File not found' : 'Preview failed',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'An error occurred while retrieving the preview',
       });
     }
   });

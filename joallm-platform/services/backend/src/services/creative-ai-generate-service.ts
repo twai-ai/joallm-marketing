@@ -505,19 +505,40 @@ export async function loadReferenceImages(
       missing.push(row.originalName || fileId);
       continue;
     }
-    const buffer = await storageProvider.downloadFile(row.storageKey);
-    loaded.push({
-      fileId: row.id,
-      filename: row.originalName || row.filename || `reference-${fileId}.png`,
-      contentType: row.mimetype || 'image/png',
-      buffer,
-    });
+    try {
+      const buffer = await storageProvider.downloadFile(row.storageKey);
+      loaded.push({
+        fileId: row.id,
+        filename: row.originalName || row.filename || `reference-${fileId}.png`,
+        contentType: row.mimetype || 'image/png',
+        buffer,
+      });
+    } catch (error) {
+      logger.warn('Creative reference download failed', {
+        fileId,
+        storageKey: row.storageKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      missing.push(row.originalName || fileId);
+    }
   }
 
-  if (loaded.length === 0 && missing.length > 0) {
-    throw new Error(
-      `Reference “${missing[0]}” has no stored image bytes. Clear references and re-upload the logo via Upload references (do not reuse older campaign assets).`,
+  if (loaded.length === 0) {
+    throw Object.assign(
+      new Error(
+        missing.length > 0
+          ? `Image “${missing[0]}” is missing from storage. Remove it and re-upload in Story Assets (volume may have been reset).`
+          : 'No reference images available. Re-upload the beat image and try again.',
+      ),
+      { statusCode: 404 },
     );
+  }
+
+  if (missing.length > 0) {
+    logger.warn('Creative AI continuing with partial references', {
+      loaded: loaded.length,
+      missing,
+    });
   }
 
   return loaded;

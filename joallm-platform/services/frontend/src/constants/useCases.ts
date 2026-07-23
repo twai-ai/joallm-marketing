@@ -43,16 +43,16 @@ export const USE_CASES: UseCaseDefinition[] = [
   },
   {
     id: 'acquisition',
-    label: 'Acquisition Intelligence',
-    shortLabel: 'Acquisition',
+    label: 'People & inbox',
+    shortLabel: 'Inbox',
     homeRoute: '/studio/acquisition',
     assetRoute: (assetId: string) => `/studio/acquisition/${assetId}`,
     status: 'active',
     description:
-      'Connect Channels (WhatsApp, Meta, …) via Platform Connectors into one trustworthy Person Timeline.',
+      'See who messaged ATRISI on WhatsApp, Messenger, Instagram, or Lead Ads — one shared person timeline for the team.',
     helper:
-      'External systems execute. ATRISI Marketing acquires, normalizes, attributes, and remembers.',
-    audience: 'Growth, admissions, partnerships, and institutional relationship teams',
+      'Start here to read inbound conversations. Use Campaigns to plan outreach and creatives.',
+    audience: 'Growth, admissions, and relationship teams',
     supportsAssetDetail: true,
   },
   {
@@ -83,16 +83,16 @@ export const USE_CASES: UseCaseDefinition[] = [
   },
   {
     id: 'marketing-studio',
-    label: 'Acquisition',
-    shortLabel: 'Acquire',
+    label: 'Campaigns',
+    shortLabel: 'Campaigns',
     homeRoute: '/studio/marketing',
     assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
     status: 'active',
     description:
-      'Acquisition Workspace: Programs → Intents → Campaigns → Channels → Interest. Marketing/ads are one acquisition strategy — not the whole product.',
+      'Pick a program, create campaigns, generate creatives, and publish. Interest from outreach shows up for Education.',
     helper:
-      'Intents are durable; Campaigns are time-bound. Output is Program Interest for Education to pull.',
-    audience: 'Growth, outreach, and institutional acquisition teams',
+      'Workflow: Goals → Campaigns → Creatives → Publish. Check People & inbox for replies.',
+    audience: 'Growth and outreach teams',
     supportsAssetDetail: true,
   },
 ];

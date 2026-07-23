@@ -351,6 +351,13 @@ export function AcquisitionIntelligencePage() {
   const waLive = Boolean(health?.graphOk && health?.boundToUser);
   const pageLive = Boolean(pageHealth?.graphOk && pageHealth?.boundToUser);
   const adsLive = Boolean(marketingHealth?.graphOk && marketingHealth?.boundToUser);
+  const needsConnect = !waLive && !pageLive && !adsLive;
+
+  useEffect(() => {
+    if (needsConnect && !loading) {
+      setAdminOpen(true);
+    }
+  }, [needsConnect, loading]);
 
   const filteredPeople = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -449,14 +456,14 @@ export function AcquisitionIntelligencePage() {
                 Studio
               </Link>
               <p className="app-display mt-4 text-xs font-semibold uppercase tracking-[0.22em] text-[#0f766e]">
-                {tenant?.organizationCode || 'ATRISI'} · Acquisition
+                {tenant?.organizationCode || 'ATRISI'} · People & inbox
               </p>
               <h1 className="app-display mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                People & conversations
+                Who messaged us
               </h1>
               <p className="mt-2 max-w-xl text-base leading-relaxed text-slate-600">
-                Shared institution inbox — WhatsApp, Messenger, Instagram, and Lead Ads resolve to
-                one person timeline your team can act on.
+                Shared team inbox for WhatsApp, Messenger, Instagram, and Lead Ads. Pick a person
+                to see their timeline. Plan outreach in Campaigns.
               </p>
             </div>
 
@@ -466,6 +473,12 @@ export function AcquisitionIntelligencePage() {
                   {tenant.role}
                 </span>
               )}
+              <Link
+                to="/studio/marketing"
+                className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Campaigns
+              </Link>
               <button
                 type="button"
                 onClick={() => void load()}
@@ -490,6 +503,42 @@ export function AcquisitionIntelligencePage() {
               </button>
             </div>
           </div>
+
+          {(needsConnect || people.length === 0) && (
+            <div className="rounded-2xl border border-teal-200/80 bg-teal-50/60 px-5 py-4">
+              <h2 className="text-sm font-semibold text-teal-950">How to use People & inbox</h2>
+              <ol className="mt-3 grid gap-3 text-sm text-teal-950/90 sm:grid-cols-3">
+                <li>
+                  <span className="font-semibold">1. Connect channels</span>
+                  <p className="mt-1 text-teal-900/70">
+                    Admins open Channel administration below and connect WhatsApp / Page / Marketing.
+                  </p>
+                </li>
+                <li>
+                  <span className="font-semibold">2. Wait for a message or lead</span>
+                  <p className="mt-1 text-teal-900/70">
+                    When someone messages ATRISI or submits a Lead Ad, they appear in People.
+                  </p>
+                </li>
+                <li>
+                  <span className="font-semibold">3. Open their timeline</span>
+                  <p className="mt-1 text-teal-900/70">
+                    Click a person to review the conversation. Use Campaigns to create outreach.
+                  </p>
+                </li>
+              </ol>
+              {canManageIntegrations && needsConnect && (
+                <button
+                  type="button"
+                  onClick={() => setAdminOpen(true)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-md bg-teal-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-teal-800"
+                >
+                  <Link2 className="h-4 w-4" />
+                  Connect channels now
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-0 rounded-2xl border border-slate-200/90 bg-white/70 px-4 py-1 backdrop-blur-sm sm:grid-cols-3 sm:px-0 sm:py-4">
             <ChannelPill

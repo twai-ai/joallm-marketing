@@ -394,7 +394,7 @@ export function Sidebar({
                 const isActive =
                   (item.id === 'notebook' && currentView === 'notebook') ||
                   (item.id === 'farm' && currentView === 'farm') ||
-                  (item.id === 'creative' && location.pathname.startsWith('/studio/marketing'));
+                  (item.id === 'creative' && location.pathname.startsWith('/studio/creative'));
 
                 return (
                   <button

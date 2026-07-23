@@ -40,9 +40,11 @@ function statusClass(status: string) {
 export function PublishingPanel({
   programId,
   campaigns,
+  onGoToAssets,
 }: {
   programId: string;
   campaigns: AcquisitionCampaign[];
+  onGoToAssets?: () => void;
 }) {
   const [jobs, setJobs] = useState<PublishingJobRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,10 +150,22 @@ export function PublishingPanel({
             Loading jobs…
           </div>
         ) : jobs.length === 0 ? (
-          <p className="text-sm text-slate-600">
-            No publishing jobs yet. Open Assets, upload a creative, then click Publish and pick a
-            channel.
-          </p>
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
+            <p className="text-sm font-medium text-slate-900">No publish jobs yet</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
+              Go to Creatives, generate or upload an asset for a campaign, then click Publish and
+              choose a channel. Jobs will appear here so you can execute them.
+            </p>
+            {onGoToAssets && (
+              <button
+                type="button"
+                onClick={onGoToAssets}
+                className="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                Go to Creatives
+              </button>
+            )}
+          </div>
         ) : (
           <div className="space-y-3">
             {jobs.map((job) => {

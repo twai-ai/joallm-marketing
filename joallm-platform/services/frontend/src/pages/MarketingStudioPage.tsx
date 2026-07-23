@@ -19,11 +19,11 @@ export function MarketingStudioPage() {
       badge={
         <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
           <Radio className="h-4 w-4 text-teal-600" />
-          Acquisition Platform · Phase 1
+          Campaigns
         </div>
       }
-      title="Select a Program to acquire interest"
-      description="Open an Acquisition Workspace. Organize by Growth Intents; campaigns execute them. Output is Program Interest for Education — not enrollment."
+      title="Choose a program to run campaigns"
+      description="Open a program workspace to create goals, campaigns, creatives, and publish. Check People & inbox for replies."
       primaryAction={
         <>
           <Link
@@ -37,15 +37,15 @@ export function MarketingStudioPage() {
             to="/studio/acquisition"
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50/40"
           >
-            Live WhatsApp acquisition
+            People & inbox
           </Link>
         </>
       }
-      secondaryPanelTitle="Handoff: Program Interest only"
-      secondaryPanelBody="Education does not pull posters, ads, or publishing jobs — only Person · Program · Source · Evidence · Intent."
+      secondaryPanelTitle="Two Studio tools"
+      secondaryPanelBody="Campaigns plans outreach. People & inbox is where conversations land for the whole team."
       secondaryPanelContent={
         <div className="space-y-2 text-sm text-slate-200">
-          {['Acquire (this platform)', 'Convert (Education)', 'Deliver (Education)'].map((phase, i) => (
+          {['Campaigns — plan & publish', 'People & inbox — read replies'].map((phase, i) => (
             <div
               key={phase}
               className={`rounded-lg border px-3 py-2 font-medium ${

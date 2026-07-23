@@ -37,9 +37,8 @@ import { InterestsPanel } from '../components/acquisition/InterestsPanel';
 import { PublishingPanel } from '../components/acquisition/PublishingPanel';
 import { UseCaseHomeShell } from '../components/use-cases/UseCaseHomeShell';
 import { getUseCaseById } from '../constants/useCases';
-import { getProgramById, PRIMARY_GROWTH_PROGRAM } from '../constants/programs';
+import { getProgramById } from '../constants/programs';
 import { getIntentById, getIntentsForProgram } from '../constants/growthIntents';
-import { ONTOLOGY } from '../constants/ontology';
 import { apiClient } from '../utils/api-client';
 import { showError, showSuccess } from '../utils/toast';
 
@@ -53,23 +52,15 @@ type WorkspaceTab =
   | 'interests'
   | 'analytics';
 
-const TABS: { id: WorkspaceTab; label: string; icon: typeof Megaphone }[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'intents', label: 'Intents', icon: Compass },
-  { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
-  { id: 'channels', label: 'Channels', icon: Radio },
-  { id: 'assets', label: 'Assets', icon: ImageIcon },
-  { id: 'publishing', label: 'Publishing', icon: Send },
-  { id: 'interests', label: 'Interest', icon: HeartHandshake },
-  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-];
-
-const STATUS_OPTIONS: AcquisitionCampaignStatus[] = [
-  'draft',
-  'active',
-  'paused',
-  'completed',
-  'archived',
+const TABS: { id: WorkspaceTab; label: string; hint: string; icon: typeof Megaphone }[] = [
+  { id: 'overview', label: 'Start here', hint: 'How this workspace works', icon: LayoutDashboard },
+  { id: 'intents', label: 'Goals', hint: 'Why you reach out', icon: Compass },
+  { id: 'campaigns', label: 'Campaigns', hint: 'Time-bound plans', icon: Megaphone },
+  { id: 'channels', label: 'Channels', hint: 'Where you publish', icon: Radio },
+  { id: 'assets', label: 'Creatives', hint: 'Images & copy', icon: ImageIcon },
+  { id: 'publishing', label: 'Publish', hint: 'Send & schedule', icon: Send },
+  { id: 'interests', label: 'Interest', hint: 'Who engaged', icon: HeartHandshake },
+  { id: 'analytics', label: 'Results', hint: 'Quick snapshot', icon: BarChart3 },
 ];
 
 function statusClass(status: string) {
@@ -80,23 +71,175 @@ function statusClass(status: string) {
   return 'bg-white text-slate-600 ring-1 ring-slate-200/80';
 }
 
-function PlaceholderPanel({
-  title,
-  body,
-  nextSprint,
-}: {
-  title: string;
-  body: string;
-  nextSprint: string;
-}) {
+const STATUS_OPTIONS: AcquisitionCampaignStatus[] = [
+  'draft',
+  'active',
+  'paused',
+  'completed',
+  'archived',
+];
+
+function ChannelsPanel({ onGoToInbox }: { onGoToInbox: () => void }) {
+  const [channels, setChannels] = useState<
+    Array<{ id: string; name: string; kind: string; status: string }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await apiClient.get<{
+          success: boolean;
+          data: Array<{ id: string; name: string; kind: string; status: string }>;
+        }>('/api/studio/channels');
+        if (!cancelled) setChannels(res.data || []);
+      } catch {
+        if (!cancelled) setChannels([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const kinds = [
+    { kind: 'whatsapp', label: 'WhatsApp', use: 'Replies and outreach messages' },
+    { kind: 'facebook_organic', label: 'Facebook Page', use: 'Organic posts from creatives' },
+    { kind: 'instagram_organic', label: 'Instagram', use: 'Organic posts from creatives' },
+    { kind: 'meta_ads', label: 'Meta Ads', use: 'Paused ads / creatives from Publish' },
+    { kind: 'linkedin_organic', label: 'LinkedIn', use: 'Simulated until connector is live' },
+    { kind: 'email', label: 'Email', use: 'Simulated until connector is live' },
+  ];
+
   return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6">
-      <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{body}</p>
-      <p className="mt-4 text-xs font-semibold uppercase tracking-[0.15em] text-teal-800">
-        {nextSprint}
-      </p>
-    </div>
+    <section className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="app-display text-xl font-semibold text-slate-950">Where campaigns go out</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+          Channels are the destinations you publish to. Connect them once in People & inbox, then
+          use Creatives → Publish here.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            to="/studio/acquisition"
+            onClick={onGoToInbox}
+            className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            Open People & inbox to connect
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading channels…
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {kinds.map((item) => {
+            const bound = channels.find((c) => c.kind === item.kind);
+            return (
+              <div
+                key={item.kind}
+                className="flex items-start justify-between gap-3 border border-slate-200 bg-white px-4 py-4"
+              >
+                <div>
+                  <div className="font-medium text-slate-950">{item.label}</div>
+                  <p className="mt-1 text-xs text-slate-500">{item.use}</p>
+                  {bound && (
+                    <p className="mt-2 text-xs font-medium text-teal-800">{bound.name}</p>
+                  )}
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                    bound?.status === 'active'
+                      ? 'bg-teal-50 text-teal-800'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {bound ? bound.status : 'Not bound'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AnalyticsPanel({
+  campaigns,
+  onGoToInterest,
+  onGoToInbox,
+}: {
+  campaigns: AcquisitionCampaign[];
+  onGoToInterest: () => void;
+  onGoToInbox: () => void;
+}) {
+  const byStatus = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of campaigns) {
+      map[c.status] = (map[c.status] || 0) + 1;
+    }
+    return map;
+  }, [campaigns]);
+
+  return (
+    <section className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="app-display text-xl font-semibold text-slate-950">Results snapshot</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+          Campaign counts live here. Detailed engagement (who replied or submitted a lead) is in
+          Interest and People & inbox.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ['Total campaigns', String(campaigns.length)],
+          ['Active', String(byStatus.active || 0)],
+          ['Draft', String(byStatus.draft || 0)],
+          ['Paused', String(byStatus.paused || 0)],
+        ].map(([label, value]) => (
+          <div key={label} className="border border-slate-200 bg-white px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {label}
+            </div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <button
+          type="button"
+          onClick={onGoToInterest}
+          className="border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-teal-300"
+        >
+          <div className="font-medium text-slate-950">View Program Interest</div>
+          <p className="mt-1 text-sm text-slate-500">
+            People who engaged after publish or inbound WhatsApp attribution.
+          </p>
+        </button>
+        <Link
+          to="/studio/acquisition"
+          onClick={onGoToInbox}
+          className="border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-teal-300"
+        >
+          <div className="font-medium text-slate-950">Open People & inbox</div>
+          <p className="mt-1 text-sm text-slate-500">
+            Read conversations and sync Meta ad insights.
+          </p>
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -150,13 +293,10 @@ function IntentsPanel({
   return (
     <section className="space-y-4">
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-950">Growth Intents</h2>
+        <h2 className="text-xl font-semibold text-slate-950">Goals for this program</h2>
         <p className="mt-1 max-w-2xl text-sm text-slate-600">
-          Durable reasons to communicate about this Program. Campaigns are time-bound executions of
-          an Intent — not free-floating marketing activities.
-        </p>
-        <p className="mt-2 font-mono text-xs text-slate-500">
-          Program → Intent → Campaign → Creative → Assets → Publishing
+          Why you reach out. Click a goal to open Campaigns filtered to it — then create a
+          time-bound campaign.
         </p>
       </div>
 
@@ -640,7 +780,7 @@ export function AcquisitionWorkspacePage() {
   const { programId = '' } = useParams<{ programId: string }>();
   const useCase = getUseCaseById('marketing-studio');
   const program = getProgramById(programId);
-  const [tab, setTab] = useState<WorkspaceTab>('intents');
+  const [tab, setTab] = useState<WorkspaceTab>('overview');
   const [filterIntentId, setFilterIntentId] = useState<GrowthIntentId | null>(null);
   const [assetsCampaignId, setAssetsCampaignId] = useState<string | null>(null);
 
@@ -678,7 +818,7 @@ export function AcquisitionWorkspacePage() {
         <div className="mt-4 inline-flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm font-medium text-teal-800">
             <Target className="h-4 w-4 text-teal-600" />
-            Acquisition Workspace
+            Campaigns workspace
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
             {program.familyLabel}
@@ -686,43 +826,44 @@ export function AcquisitionWorkspacePage() {
         </div>
       }
       title={program.name}
-      description={`${program.tagline}. Organize by Growth Intents first — campaigns are time-bound executions that produce Program Interest for Education.`}
+      description="Plan outreach for this program: pick a goal, create a campaign, make a creative, then publish. Replies show up in People & inbox."
       primaryAction={
         <>
-          <Link
-            to="/studio/acquisition"
+          <button
+            type="button"
+            onClick={() => setTab('campaigns')}
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm"
           >
-            Live WhatsApp timelines
+            Create or open campaigns
             <ArrowRight className="h-4 w-4" />
-          </Link>
-          <a
-            href="https://atrisi.org/programs"
-            target="_blank"
-            rel="noreferrer"
+          </button>
+          <Link
+            to="/studio/acquisition"
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300"
           >
-            Public program page
-          </a>
+            People & inbox
+          </Link>
         </>
       }
-      secondaryPanelTitle="Output: Program Interest"
-      secondaryPanelBody="Person · Program · Source · Evidence · Intent. Education converts; this workspace acquires."
+      secondaryPanelTitle="How to use this"
+      secondaryPanelBody="Follow the tabs left to right the first time. After that, jump to Campaigns or Creatives."
       secondaryPanelContent={
-        <div className="space-y-2 text-sm text-slate-200">
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-xs uppercase tracking-wide text-teal-200/80">Phases</div>
-            <div className="mt-1">{ONTOLOGY.phases.acquire}</div>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-xs uppercase tracking-wide text-teal-200/80">Dogfood</div>
-            <div className="mt-1">
-              {program.id === PRIMARY_GROWTH_PROGRAM.id
-                ? `${intents.length} Amplify Growth Intents`
-                : 'Catalog program intents'}
-            </div>
-          </div>
-        </div>
+        <ol className="space-y-2 text-sm text-slate-200">
+          {[
+            'Goals — why you are reaching out',
+            'Campaigns — name a time-bound plan',
+            'Creatives — generate or upload assets',
+            'Publish — send to WhatsApp / Meta',
+            'Interest — see who engaged',
+          ].map((step, i) => (
+            <li
+              key={step}
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+            >
+              <span className="text-teal-200">{i + 1}.</span> {step}
+            </li>
+          ))}
+        </ol>
       }
     >
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -733,6 +874,7 @@ export function AcquisitionWorkspacePage() {
               key={item.id}
               type="button"
               onClick={() => setTab(item.id)}
+              title={item.hint}
               className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
                 active
                   ? 'bg-teal-600 text-white shadow-sm'
@@ -747,52 +889,83 @@ export function AcquisitionWorkspacePage() {
       </div>
 
       {tab === 'overview' && (
-        <section className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
-            <h2 className="text-xl font-semibold text-slate-950">Program context</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{program.summary}</p>
-            {program.tracks && (
-              <p className="mt-3 text-sm text-slate-500">{program.tracks.join(' · ')}</p>
-            )}
-            <div className="mt-5 rounded-2xl border border-teal-100 bg-teal-50/50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.15em] text-teal-800">
-                Organizing principle
-              </div>
-              <p className="mt-2 font-mono text-xs leading-5 text-slate-700">
-                Program → Intent → Campaign → Creative → Assets → Publishing → Program Interest
-              </p>
-              <p className="mt-2 text-sm text-slate-600">
-                Intents are durable (Registration, Events, Community…). Campaigns are time-bound
-                (July Launch, Early Bird). Start from the Intents tab.
-              </p>
-            </div>
-            <div className="mt-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
-                Audiences
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {program.audiences.map((audience) => (
-                  <span
-                    key={audience}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
-                  >
-                    {audience}
-                  </span>
-                ))}
-              </div>
-            </div>
+        <section className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 className="app-display text-xl font-semibold text-slate-950">
+              Start here — {program.name}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+              {program.summary}
+            </p>
           </div>
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-950">Sprint status</h2>
-            <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              <li className="font-medium text-teal-800">✓ Sprint 1 — this workspace</li>
-              <li className="font-medium text-teal-800">✓ Sprint 2 — Campaign CRUD</li>
-              <li className="font-medium text-teal-800">✓ Sprint 2b — Intent catalog</li>
-              <li className="font-medium text-teal-800">✓ Sprint 3 — Creative Projects + Assets</li>
-              <li className="font-medium text-teal-800">✓ Sprint 4 — Publishing Jobs</li>
-              <li className="font-medium text-teal-800">✓ Sprint 5 — Outbound execute</li>
-              <li className="font-medium text-teal-800">✓ Sprint 6–7 — Program Interest</li>
-            </ul>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                step: '1',
+                title: 'Pick a goal',
+                body: 'Open Goals and choose why you are reaching out (registration, events, community…).',
+                action: () => setTab('intents'),
+                cta: 'Open Goals',
+              },
+              {
+                step: '2',
+                title: 'Create a campaign',
+                body: 'Name a time-bound plan under that goal. You can stay in draft until ready.',
+                action: () => setTab('campaigns'),
+                cta: 'Open Campaigns',
+              },
+              {
+                step: '3',
+                title: 'Make a creative',
+                body: 'Generate or upload an image/copy for the campaign, then Publish to a channel.',
+                action: () => setTab('assets'),
+                cta: 'Open Creatives',
+              },
+              {
+                step: '4',
+                title: 'Watch replies',
+                body: 'Inbound WhatsApp / leads appear in People & inbox for the whole team.',
+                action: () => undefined,
+                href: '/studio/acquisition',
+                cta: 'Open inbox',
+              },
+            ].map((card) => (
+              <div
+                key={card.step}
+                className="flex flex-col border border-slate-200 bg-white p-5"
+              >
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal-800">
+                  Step {card.step}
+                </div>
+                <h3 className="mt-2 font-semibold text-slate-950">{card.title}</h3>
+                <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600">{card.body}</p>
+                {card.href ? (
+                  <Link
+                    to={card.href}
+                    className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal-800 hover:text-teal-950"
+                  >
+                    {card.cta} <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={card.action}
+                    className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal-800 hover:text-teal-950"
+                  >
+                    {card.cta} <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-600">
+            <span className="font-semibold text-slate-900">{campaigns.length}</span> campaign
+            {campaigns.length === 1 ? '' : 's'} on this program
+            {campaigns.length === 0
+              ? ' — create your first one in Campaigns.'
+              : '. Jump to Campaigns anytime to edit or publish.'}
           </div>
         </section>
       )}
@@ -821,13 +994,7 @@ export function AcquisitionWorkspacePage() {
         />
       )}
 
-      {tab === 'channels' && (
-        <PlaceholderPanel
-          title="Channels"
-          body="Business destinations for this Program’s acquisition (WhatsApp, LinkedIn, ads, email, events). Live inbound WhatsApp already runs under Acquisition Intelligence — wire program attribution next."
-          nextSprint="Sprint 5 — one outbound connector · keep WhatsApp inbound live"
-        />
-      )}
+      {tab === 'channels' && <ChannelsPanel onGoToInbox={() => undefined} />}
 
       {tab === 'assets' && (
         <AssetsPanel
@@ -843,16 +1010,20 @@ export function AcquisitionWorkspacePage() {
       )}
 
       {tab === 'publishing' && (
-        <PublishingPanel programId={program.id} campaigns={campaigns} />
+        <PublishingPanel
+          programId={program.id}
+          campaigns={campaigns}
+          onGoToAssets={() => setTab('assets')}
+        />
       )}
 
       {tab === 'interests' && <InterestsPanel programId={program.id} />}
 
       {tab === 'analytics' && (
-        <PlaceholderPanel
-          title="Analytics"
-          body="North star is Program Interest (Interest tab). Cross-program rollups stay in the Brain."
-          nextSprint="Growth Intelligence — Brain rollups across programs"
+        <AnalyticsPanel
+          campaigns={campaigns}
+          onGoToInterest={() => setTab('interests')}
+          onGoToInbox={() => undefined}
         />
       )}
     </UseCaseHomeShell>

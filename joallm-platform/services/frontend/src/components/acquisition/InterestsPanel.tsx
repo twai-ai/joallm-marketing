@@ -45,13 +45,10 @@ export function InterestsPanel({ programId }: { programId: string }) {
         <div className="flex items-start gap-3">
           <HeartHandshake className="mt-0.5 h-5 w-5 text-teal-700" />
           <div>
-            <h2 className="text-xl font-semibold text-slate-950">Program Interest</h2>
+            <h2 className="text-xl font-semibold text-slate-950">Who showed interest</h2>
             <p className="mt-1 text-sm text-slate-600">
-              The only object Education should pull. Created when creatives publish and when WhatsApp
-              inbound attributes to a recent campaign.
-            </p>
-            <p className="mt-2 font-mono text-xs text-slate-500">
-              GET /api/acquisition/program-interests/pull?programId={programId}
+              People who engaged after you published, or messaged on WhatsApp after a campaign.
+              Education can pull this list later — your team uses it to follow up.
             </p>
           </div>
         </div>
@@ -64,10 +61,13 @@ export function InterestsPanel({ programId }: { programId: string }) {
             Loading interests…
           </div>
         ) : interests.length === 0 ? (
-          <p className="text-sm text-slate-600">
-            No Program Interest yet. Publish an asset (Publishing tab) or receive a WhatsApp message
-            after a campaign publish.
-          </p>
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
+            <p className="text-sm font-medium text-slate-900">No interest yet</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
+              Publish a creative from Creatives → Publish, or wait for a WhatsApp reply after a
+              campaign goes out. Interest rows will land here.
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {interests.map((item) => (

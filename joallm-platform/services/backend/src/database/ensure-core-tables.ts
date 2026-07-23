@@ -406,11 +406,25 @@ export async function ensureCorePlatformTables(): Promise<void> {
         "organization_id" uuid REFERENCES "organizations"("id") ON DELETE CASCADE,
         "name" text NOT NULL,
         "slug" text NOT NULL,
+        "description" text,
+        "is_default" boolean DEFAULT false,
         "settings" jsonb DEFAULT '{}'::jsonb,
         "created_at" timestamp DEFAULT NOW() NOT NULL,
         "updated_at" timestamp DEFAULT NOW() NOT NULL
       )
     `,
+  );
+  await exec(
+    'workspaces.description',
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "description" text`,
+  );
+  await exec(
+    'workspaces.is_default',
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "is_default" boolean DEFAULT false`,
+  );
+  await exec(
+    'workspaces.settings',
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "settings" jsonb DEFAULT '{}'::jsonb`,
   );
 
   // Acquisition Intelligence tables (journal may lag behind)

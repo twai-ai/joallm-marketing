@@ -45,8 +45,21 @@ export async function ensureAtrisiInstitution(): Promise<{
   organizationId: string;
   workspaceId: string;
 }> {
+  // Align older DBs that created workspaces without description / is_default
+  // (ensure-core-tables CREATE IF NOT EXISTS does not add columns to existing tables).
+  await db.execute(sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "description" text`);
+  await db.execute(
+    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "is_default" boolean DEFAULT false`,
+  );
+  await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "code" text`);
+
   let [org] = await db
-    .select()
+    .select({
+      id: organizations.id,
+      code: organizations.code,
+      domain: organizations.domain,
+      slug: organizations.slug,
+    })
     .from(organizations)
     .where(eq(organizations.slug, ATRISI_ORG_SLUG))
     .limit(1);
@@ -62,7 +75,12 @@ export async function ensureAtrisiInstitution(): Promise<{
         plan: 'enterprise',
         settings: { brand: 'atrisi' },
       })
-      .returning();
+      .returning({
+        id: organizations.id,
+        code: organizations.code,
+        domain: organizations.domain,
+        slug: organizations.slug,
+      });
     logger.info('Seeded ATRISI organization', { organizationId: org.id });
   } else if (!org.code) {
     await db
@@ -73,7 +91,7 @@ export async function ensureAtrisiInstitution(): Promise<{
   }
 
   let [ws] = await db
-    .select()
+    .select({ id: workspaces.id })
     .from(workspaces)
     .where(
       and(eq(workspaces.organizationId, org.id), eq(workspaces.slug, 'default')),
@@ -88,13 +106,12 @@ export async function ensureAtrisiInstitution(): Promise<{
         name: 'Default',
         slug: 'default',
         isDefault: true,
-        description: 'Default ATRISI workspace',
       })
-      .returning();
+      .returning({ id: workspaces.id });
   }
 
   const [domainRow] = await db
-    .select()
+    .select({ id: organizationDomains.id })
     .from(organizationDomains)
     .where(
       and(

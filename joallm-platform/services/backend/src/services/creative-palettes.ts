@@ -4,6 +4,7 @@
 
 export type CreativePaletteTypeId =
   | 'auto'
+  | 'atrisi_institute'
   | 'institutional_navy'
   | 'teal_modern'
   | 'forest'
@@ -17,6 +18,13 @@ export type CreativePaletteType = {
 
 export const CREATIVE_PALETTE_TYPES: CreativePaletteType[] = [
   { id: 'auto', label: 'Auto', colors: [] },
+  // Official ATRISI App.css / institutional UI (teal + navy + blue)
+  {
+    id: 'atrisi_institute',
+    label: 'ATRISI institute',
+    colors: ['#0F766E', '#0F172A', '#1E40AF', '#F1F5F9', '#FFFFFF'],
+  },
+  // Legacy generic institutional (kept for older Creative jobs)
   { id: 'institutional_navy', label: 'Institutional navy', colors: ['#0B2C5E', '#C4A35A', '#F5F7FA'] },
   { id: 'teal_modern', label: 'Teal modern', colors: ['#0F766E', '#334155', '#E2E8F0'] },
   { id: 'forest', label: 'Forest', colors: ['#1B4332', '#D8E2DC', '#F8F1E7'] },

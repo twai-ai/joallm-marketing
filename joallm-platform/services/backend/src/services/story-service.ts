@@ -10,7 +10,6 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { files, storySessions, users, type StoryBeat } from '../database/schema.js';
 import { generateCreativeImages } from './creative-ai-generate-service.js';
-import type { BrandThemeInput } from './creative-brand-theme.js';
 import {
   applyHeuristicFromVision,
   combineVisionIntoStory,
@@ -20,6 +19,7 @@ import {
   structureStoryline,
 } from './story-compose-service.js';
 import { getStoryAspectRatio, getStoryFormat, isStoryFormatId } from './story-format.js';
+import { ATRISI_INSTITUTE_BRAND_THEME } from './atrisi-brand.js';
 import {
   buildOrgTeamOwnerReadScope,
   canActorAccessOwnerResource,
@@ -40,25 +40,8 @@ import {
 
 const requirePptx = createRequire(import.meta.url);
 
-/** Default ATRISI Marketing visual theme for Story Creative AI actions */
-export const ATRISI_STORY_BRAND_THEME: BrandThemeInput = {
-  palette: {
-    primary: '#0F766E',
-    secondary: '#0F172A',
-    accent: '#2DD4BF',
-    background: '#F8FAFC',
-    text: '#0F172A',
-  },
-  theme: {
-    mood: 'premium institutional, trustworthy, calm authority',
-    // Typography is applied in Story overlays — do not ask the image model for headlines
-    layout: 'minimal, generous whitespace, clear visual hierarchy, empty margins for text overlay',
-    imagery: 'real institutional life — campus, learners, mentors; not stock-ad clichés',
-    density: 'sparse',
-    notes:
-      'ATRISI Marketing brand for Institution Acquisition. Teal + slate. No neon, no purple glow, no cluttered badge stacks. Images are text-free; copy lives in Story fields.',
-  },
-};
+/** @deprecated Use ATRISI_INSTITUTE_BRAND_THEME — kept as alias for Story imports */
+export const ATRISI_STORY_BRAND_THEME = ATRISI_INSTITUTE_BRAND_THEME;
 
 export type StoryStatus = 'draft' | 'ready' | 'archived';
 
@@ -403,7 +386,6 @@ export async function brandStoryBeat(
   }
   const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
   const headline = cleanStoryTypography(beat.title, 56);
-  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 40);
   const textMode: StoryBrandTextMode =
     options?.textMode || (headline ? 'title' : 'none');
   const useBrandCopy = textMode === 'title' && Boolean(headline);
@@ -418,13 +400,15 @@ export async function brandStoryBeat(
   const promptParts = useBrandCopy
     ? [
         'ATRISI Marketing branded institutional acquisition creative for THIS subject (from scene description).',
-        'Apply ATRISI teal and slate brand, premium institutional look, clean visual hierarchy.',
+        'Apply ATRISI institute brand: teal #0F766E accents on navy #0F172A with blue #1E40AF — premium institutional look, clean visual hierarchy.',
         'Preserve the recognizable people and place from the description — branded treatment of the same moment, not a random stock scene.',
+        'Do not use gold, purple, fuchsia, neon cyan, or generic university crest clichés.',
       ]
     : [
         'Remix THIS uploaded subject photo into an ATRISI Marketing institutional acquisition visual.',
         'Preserve the recognizable people, place, and composition from the first reference image — subject-locked edit.',
-        'Apply ATRISI teal and slate color grade, premium institutional look.',
+        'Apply ATRISI teal #0F766E and navy #0F172A color grade, premium institutional look.',
+        'Do not use gold, purple, fuchsia, or neon cyan.',
         'TEXT-FREE brand pass: no readable text, headlines, CTAs, or gibberish. Empty margins for later overlay.',
       ];
 
@@ -432,11 +416,9 @@ export async function brandStoryBeat(
     promptParts.push(
       `Brand typography — render ONLY this headline letter-perfect: "${headline}".`,
     );
-    if (cta && cta !== headline) {
-      promptParts.push(`Optional supporting line exactly: "${cta}".`);
-    }
+    // Captions from Build story are often long — they spawn garbage slogans. Title only by default.
     promptParts.push(
-      'No other slogans, fake stats, dates, CTAs, or gibberish. Only the Story copy above.',
+      'No other slogans, fake stats, dates, CTAs, button labels, or gibberish. Only the headline above.',
     );
   }
 
@@ -486,14 +468,14 @@ export async function brandStoryBeat(
     precision: {
       textFree: !useBrandCopy,
       headline: useBrandCopy ? headline : undefined,
-      cta: useBrandCopy && cta && cta !== headline ? cta : undefined,
+      cta: undefined,
       mustIncludeText: useBrandCopy ? headline : undefined,
       brandTheme: ATRISI_STORY_BRAND_THEME,
-      paletteType: 'institutional_navy',
+      paletteType: 'atrisi_institute',
       useLogoReference: watermark,
       avoid: useBrandCopy
-        ? 'any text except the quoted headline/supporting line, gibberish, misspellings, extra slogans, fake CTAs, Apply Now, Learn More, neon, purple glow, clutter'
-        : 'any readable text, gibberish letters, misspelled words, fake logos, neon, purple glow, cluttered stickers, CTAs, captions, signage',
+        ? 'any text except the quoted headline, gibberish, misspellings, extra slogans, fake CTAs, Apply Now, Learn More, neon, purple glow, fuchsia, cyan cyberpunk, gold seals, clutter'
+        : 'any readable text, gibberish letters, misspelled words, fake logos, neon, purple glow, fuchsia, cyan cyberpunk, gold seals, cluttered stickers, CTAs, captions, signage',
     },
   });
 
@@ -616,13 +598,13 @@ export async function generateSimilarStoryBeats(
         cta: includeCaption ? cta : undefined,
         mustIncludeText: useCopy ? headline : undefined,
         brandTheme: ATRISI_STORY_BRAND_THEME,
-        paletteType: 'institutional_navy',
+        paletteType: 'atrisi_institute',
         useLogoReference: false,
         avoid: useCopy
           ? 'any text except the quoted headline' +
             (includeCaption ? '/supporting line' : '') +
-            ', gibberish, misspellings, extra slogans, fake CTAs, Apply Now, Learn More, logos, watermarks, badge stacks, neon, clutter'
-          : 'any readable text, letters, words, gibberish, captions, headlines, CTAs, logos, watermarks, signage, posters, subtitles, UI chrome, neon, clutter, exact duplicate of reference',
+            ', gibberish, misspellings, extra slogans, fake CTAs, Apply Now, Learn More, logos, watermarks, badge stacks, neon, purple glow, fuchsia, cyan cyberpunk, gold seals, clutter'
+          : 'any readable text, letters, words, gibberish, captions, headlines, CTAs, logos, watermarks, signage, posters, subtitles, UI chrome, neon, purple glow, fuchsia, cyan, gold seals, clutter, exact duplicate of reference',
       },
     });
   } catch (error) {

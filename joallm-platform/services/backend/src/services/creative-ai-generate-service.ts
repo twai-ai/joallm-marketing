@@ -371,8 +371,17 @@ export function buildEnhancedPrompt(options: {
 
   const visual = p.referenceVisualContext?.trim();
   if (visual) {
-    // Keep vision cues short so they do not drown out typography instructions
-    parts.push(`Reference look: ${visual.slice(0, 500)}`);
+    // Keep vision cues short so they do not drown out typography instructions.
+    // Exact mode: even shorter, and strip quote fragments that look like OCR.
+    const cleaned = exact
+      ? visual
+          .replace(/seen text\s+"[^"]*"/gi, '')
+          .replace(/"[^"]{3,80}"/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 220)
+      : visual.slice(0, 500);
+    if (cleaned) parts.push(`Reference look: ${cleaned}`);
   }
 
   if (textFree) {
@@ -407,15 +416,19 @@ export function buildEnhancedPrompt(options: {
   parts.push(`Avoid: ${avoid}.`);
 
   // Shorter prompts = better text fidelity on Ideogram
-  const enhanced = parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, exact ? 1800 : 3500);
+  // Exact typography: keep prompt tight; long briefs cause invented slogans
+  const maxLen = exact ? 1400 : textFree ? 2800 : 3500;
+  const enhanced = parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, maxLen);
 
   return {
     prompt: enhanced,
     magicPrompt: resolveMagicPrompt(base, options.precision),
-    // REALISTIC reduces Ideogram "poster text" bias vs DESIGN
+    // DESIGN for locked copy; REALISTIC when scrubbing text from photos
     styleType: textFree
       ? 'REALISTIC'
-      : ideogramStyleType(options.style, options.transparentBackground),
+      : exact
+        ? 'DESIGN'
+        : ideogramStyleType(options.style, options.transparentBackground),
     paletteHex,
   };
 }
@@ -1038,14 +1051,14 @@ export async function generateCreativeImages(
             ];
             if (note.styleNotes.length) bits.push(note.styleNotes.slice(0, 4).join('; '));
             if (note.colors.length) bits.push(`colors ${note.colors.join(', ')}`);
-            // OCR text from refs makes Ideogram reinvent gibberish — never feed it when text-free
+            // Never feed OCR into exact-copy or text-free jobs — Ideogram invents garbage from it
             if (!textFree && !userHasExactText && note.detectedText) {
               bits.push(`seen text "${note.detectedText.slice(0, 80)}"`);
             }
             return bits.join(' — ');
           })
           .join(' | ')
-          .slice(0, 600);
+          .slice(0, userHasExactText ? 280 : 600);
 
         inferredPalette = visionNotes.flatMap((n) => n.colors).slice(0, 5);
       }

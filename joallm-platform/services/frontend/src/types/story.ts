@@ -1,6 +1,17 @@
 export type StoryArcRole = 'context' | 'proof' | 'ask' | 'other';
 export type StoryStatus = 'draft' | 'ready' | 'archived';
 
+export type StoryBeatVision = {
+  fileId: string;
+  what: string;
+  onImageText: string | null;
+  signals: string[];
+  mood: string;
+  confidence: number;
+  model: string;
+  analyzedAt: string;
+};
+
 export type StoryBeat = {
   id: string;
   fileId: string | null;
@@ -9,6 +20,7 @@ export type StoryBeat = {
   notes: string;
   order: number;
   arcRole?: StoryArcRole;
+  vision?: StoryBeatVision | null;
 };
 
 export type StorySession = {

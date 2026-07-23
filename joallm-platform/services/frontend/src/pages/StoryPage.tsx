@@ -59,10 +59,10 @@ export function StoryPage() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="flex items-center gap-2 text-sm font-medium text-white">
               <Sparkles className="h-4 w-4 text-teal-300" />
-              Propose storyline
+              See → Structure → Speak
             </div>
             <p className="mt-2 text-sm text-slate-300">
-              Creative AI / LLM suggests Context → Proof → Ask titles and captions across your beats.
+              Groq vision reads your assets, then ATRISI composes Context → Proof → Ask titles and captions.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">

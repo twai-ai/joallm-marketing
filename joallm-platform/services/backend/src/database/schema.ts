@@ -1478,6 +1478,17 @@ export const publishingJobs = pgTable('publishing_jobs', {
  * Free-floating until programId/campaignId attach. Not a durable aggregate root.
  * Platform remembers files; Growth receives assets only via explicit Send to Campaign.
  */
+export type StoryBeatVision = {
+  fileId: string;
+  what: string;
+  onImageText: string | null;
+  signals: string[];
+  mood: string;
+  confidence: number;
+  model: string;
+  analyzedAt: string;
+};
+
 export type StoryBeat = {
   id: string;
   fileId: string | null;
@@ -1486,6 +1497,8 @@ export type StoryBeat = {
   notes: string;
   order: number;
   arcRole?: 'context' | 'proof' | 'ask' | 'other';
+  /** Cached Groq vision card from See → Structure → Speak */
+  vision?: StoryBeatVision | null;
 };
 
 export const storySessions = pgTable('story_sessions', {

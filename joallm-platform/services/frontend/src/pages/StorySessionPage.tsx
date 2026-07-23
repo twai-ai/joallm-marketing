@@ -51,6 +51,8 @@ export function StorySessionPage() {
   const [previewIndex, setPreviewIndex] = useState(0);
   const [generatePrompt, setGeneratePrompt] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
+  const [keepOrder, setKeepOrder] = useState(false);
+  const [refreshVision, setRefreshVision] = useState(false);
 
   useEffect(() => {
     if (!story) return;
@@ -155,17 +157,35 @@ export function StorySessionPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={keepOrder}
+                  onChange={(e) => setKeepOrder(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Keep my order
+              </label>
+              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={refreshVision}
+                  onChange={(e) => setRefreshVision(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Refresh vision
+              </label>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                 Attach soon
               </span>
               <button
                 type="button"
                 disabled={beats.length === 0 || isProposing}
-                onClick={() => void proposeStoryline()}
+                onClick={() => void proposeStoryline({ keepOrder, refreshVision })}
                 className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
               >
                 {isProposing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                Propose storyline
+                {isProposing ? 'Reading assets…' : 'Propose storyline'}
               </button>
               <button
                 type="button"
@@ -413,6 +433,24 @@ export function StorySessionPage() {
                     className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                   />
                 </div>
+                {selected.vision?.what ? (
+                  <div className="rounded-xl border border-teal-100 bg-teal-50/60 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-teal-800">
+                      Vision read
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-700">{selected.vision.what}</p>
+                    {selected.vision.onImageText ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        On image: {selected.vision.onImageText}
+                      </p>
+                    ) : null}
+                    {selected.vision.signals?.length ? (
+                      <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
+                        {selected.vision.signals.join(' · ')}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
                 {isSaving ? (
                   <p className="flex items-center gap-2 text-xs text-slate-500">
                     <Loader2 className="h-3 w-3 animate-spin" /> Saving…

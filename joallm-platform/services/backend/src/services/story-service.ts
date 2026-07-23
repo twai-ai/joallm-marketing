@@ -6,12 +6,15 @@
 
 import { randomUUID } from 'crypto';
 import { and, desc, eq } from 'drizzle-orm';
-import Groq from 'groq-sdk';
-import OpenAI from 'openai';
-import { config } from '../config/config.js';
 import { db } from '../database/connection.js';
 import { files, storySessions, type StoryBeat } from '../database/schema.js';
 import { storageProvider } from './file-storage.js';
+import {
+  applyHeuristicFromVision,
+  seeBeatVisionCards,
+  speakStoryline,
+  structureStoryline,
+} from './story-compose-service.js';
 import {
   buildOrgDualReadScope,
   resolveOrganizationIdForUser,
@@ -41,10 +44,6 @@ const ARC_LABELS: Record<string, string> = {
   ask: 'Ask',
   other: 'Beat',
 };
-
-function isUsableKey(value?: string | null): value is string {
-  return Boolean(value && value.trim().length > 0 && !value.includes('PLACEHOLDER'));
-}
 
 function toDto(row: typeof storySessions.$inferSelect): StorySessionDto {
   const beats = Array.isArray(row.beats) ? row.beats : [];
@@ -149,6 +148,7 @@ export async function updateStory(
         title: beat.title ?? '',
         caption: beat.caption ?? '',
         notes: beat.notes ?? '',
+        vision: beat.vision ?? null,
       }))
     : existing.beats;
 
@@ -219,147 +219,15 @@ export async function addBeatsFromFiles(
   });
 }
 
-function heuristicPropose(beats: StoryBeat[], title: string): {
-  title: string;
-  arc: string;
-  tone: string;
-  beats: StoryBeat[];
-} {
-  const n = beats.length;
-  const proposed = beats.map((beat, index) => {
-    let arcRole: StoryBeat['arcRole'] = 'other';
-    if (n <= 1) arcRole = 'ask';
-    else if (index === 0) arcRole = 'context';
-    else if (index === n - 1) arcRole = 'ask';
-    else arcRole = 'proof';
-
-    const roleLabel = ARC_LABELS[arcRole || 'other'];
-    return {
-      ...beat,
-      order: index,
-      arcRole,
-      title: beat.title?.trim() || `${roleLabel} ${index + 1}`,
-      caption:
-        beat.caption?.trim() ||
-        (arcRole === 'context'
-          ? 'Set the scene for the audience.'
-          : arcRole === 'proof'
-            ? 'Show evidence that builds trust.'
-            : arcRole === 'ask'
-              ? 'Close with a clear next step.'
-              : 'Advance the narrative.'),
-    };
-  });
-
-  return {
-    title: title?.trim() && title !== 'Untitled story' ? title : 'ATRISI story',
-    arc: 'context_proof_ask',
-    tone: 'atrisi_institutional',
-    beats: proposed,
-  };
-}
-
-async function llmProposeStoryline(
-  title: string,
-  beats: StoryBeat[],
-): Promise<{ title: string; arc: string; tone: string; beats: StoryBeat[] } | null> {
-  const beatSummaries = beats.map((b, i) => ({
-    index: i,
-    id: b.id,
-    currentTitle: b.title,
-    hasImage: Boolean(b.fileId),
-  }));
-
-  const system = `You are ATRISI Marketing Story composer.
-Constitution: Studio creates. Products operate. Platform remembers.
-Propose a coherent multi-medium narrative (Context → Proof → Ask) for institutional acquisition marketing.
-Return ONLY valid JSON:
-{
-  "title": "short story title",
-  "arc": "context_proof_ask",
-  "tone": "atrisi_institutional",
-  "beats": [
-    { "id": "beat-id", "title": "...", "caption": "...", "notes": "...", "arcRole": "context|proof|ask|other" }
-  ]
-}
-Keep titles short. Captions one sentence. Preserve every beat id. Do not invent beat ids.`;
-
-  const user = JSON.stringify({ currentTitle: title, beats: beatSummaries });
-
-  try {
-    let content = '';
-    if (isUsableKey(config.groqApiKey)) {
-      const client = new Groq({ apiKey: config.groqApiKey });
-      const response = await client.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.4,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        response_format: { type: 'json_object' },
-      });
-      content = response.choices[0]?.message?.content || '';
-    } else if (isUsableKey(config.openaiApiKey)) {
-      const client = new OpenAI({ apiKey: config.openaiApiKey });
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        temperature: 0.4,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        response_format: { type: 'json_object' },
-      });
-      content = response.choices[0]?.message?.content || '';
-    } else {
-      return null;
-    }
-
-    const parsed = JSON.parse(content) as {
-      title?: string;
-      arc?: string;
-      tone?: string;
-      beats?: Array<{
-        id: string;
-        title?: string;
-        caption?: string;
-        notes?: string;
-        arcRole?: StoryBeat['arcRole'];
-      }>;
-    };
-
-    const byId = new Map((parsed.beats || []).map((b) => [b.id, b]));
-    const nextBeats = beats.map((beat, index) => {
-      const suggestion = byId.get(beat.id);
-      return {
-        ...beat,
-        order: index,
-        title: suggestion?.title?.trim() || beat.title,
-        caption: suggestion?.caption?.trim() || beat.caption,
-        notes: suggestion?.notes?.trim() || beat.notes,
-        arcRole: suggestion?.arcRole || beat.arcRole || 'other',
-      };
-    });
-
-    return {
-      title: parsed.title?.trim() || title,
-      arc: parsed.arc || 'context_proof_ask',
-      tone: parsed.tone || 'atrisi_institutional',
-      beats: nextBeats,
-    };
-  } catch (error) {
-    logger.warn('Story LLM propose failed; using heuristic', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
-}
-
 export async function proposeStoryline(
   ownerUserId: string,
   storyId: string,
-): Promise<{ story: StorySessionDto; source: 'llm' | 'heuristic' }> {
+  options?: { refreshVision?: boolean; keepOrder?: boolean },
+): Promise<{
+  story: StorySessionDto;
+  source: 'vision-compose' | 'vision-heuristic' | 'heuristic';
+  visionCount: number;
+}> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   if (!existing.beats.length) {
     throw Object.assign(new Error('Add assets before proposing a storyline'), {
@@ -367,8 +235,62 @@ export async function proposeStoryline(
     });
   }
 
-  const llm = await llmProposeStoryline(existing.title, existing.beats);
-  const proposal = llm || heuristicPropose(existing.beats, existing.title);
+  const refreshVision = Boolean(options?.refreshVision);
+  const keepOrder = Boolean(options?.keepOrder);
+
+  // 1) See — Groq vision cards (cached on beats)
+  const seen = await seeBeatVisionCards(ownerUserId, existing.beats, refreshVision);
+
+  // 2) Structure — order + roles from cards
+  const structure = await structureStoryline(existing.title, seen.beats, keepOrder);
+
+  let proposal: { title: string; arc: string; tone: string; beats: StoryBeat[] };
+  let source: 'vision-compose' | 'vision-heuristic' | 'heuristic' = 'heuristic';
+
+  if (structure) {
+    const byId = new Map(seen.beats.map((b) => [b.id, b]));
+    const structuredBeats: StoryBeat[] = structure.orderedIds
+      .map((id, order) => {
+        const beat = byId.get(id);
+        if (!beat) return null;
+        return {
+          ...beat,
+          order,
+          arcRole: structure.roles[id] || beat.arcRole || 'other',
+        };
+      })
+      .filter(Boolean) as StoryBeat[];
+
+    // 3) Speak — titles/captions grounded in vision + roles
+    const copy = await speakStoryline(structure.title, structuredBeats);
+    if (copy) {
+      proposal = {
+        title: structure.title,
+        arc: structure.arc,
+        tone: structure.tone,
+        beats: structuredBeats.map((beat) => {
+          const spoken = copy.get(beat.id);
+          const notesFromVision = beat.vision
+            ? `${beat.arcRole || 'beat'} — ${beat.vision.what}`
+            : beat.notes;
+          return {
+            ...beat,
+            title: spoken?.title || beat.title,
+            caption: spoken?.caption || beat.vision?.what || beat.caption,
+            notes: spoken?.notes || notesFromVision,
+          };
+        }),
+      };
+      source = seen.visionCount > 0 ? 'vision-compose' : 'heuristic';
+    } else {
+      proposal = applyHeuristicFromVision(structuredBeats, structure.title);
+      source = seen.visionCount > 0 ? 'vision-heuristic' : 'heuristic';
+    }
+  } else {
+    proposal = applyHeuristicFromVision(seen.beats, existing.title);
+    source = seen.visionCount > 0 ? 'vision-heuristic' : 'heuristic';
+  }
+
   const story = await updateStory(ownerUserId, storyId, {
     title: proposal.title,
     arc: proposal.arc,
@@ -376,12 +298,14 @@ export async function proposeStoryline(
     beats: proposal.beats,
     status: 'ready',
     metadata: {
-      lastProposeSource: llm ? 'llm' : 'heuristic',
+      lastProposeSource: source,
       lastProposedAt: new Date().toISOString(),
+      lastVisionCount: seen.visionCount,
+      composePipeline: 'see_structure_speak',
     },
   });
 
-  return { story, source: llm ? 'llm' : 'heuristic' };
+  return { story, source, visionCount: seen.visionCount };
 }
 
 export async function exportStoryPptx(

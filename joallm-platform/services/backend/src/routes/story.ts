@@ -27,6 +27,19 @@ const BeatSchema = z.object({
   notes: z.string().max(2000),
   order: z.number().int().min(0),
   arcRole: z.enum(['context', 'proof', 'ask', 'other']).optional(),
+  vision: z
+    .object({
+      fileId: z.string(),
+      what: z.string(),
+      onImageText: z.string().nullable(),
+      signals: z.array(z.string()),
+      mood: z.string(),
+      confidence: z.number(),
+      model: z.string(),
+      analyzedAt: z.string(),
+    })
+    .nullable()
+    .optional(),
 });
 
 const CreateSchema = z.object({
@@ -188,15 +201,27 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
   fastify.post('/:storyId/propose', {
     preHandler: [authenticateToken],
     schema: {
-      description: 'Propose ATRISI storyline (order roles + titles/captions) via Creative AI / LLM',
+      description:
+        'Propose ATRISI storyline via See (Groq vision) → Structure → Speak',
       tags: ['story'],
     },
   }, async (request, reply) => {
     try {
       const userId = (request as { user: { id: string } }).user.id;
       const { storyId } = request.params as { storyId: string };
-      const result = await proposeStoryline(userId, storyId);
-      return reply.send({ success: true, data: result.story, source: result.source });
+      const body = z
+        .object({
+          refreshVision: z.boolean().optional(),
+          keepOrder: z.boolean().optional(),
+        })
+        .parse(request.body || {});
+      const result = await proposeStoryline(userId, storyId, body);
+      return reply.send({
+        success: true,
+        data: result.story,
+        source: result.source,
+        visionCount: result.visionCount,
+      });
     } catch (error) {
       return reply.status(statusFromError(error)).send({
         success: false,

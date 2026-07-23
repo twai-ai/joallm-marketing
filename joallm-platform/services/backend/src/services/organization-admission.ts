@@ -45,15 +45,51 @@ export async function ensureAtrisiInstitution(): Promise<{
   organizationId: string;
   workspaceId: string;
 }> {
-  // Align older DBs that created workspaces without description / is_default
-  // (ensure-core-tables CREATE IF NOT EXISTS does not add columns to existing tables).
-  await db.execute(sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "description" text`);
-  await db.execute(
-    sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "is_default" boolean DEFAULT false`,
-  );
+  // Railway DBs often skipped migration 0019 / 0031. Create identity tables first,
+  // then add columns that older CREATE TABLE paths omitted.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "organizations" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "name" text NOT NULL,
+      "slug" text NOT NULL,
+      "code" text,
+      "domain" text,
+      "plan" text DEFAULT 'starter',
+      "settings" jsonb DEFAULT '{}'::jsonb,
+      "created_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+      "created_at" timestamp NOT NULL DEFAULT NOW(),
+      "updated_at" timestamp NOT NULL DEFAULT NOW(),
+      CONSTRAINT "organizations_slug_unique" UNIQUE ("slug")
+    )
+  `);
   await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "code" text`);
+  await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "domain" text`);
+  await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "plan" text DEFAULT 'starter'`);
+  await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "settings" jsonb DEFAULT '{}'::jsonb`);
+  await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "created_by" uuid`);
+  await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "created_at" timestamp DEFAULT NOW()`);
+  await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "updated_at" timestamp DEFAULT NOW()`);
 
-  // Enterprise scaffolding (0019) may never have applied on this database.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "workspaces" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "organization_id" uuid NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
+      "name" text NOT NULL,
+      "slug" text NOT NULL,
+      "description" text,
+      "is_default" boolean DEFAULT false,
+      "settings" jsonb DEFAULT '{}'::jsonb,
+      "created_at" timestamp NOT NULL DEFAULT NOW(),
+      "updated_at" timestamp NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "description" text`);
+  await db.execute(sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "is_default" boolean DEFAULT false`);
+  await db.execute(sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "settings" jsonb DEFAULT '{}'::jsonb`);
+  await db.execute(sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "organization_id" uuid`);
+  await db.execute(sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "name" text`);
+  await db.execute(sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "slug" text`);
+
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS "memberships" (
       "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -79,6 +115,19 @@ export async function ensureAtrisiInstitution(): Promise<{
       "created_at" timestamp NOT NULL DEFAULT NOW(),
       "updated_at" timestamp NOT NULL DEFAULT NOW(),
       CONSTRAINT "organization_domains_domain_unique" UNIQUE ("domain")
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "audit_logs" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "user_id" uuid,
+      "action" text NOT NULL,
+      "resource" text,
+      "resource_id" text,
+      "metadata" jsonb,
+      "ip_address" text,
+      "user_agent" text,
+      "created_at" timestamp NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -192,7 +241,7 @@ export async function admitUserToOrganization(options: {
     if (allowed.length > 0 && !allowed.includes(domain)) {
       // Still allow if active membership exists (grandfather)
       const [existing] = await db
-        .select()
+        .select({ id: memberships.id })
         .from(memberships)
         .where(
           and(
@@ -213,8 +262,11 @@ export async function admitUserToOrganization(options: {
   // 1) Existing active membership
   const activeMemberships = await db
     .select({
-      membership: memberships,
-      organization: organizations,
+      membershipId: memberships.id,
+      membershipRole: memberships.role,
+      organizationId: organizations.id,
+      organizationCode: organizations.code,
+      organizationSlug: organizations.slug,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
@@ -225,14 +277,14 @@ export async function admitUserToOrganization(options: {
 
   if (activeMemberships.length > 0) {
     const row = activeMemberships[0];
-    const role = (row.membership.role || 'member') as MembershipRole;
+    const role = (row.membershipRole || 'member') as MembershipRole;
     const resolved = resolveMembershipPermissions(role);
     return {
       ok: true,
-      organizationId: row.organization.id,
-      organizationCode: row.organization.code || row.organization.slug.toUpperCase(),
-      organizationSlug: row.organization.slug,
-      membershipId: row.membership.id,
+      organizationId: row.organizationId,
+      organizationCode: row.organizationCode || row.organizationSlug.toUpperCase(),
+      organizationSlug: row.organizationSlug,
+      membershipId: row.membershipId,
       role,
       permissions: resolved.permissions,
       experiences: resolved.experiences,
@@ -244,8 +296,12 @@ export async function admitUserToOrganization(options: {
   // 2) Domain auto-join
   const [domainMapping] = await db
     .select({
-      domain: organizationDomains,
-      organization: organizations,
+      domainId: organizationDomains.id,
+      allowedAuthMethods: organizationDomains.allowedAuthMethods,
+      defaultRole: organizationDomains.defaultRole,
+      organizationId: organizations.id,
+      organizationCode: organizations.code,
+      organizationSlug: organizations.slug,
     })
     .from(organizationDomains)
     .innerJoin(
@@ -268,7 +324,7 @@ export async function admitUserToOrganization(options: {
     };
   }
 
-  const methods = domainMapping.domain.allowedAuthMethods || ['google', 'password'];
+  const methods = domainMapping.allowedAuthMethods || ['google', 'password'];
   if (!methods.includes(options.authMethod)) {
     return {
       ok: false,
@@ -276,15 +332,19 @@ export async function admitUserToOrganization(options: {
     };
   }
 
-  const defaultRole = (domainMapping.domain.defaultRole || 'member') as MembershipRole;
+  const defaultRole = (domainMapping.defaultRole || 'member') as MembershipRole;
 
   const [existingMembership] = await db
-    .select()
+    .select({
+      id: memberships.id,
+      status: memberships.status,
+      role: memberships.role,
+    })
     .from(memberships)
     .where(
       and(
         eq(memberships.userId, options.userId),
-        eq(memberships.organizationId, domainMapping.organization.id),
+        eq(memberships.organizationId, domainMapping.organizationId),
       ),
     )
     .limit(1);
@@ -296,12 +356,16 @@ export async function admitUserToOrganization(options: {
     const [created] = await db
       .insert(memberships)
       .values({
-        organizationId: domainMapping.organization.id,
+        organizationId: domainMapping.organizationId,
         userId: options.userId,
         role: defaultRole,
         status: 'active',
       })
-      .returning();
+      .returning({
+        id: memberships.id,
+        status: memberships.status,
+        role: memberships.role,
+      });
     membership = created;
     provisioned = true;
   } else if (membership.status !== 'active') {
@@ -309,7 +373,11 @@ export async function admitUserToOrganization(options: {
       .update(memberships)
       .set({ status: 'active', role: defaultRole, updatedAt: new Date() })
       .where(eq(memberships.id, membership.id))
-      .returning();
+      .returning({
+        id: memberships.id,
+        status: memberships.status,
+        role: memberships.role,
+      });
     membership = reactivated || { ...membership, status: 'active', role: defaultRole };
     provisioned = true;
   }
@@ -323,10 +391,10 @@ export async function admitUserToOrganization(options: {
 
   return {
     ok: true,
-    organizationId: domainMapping.organization.id,
+    organizationId: domainMapping.organizationId,
     organizationCode:
-      domainMapping.organization.code || domainMapping.organization.slug.toUpperCase(),
-    organizationSlug: domainMapping.organization.slug,
+      domainMapping.organizationCode || domainMapping.organizationSlug.toUpperCase(),
+    organizationSlug: domainMapping.organizationSlug,
     membershipId: membership.id,
     role,
     permissions: resolved.permissions,

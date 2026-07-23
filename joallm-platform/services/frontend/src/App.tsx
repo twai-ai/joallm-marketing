@@ -129,6 +129,11 @@ function AppLayout() {
   };
 
   const currentView = getCurrentView();
+  const isBareAuthRoute =
+    location.pathname === '/login' ||
+    location.pathname === '/register' ||
+    location.pathname === '/unauthorized' ||
+    location.pathname.startsWith('/auth/');
 
   const handleViewChange = (view: ViewMode) => {
     navigate(routeForView(view));
@@ -179,31 +184,34 @@ function AppLayout() {
 
   return (
     <div className="app-shell-bg flex min-h-screen min-h-[100dvh] overflow-x-hidden md:h-screen md:overflow-hidden">
-      {/* Sidebar — docked on desktop, drawer on mobile */}
-      <Sidebar
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-        currentView={currentView}
-        onViewChange={handleViewChange}
-        onQuickPrompt={() => {}}
-        onOpenKnowledge={() => setKnowledgeManagerOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenCreativeSettings={() => {
-          setSettingsInitialTab('models');
-          setSettingsOpen(true);
-        }}
-        onOpenBookmarks={() => setBookmarksOpen(true)}
-      />
+      {/* Sidebar — only for authenticated app surfaces, not login/register */}
+      {!isBareAuthRoute && (
+        <Sidebar
+          isOpen={sidebarOpen}
+          onToggle={() => setSidebarOpen(!sidebarOpen)}
+          currentView={currentView}
+          onViewChange={handleViewChange}
+          onQuickPrompt={() => {}}
+          onOpenKnowledge={() => setKnowledgeManagerOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenCreativeSettings={() => {
+            setSettingsInitialTab('models');
+            setSettingsOpen(true);
+          }}
+          onOpenBookmarks={() => setBookmarksOpen(true)}
+        />
+      )}
 
       {/* Main Content Area */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {/* Constant app header — does not scroll away with page content */}
-        <Header
-          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenKnowledge={() => setKnowledgeManagerOpen(true)}
-          currentView={currentView}
-        />
+        {!isBareAuthRoute && (
+          <Header
+            onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenKnowledge={() => setKnowledgeManagerOpen(true)}
+            currentView={currentView}
+          />
+        )}
 
         {/* Content */}
         <MainContent>

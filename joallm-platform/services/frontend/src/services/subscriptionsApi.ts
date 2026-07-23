@@ -37,6 +37,17 @@ export interface UsageResponse {
     models: string[];
   }>;
   totals: UsageTotals;
+  creative?: {
+    totals: { requests: number; images: number; costCents: number };
+    byModel: Array<{
+      endpoint: string;
+      model: string | null;
+      requests: number;
+      images: number;
+      costCents: number;
+    }>;
+    note?: string;
+  };
 }
 
 export interface CheckoutResponse {

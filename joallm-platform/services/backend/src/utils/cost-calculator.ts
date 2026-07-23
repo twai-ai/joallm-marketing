@@ -128,6 +128,72 @@ export function formatCost(cents: number): string {
 }
 
 /**
+ * Estimate Ideogram / FLUX (BFL) image generation cost from the call shape.
+ * Sources: Ideogram API pricing (v3 Turbo $0.03 / Quality $0.09);
+ * BFL docs (1 credit = $0.01; klein ~$0.015, pro ~$0.03–0.045, max ~$0.07).
+ * Estimates only — providers may change rates; BYOK bills the user’s provider account.
+ */
+export type CreativeImageCostEstimate = {
+  provider: 'ideogram' | 'flux';
+  modelId: string;
+  imageCount: number;
+  /** Whole USD cents (rounded up per image) */
+  estimatedCostCents: number;
+  /** BFL-style credits (1 credit ≈ $0.01) */
+  estimatedCredits: number;
+  pricingNote: string;
+};
+
+export function estimateCreativeImageCost(options: {
+  provider: 'ideogram' | 'flux';
+  modelId: string;
+  quality?: string;
+  imageCount?: number;
+  hasReferences?: boolean;
+}): CreativeImageCostEstimate {
+  const imageCount = Math.max(1, options.imageCount || 1);
+  const model = (options.modelId || '').toLowerCase();
+  const quality = (options.quality || 'standard').toLowerCase();
+  let centsPerImage = 0;
+  let note = '';
+
+  if (options.provider === 'ideogram') {
+    if (quality === 'draft' || model.includes('turbo') || model.includes('flash')) {
+      centsPerImage = 3;
+      note = 'Ideogram ~Turbo/Flash ≈ $0.03/image';
+    } else {
+      centsPerImage = 9;
+      note = 'Ideogram ~Quality ≈ $0.09/image';
+    }
+  } else {
+    // FLUX / BFL
+    if (model.includes('klein')) {
+      centsPerImage = 2;
+      note = 'BFL FLUX.2 klein ≈ $0.015–0.02/image';
+    } else if (model.includes('max')) {
+      centsPerImage = 7;
+      note = 'BFL FLUX.2 max ≈ $0.07/image';
+    } else if (options.hasReferences || model.includes('+ref')) {
+      centsPerImage = 5;
+      note = 'BFL FLUX.2 pro edit ≈ $0.045/image';
+    } else {
+      centsPerImage = 3;
+      note = 'BFL FLUX.2 pro ≈ $0.03/image';
+    }
+  }
+
+  const estimatedCostCents = centsPerImage * imageCount;
+  return {
+    provider: options.provider,
+    modelId: options.modelId,
+    imageCount,
+    estimatedCostCents,
+    estimatedCredits: estimatedCostCents, // 1 credit ≈ $0.01
+    pricingNote: note,
+  };
+}
+
+/**
  * Calculate estimated cost for a given model and token count
  * Useful for showing users estimated costs before making a request
  * 

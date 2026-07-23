@@ -381,6 +381,7 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
         provider: result.provider,
         fileId: result.fileId,
         addedBeatId: result.addedBeatId,
+        usage: result.usage || null,
       });
     } catch (error) {
       logger.error('Story brand beat failed', {
@@ -414,6 +415,7 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
         data: result.story,
         provider: result.provider,
         addedBeatIds: result.addedBeatIds,
+        usage: result.usage || null,
       });
     } catch (error) {
       logger.error('Story generate similar failed', {

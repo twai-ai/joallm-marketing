@@ -27,6 +27,11 @@ import { resolvePaletteColors } from './creative-palettes.js';
 import { parseBrandTheme, type BrandThemeInput } from './creative-brand-theme.js';
 import { canActorAccessOwnerResource } from './organization-ownership.js';
 import { ATRISI_EXACT_TYPE_DIRECTION } from './atrisi-brand.js';
+import {
+  formatCreativeUsageSummary,
+  recordCreativeImageUsage,
+  type CreativeUsageRecord,
+} from './creative-usage.js';
 
 const EXECUTABLE_PROVIDERS = ['ideogram', 'flux'] as const;
 type ExecutableProvider = (typeof EXECUTABLE_PROVIDERS)[number];
@@ -128,6 +133,8 @@ export type GenerateCreativeBatchResult = {
   referenceFileIds?: string[];
   referenceMode?: 'style' | 'edit';
   transparentBackground?: boolean;
+  /** Estimated Ideogram/FLUX cost recorded to api_usage */
+  usage?: CreativeUsageRecord | null;
 };
 
 export type ReferenceImageBlob = {
@@ -1296,11 +1303,26 @@ export async function generateCreativeImages(
   }
 
   const latencyMs = Date.now() - started;
+  const usage = await recordCreativeImageUsage({
+    userId: input.ownerUserId,
+    provider,
+    modelId: filesOut[0]?.modelId || provider,
+    quality,
+    imageCount: filesOut.length,
+    hasReferences: providerReferences.length > 0,
+    latencyMs,
+    keySource: source,
+    source: typeof input.metadata?.source === 'string' ? input.metadata.source : undefined,
+  });
+
   logger.info('Creative AI generate succeeded', {
     userId: input.ownerUserId,
     provider,
     fileCount: filesOut.length,
     latencyMs,
+    estimatedCostCents: usage?.estimatedCostCents,
+    estimatedCredits: usage?.estimatedCredits,
+    usageSummary: formatCreativeUsageSummary(usage),
   });
 
   return {
@@ -1313,6 +1335,7 @@ export async function generateCreativeImages(
     referenceFileIds: references.map((r) => r.fileId),
     referenceMode: references.length ? referenceMode : undefined,
     transparentBackground: transparentBackground || undefined,
+    usage,
   };
 }
 

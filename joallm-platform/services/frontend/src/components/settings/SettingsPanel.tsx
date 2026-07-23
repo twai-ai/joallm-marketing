@@ -1687,6 +1687,57 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
+                    <h4 className="font-medium text-gray-900 dark:text-white">Creative AI (Story Brand / More visuals)</h4>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {usage?.creative?.note ||
+                        'Estimated from Ideogram/BFL public rates (1 credit ≈ $0.01). BYOK bills your provider.'}
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl bg-white px-3 py-2 text-sm dark:bg-gray-900">
+                        <div className="text-gray-500">Calls</div>
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {formatNumber(usage?.creative?.totals.requests)}
+                        </div>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2 text-sm dark:bg-gray-900">
+                        <div className="text-gray-500">Images</div>
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {formatNumber(usage?.creative?.totals.images)}
+                        </div>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2 text-sm dark:bg-gray-900">
+                        <div className="text-gray-500">Est. credits / cost</div>
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          ~{formatNumber(usage?.creative?.totals.costCents)} ·{' '}
+                          {formatCurrency(usage?.creative?.totals.costCents)}
+                        </div>
+                      </div>
+                    </div>
+                    {usage?.creative?.byModel?.length ? (
+                      <div className="mt-3 space-y-2">
+                        {usage.creative.byModel.slice(0, 6).map((row) => (
+                          <div
+                            key={`${row.endpoint}-${row.model}`}
+                            className="flex flex-col gap-1 rounded-xl bg-white px-3 py-2 text-xs dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <span className="font-medium text-gray-800 dark:text-gray-200">
+                              {row.model || row.endpoint}
+                            </span>
+                            <span className="text-gray-500">
+                              {formatNumber(row.images)} img · ~{formatNumber(row.costCents)} credits ·{' '}
+                              {formatCurrency(row.costCents)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        No Creative AI calls recorded in this window yet.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
                     <h4 className="font-medium text-gray-900 dark:text-white">Recent model activity</h4>
                     {usage?.dailyBreakdown?.length ? (
                       <div className="mt-3 space-y-3">

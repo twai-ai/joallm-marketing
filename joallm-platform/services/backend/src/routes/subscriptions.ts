@@ -13,7 +13,7 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import crypto from 'crypto';
 import { db } from '../database/connection.js';
 import { users, apiUsage } from '../database/schema.js';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { logger } from '../utils/logger.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { TIER_LIMITS, getTierLimits } from '../middleware/subscription.js';
@@ -127,9 +127,27 @@ export async function subscriptionRoutes(fastify: FastifyInstance, options: Fast
         models: sql<string[]>`array_agg(DISTINCT ${apiUsage.model}) FILTER (WHERE ${apiUsage.model} IS NOT NULL)`,
       })
         .from(apiUsage)
-        .where(eq(apiUsage.userId, userId))
+        .where(and(eq(apiUsage.userId, userId), sql`${apiUsage.createdAt} >= ${since}`))
         .groupBy(sql`DATE(${apiUsage.createdAt})`)
         .orderBy(sql`DATE(${apiUsage.createdAt}) DESC`);
+
+      const creativeRows = await db.select({
+        endpoint: apiUsage.endpoint,
+        model: apiUsage.model,
+        requests: sql<number>`COUNT(*)`,
+        images: sql<number>`COALESCE(SUM(${apiUsage.tokensUsed}), 0)`,
+        costCents: sql<number>`COALESCE(SUM(${apiUsage.cost}), 0)`,
+      })
+        .from(apiUsage)
+        .where(
+          and(
+            eq(apiUsage.userId, userId),
+            sql`${apiUsage.createdAt} >= ${since}`,
+            sql`${apiUsage.endpoint} LIKE '/api/creative/%'`,
+          ),
+        )
+        .groupBy(apiUsage.endpoint, apiUsage.model)
+        .orderBy(sql`SUM(${apiUsage.cost}) DESC`);
 
       const totals = rows.reduce((acc, r) => ({
         totalRequests: acc.totalRequests + Number(r.totalRequests),
@@ -137,7 +155,25 @@ export async function subscriptionRoutes(fastify: FastifyInstance, options: Fast
         totalCostCents: acc.totalCostCents + Number(r.totalCostCents),
       }), { totalRequests: 0, totalTokens: 0, totalCostCents: 0 });
 
-      return reply.send({ days, dailyBreakdown: rows, totals });
+      const creativeTotals = creativeRows.reduce(
+        (acc, r) => ({
+          requests: acc.requests + Number(r.requests),
+          images: acc.images + Number(r.images),
+          costCents: acc.costCents + Number(r.costCents),
+        }),
+        { requests: 0, images: 0, costCents: 0 },
+      );
+
+      return reply.send({
+        days,
+        dailyBreakdown: rows,
+        totals,
+        creative: {
+          totals: creativeTotals,
+          byModel: creativeRows,
+          note: 'Creative estimates from Ideogram/BFL public rates (1 credit ≈ $0.01). BYOK bills your provider account.',
+        },
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('Failed to get usage:', error);

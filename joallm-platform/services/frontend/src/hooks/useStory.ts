@@ -174,7 +174,17 @@ export function useStorySession(storyId: string | undefined) {
   const brandBeatMutation = useMutation({
     mutationFn: async (input: { beatId: string; textMode?: 'none' | 'title' }) => {
       const res = await apiClient.post<
-        ApiOk<StorySession> & { provider?: string; addedBeatId?: string }
+        ApiOk<StorySession> & {
+          provider?: string;
+          addedBeatId?: string;
+          usage?: {
+            estimatedCredits?: number;
+            estimatedCostCents?: number;
+            provider?: string;
+            imageCount?: number;
+            keySource?: string;
+          } | null;
+        }
       >(
         API_ENDPOINTS.story.brandBeat(storyId!, input.beatId),
         { textMode: input.textMode ?? 'title' },
@@ -185,11 +195,17 @@ export function useStorySession(storyId: string | undefined) {
     onSuccess: (res) => {
       queryClient.setQueryData(['story', storyId], res.data);
       const withText = res.textMode === 'title';
+      const usage = res.usage;
+      const usageBit = usage?.estimatedCredits
+        ? ` · ~${usage.estimatedCredits} credit${usage.estimatedCredits === 1 ? '' : 's'} (~$${(
+            (usage.estimatedCostCents || 0) / 100
+          ).toFixed(2)})`
+        : '';
       showSuccess(
         res.provider
           ? withText
-            ? `Branded with title burned in (${res.provider}) — original kept`
-            : `Brand look added (${res.provider}) — original kept`
+            ? `Branded with title (${res.provider})${usageBit} — original kept`
+            : `Brand look (${res.provider})${usageBit} — original kept`
           : 'Branded variant added — original kept',
       );
     },
@@ -209,7 +225,16 @@ export function useStorySession(storyId: string | undefined) {
   const similarBeatMutation = useMutation({
     mutationFn: async (input: { beatId: string; count?: number }) => {
       const res = await apiClient.post<
-        ApiOk<StorySession> & { provider?: string; addedBeatIds?: string[] }
+        ApiOk<StorySession> & {
+          provider?: string;
+          addedBeatIds?: string[];
+          usage?: {
+            estimatedCredits?: number;
+            estimatedCostCents?: number;
+            provider?: string;
+            imageCount?: number;
+          } | null;
+        }
       >(API_ENDPOINTS.story.similarBeat(storyId!, input.beatId), {
         count: input.count || 1,
       }, { showErrorToast: false });
@@ -218,10 +243,16 @@ export function useStorySession(storyId: string | undefined) {
     onSuccess: (res) => {
       queryClient.setQueryData(['story', storyId], res.data);
       const n = res.addedBeatIds?.length || 1;
+      const usage = res.usage;
+      const usageBit = usage?.estimatedCredits
+        ? ` · ~${usage.estimatedCredits} credit${usage.estimatedCredits === 1 ? '' : 's'} (~$${(
+            (usage.estimatedCostCents || 0) / 100
+          ).toFixed(2)})`
+        : '';
       showSuccess(
         n > 1
-          ? `${n} text-free photos added (${res.provider || 'FLUX'}) — edit title to overlay`
-          : `Text-free photo added (${res.provider || 'FLUX'}) — edit title to overlay`,
+          ? `${n} text-free photos (${res.provider || 'FLUX'})${usageBit}`
+          : `Text-free photo (${res.provider || 'FLUX'})${usageBit} — edit title to overlay`,
       );
     },
     onError: (error: unknown) => {

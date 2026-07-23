@@ -22,6 +22,7 @@ import {
 } from './story-compose-service.js';
 import { getStoryAspectRatio, getStoryFormat, isStoryFormatId } from './story-format.js';
 import { ATRISI_INSTITUTE_BRAND_THEME } from './atrisi-brand.js';
+import type { CreativeUsageRecord } from './creative-usage.js';
 import {
   buildOrgTeamOwnerReadScope,
   canActorAccessOwnerResource,
@@ -380,7 +381,13 @@ export async function brandStoryBeat(
   storyId: string,
   beatId: string,
   options?: { textMode?: StoryBrandTextMode },
-): Promise<{ story: StorySessionDto; provider: string; fileId: string; addedBeatId: string }> {
+): Promise<{
+  story: StorySessionDto;
+  provider: string;
+  fileId: string;
+  addedBeatId: string;
+  usage?: CreativeUsageRecord | null;
+}> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
   if (!beat.fileId) {
@@ -507,7 +514,13 @@ export async function brandStoryBeat(
   const beats = [...before, brandedBeat, ...after].map((b, order) => ({ ...b, order }));
 
   const story = await updateStory(ownerUserId, storyId, { beats });
-  return { story, provider: generated.provider, fileId: newFileId, addedBeatId };
+  return {
+    story,
+    provider: generated.provider,
+    fileId: newFileId,
+    addedBeatId,
+    usage: generated.usage,
+  };
 }
 
 /**
@@ -520,7 +533,12 @@ export async function generateSimilarStoryBeats(
   storyId: string,
   beatId: string,
   options?: { count?: number },
-): Promise<{ story: StorySessionDto; provider: string; addedBeatIds: string[] }> {
+): Promise<{
+  story: StorySessionDto;
+  provider: string;
+  addedBeatIds: string[];
+  usage?: CreativeUsageRecord | null;
+}> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
   if (!beat.fileId) {
@@ -621,6 +639,7 @@ export async function generateSimilarStoryBeats(
     story,
     provider: batch.provider,
     addedBeatIds: added.map((b) => b.id),
+    usage: batch.usage,
   };
 }
 

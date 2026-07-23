@@ -457,8 +457,9 @@ export async function brandStoryBeat(
 }
 
 /**
- * Generate similar — style-reference variants.
- * Images stay text-light; titles/captions inherit from the source beat.
+ * Generate similar — associated photo variants only (no on-image copy).
+ * Prefer FLUX remix of the beat; Ideogram often invents text — keep prompts visual-only
+ * so users can caption manually in Story / design tools.
  */
 export async function generateSimilarStoryBeats(
   ownerUserId: string,
@@ -468,79 +469,86 @@ export async function generateSimilarStoryBeats(
 ): Promise<{ story: StorySessionDto; provider: string; addedBeatIds: string[] }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
+  if (!beat.fileId) {
+    throw Object.assign(new Error('Beat has no image for More visuals'), { statusCode: 400 });
+  }
   const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
   const count = Math.min(Math.max(options?.count || 1, 1), 3);
-  const watermark = Boolean(kit.logoFileId) && kit.watermark !== false;
 
+  // Visual-only brief — never quote Story titles/captions (models burn them as letters).
   const promptParts = [
-    'Create a similar institutional acquisition scene inspired by the first reference photo.',
-    'Keep the same subject world, people types, setting, and mood — fresh composition, not a duplicate.',
-    'ATRISI Marketing look: teal + slate, premium, trustworthy, sparse layout.',
-    'TEXT-FREE OUTPUT (critical): zero readable text on the image — no headlines, CTAs, captions, signs, posters, numbers-as-typography, or gibberish. Story editor owns all copy.',
+    'Create an associated photograph inspired by the first reference image.',
+    'Same subject, people, place, and lighting — new camera angle or framing, not a duplicate.',
+    'Premium institutional photo look, natural color, clean composition.',
+    'Absolutely no text, letters, logos-as-words, signs, posters, UI labels, or watermarks in the frame.',
+    'Leave empty clean margins suitable for later typography overlay by a human editor.',
   ];
-
-  // Use Story + source-image language as scene direction only — never burn it as letters
-  const sceneBits: string[] = [];
-  if (beat.title?.trim()) sceneBits.push(beat.title.trim());
-  if (beat.caption?.trim()) sceneBits.push(beat.caption.trim().slice(0, 160));
-  if (beat.vision?.claimHint?.trim()) sceneBits.push(beat.vision.claimHint.trim());
-  if (beat.vision?.onImageText?.trim()) {
-    sceneBits.push(
-      `source creatives communicated: ${beat.vision.onImageText.trim().slice(0, 120)}`,
-    );
+  if (beat.vision?.what) {
+    // Factual scene only (from vision), not marketing copy
+    promptParts.push(`What to keep recognizable: ${beat.vision.what}.`);
   }
-  if (sceneBits.length) {
-    promptParts.push(
-      `Visual narrative to express (DO NOT render as letters or captions): ${sceneBits.join(' — ')}.`,
-    );
-  }
-  if (beat.vision?.what) promptParts.push(`Reference scene: ${beat.vision.what}.`);
-  if (beat.vision?.mood) promptParts.push(`Mood: ${beat.vision.mood}.`);
-
-  if (watermark) {
-    promptParts.push(
-      'Place the official logo reference as a small corner mark (bottom-right), ~10% width — logo graphic only, no invented lettering.',
-    );
+  if (beat.vision?.mood) {
+    promptParts.push(`Mood: ${beat.vision.mood}.`);
   }
 
-  const refs = brandReferenceIds(kit, beat.fileId!);
   const similarRefs = [
-    beat.fileId!,
-    ...refs.filter((id) => id !== beat.fileId),
-  ].slice(0, 4);
+    beat.fileId,
+    ...brandReferenceIds(kit, beat.fileId).filter((id) => id !== beat.fileId && id !== kit.logoFileId),
+  ].slice(0, 3);
 
-  const generated = await generateCreativeImages({
-    ownerUserId,
-    prompt: promptParts.join(' '),
-    style: 'photo_realistic',
-    quality: 'standard',
-    aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
-    titleHint: beat.title || 'Similar beat',
-    referenceFileIds: similarRefs,
-    referenceMode: 'edit',
-    analyzeReferences: true,
-    variantCount: count,
-    metadata: {
-      source: 'story_generate_similar',
-      storyId,
-      beatId,
-      referenceFileId: beat.fileId,
-      watermark,
-      format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
-    },
-    precision: {
-      textFree: true,
-      brandTheme: ATRISI_STORY_BRAND_THEME,
-      paletteType: 'institutional_navy',
-      useLogoReference: watermark,
-      // Feed narrative into referenceVisualContext-adjacent avoid + scene via prompt only
-      referenceVisualContext: sceneBits.length
-        ? `Express without lettering: ${sceneBits.join(' | ').slice(0, 280)}`
-        : undefined,
-      avoid:
-        'any readable text, gibberish letters, misspelled words, fake logos, captions, headlines, CTAs, signage, posters with words, neon, clutter, exact duplicate of reference',
-    },
-  });
+  const generateOnce = (providerOverride: 'flux' | 'ideogram' | null) =>
+    generateCreativeImages({
+      ownerUserId,
+      prompt: promptParts.join(' '),
+      style: 'photo_realistic',
+      quality: 'standard',
+      aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
+      titleHint: 'Similar visual',
+      referenceFileIds: similarRefs,
+      referenceMode: 'edit',
+      // Skip ref OCR — it feeds Ideogram into inventing letters
+      analyzeReferences: false,
+      variantCount: count,
+      providerOverride: providerOverride || undefined,
+      metadata: {
+        source: 'story_generate_similar',
+        storyId,
+        beatId,
+        referenceFileId: beat.fileId,
+        textFree: true,
+        format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
+      },
+      precision: {
+        textFree: true,
+        brandTheme: ATRISI_STORY_BRAND_THEME,
+        paletteType: 'institutional_navy',
+        useLogoReference: false,
+        avoid:
+          'any readable text, letters, words, gibberish, captions, headlines, CTAs, logos, watermarks, signage, posters, subtitles, UI chrome, neon, clutter, exact duplicate of reference',
+      },
+    });
+
+  let generated: Awaited<ReturnType<typeof generateCreativeImages>>;
+  try {
+    // FLUX remix keeps the photo association; Ideogram often paints junk typography
+    generated = await generateOnce('flux');
+  } catch (fluxError) {
+    logger.warn('Story More visuals: FLUX failed, trying Ideogram text-free fallback', {
+      error: fluxError instanceof Error ? fluxError.message : String(fluxError),
+    });
+    try {
+      generated = await generateOnce('ideogram');
+    } catch (ideoError) {
+      const fluxMsg = fluxError instanceof Error ? fluxError.message : String(fluxError);
+      const ideoMsg = ideoError instanceof Error ? ideoError.message : String(ideoError);
+      throw Object.assign(
+        new Error(
+          `More visuals failed. FLUX: ${fluxMsg}. Ideogram: ${ideoMsg}. Add BFL/FLUX for best photo remix.`,
+        ),
+        { statusCode: 502 },
+      );
+    }
+  }
 
   const newFileIds = generated.files.map((f) => f.fileId).filter(Boolean);
   if (newFileIds.length === 0) {
@@ -552,10 +560,9 @@ export async function generateSimilarStoryBeats(
     id: randomUUID(),
     fileId,
     sourceFileId: beat.fileId,
-    // Inherit story copy from source — do not invent new poster text
-    title: beat.title || `Similar ${index + 1}`,
+    title: beat.title || `Visual ${index + 1}`,
     caption: beat.caption || '',
-    notes: 'Similar visual · copy inherited from source beat · original kept',
+    notes: 'More visuals · text-free photo · add copy yourself in Edit / design tools',
     order: insertAt + 1 + index,
     arcRole: beat.arcRole || 'other',
     vision: null,

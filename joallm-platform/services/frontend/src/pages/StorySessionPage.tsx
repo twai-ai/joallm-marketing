@@ -482,7 +482,7 @@ export function StorySessionPage() {
                     {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                   </span>
                   <span className="text-[10px] font-medium text-slate-300">
-                    Similar scene · no text on image
+                    Matching photo · no text — add copy yourself
                   </span>
                 </button>
               </div>
@@ -647,7 +647,7 @@ export function StorySessionPage() {
                           {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                         </span>
                         <span className="mt-0.5 block text-[11px] text-slate-500">
-                          Similar scene · no text on image
+                          Matching photo · blank for your text
                         </span>
                       </button>
                       <button

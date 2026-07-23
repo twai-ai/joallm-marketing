@@ -217,8 +217,8 @@ export function useStorySession(storyId: string | undefined) {
       const n = res.addedBeatIds?.length || 1;
       showSuccess(
         n > 1
-          ? `${n} similar visuals added — copy inherited from source`
-          : 'Similar visual added — copy inherited from source',
+          ? `${n} matching photos added — text-free for your copy`
+          : 'Matching photo added — text-free for your copy',
       );
     },
     onError: (error: unknown) => {

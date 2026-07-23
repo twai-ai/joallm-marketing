@@ -9,9 +9,11 @@ import { authenticateToken } from '../middleware/auth.js';
 import { generateCreativeImages } from '../services/creative-ai-generate-service.js';
 import {
   addBeatsFromFiles,
+  brandStoryBeat,
   createStory,
   deleteStory,
   exportStoryPptx,
+  generateSimilarStoryBeats,
   getStory,
   listStories,
   proposeStoryline,
@@ -292,6 +294,65 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
       return reply.status(statusFromError(error)).send({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to generate beat',
+      });
+    }
+  });
+
+  fastify.post('/:storyId/beats/:beatId/brand', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Brand this beat with ATRISI Creative AI (edit remix + brand theme)',
+      tags: ['story'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as { user: { id: string } }).user.id;
+      const { storyId, beatId } = request.params as { storyId: string; beatId: string };
+      const result = await brandStoryBeat(userId, storyId, beatId);
+      return reply.status(201).send({
+        success: true,
+        data: result.story,
+        provider: result.provider,
+        fileId: result.fileId,
+      });
+    } catch (error) {
+      logger.error('Story brand beat failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return reply.status(statusFromError(error)).send({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to brand beat',
+      });
+    }
+  });
+
+  fastify.post('/:storyId/beats/:beatId/similar', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Generate similar beat image(s) via Creative AI style reference',
+      tags: ['story'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as { user: { id: string } }).user.id;
+      const { storyId, beatId } = request.params as { storyId: string; beatId: string };
+      const body = z
+        .object({ count: z.number().int().min(1).max(3).optional() })
+        .parse(request.body || {});
+      const result = await generateSimilarStoryBeats(userId, storyId, beatId, body);
+      return reply.status(201).send({
+        success: true,
+        data: result.story,
+        provider: result.provider,
+        addedBeatIds: result.addedBeatIds,
+      });
+    } catch (error) {
+      logger.error('Story generate similar failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return reply.status(statusFromError(error)).send({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to generate similar',
       });
     }
   });

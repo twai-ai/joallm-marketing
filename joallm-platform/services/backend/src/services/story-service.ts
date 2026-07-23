@@ -9,6 +9,8 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { files, storySessions, type StoryBeat } from '../database/schema.js';
 import { storageProvider } from './file-storage.js';
+import { generateCreativeImages } from './creative-ai-generate-service.js';
+import type { BrandThemeInput } from './creative-brand-theme.js';
 import {
   applyHeuristicFromVision,
   seeBeatVisionCards,
@@ -20,6 +22,26 @@ import {
   resolveOrganizationIdForUser,
 } from './organization-ownership.js';
 import { logger } from '../utils/logger.js';
+
+/** Default ATRISI Marketing visual theme for Story Creative AI actions */
+export const ATRISI_STORY_BRAND_THEME: BrandThemeInput = {
+  palette: {
+    primary: '#0F766E',
+    secondary: '#0F172A',
+    accent: '#2DD4BF',
+    background: '#F8FAFC',
+    text: '#0F172A',
+  },
+  theme: {
+    mood: 'premium institutional, trustworthy, calm authority',
+    typography: 'bold clean sans-serif headlines, restrained supporting text',
+    layout: 'minimal, generous whitespace, clear hierarchy, logo-safe margins',
+    imagery: 'real institutional life — campus, learners, mentors; not stock-ad clichés',
+    density: 'sparse',
+    notes:
+      'ATRISI Marketing brand for Institution Acquisition. Teal + slate. No neon, no purple glow, no cluttered badge stacks.',
+  },
+};
 
 export type StoryStatus = 'draft' | 'ready' | 'archived';
 
@@ -217,6 +239,162 @@ export async function addBeatsFromFiles(
   return updateStory(ownerUserId, storyId, {
     beats: [...existing.beats, ...added],
   });
+}
+
+function findBeatOrThrow(beats: StoryBeat[], beatId: string): StoryBeat {
+  const beat = beats.find((b) => b.id === beatId);
+  if (!beat) {
+    throw Object.assign(new Error('Beat not found'), { statusCode: 404 });
+  }
+  if (!beat.fileId) {
+    throw Object.assign(new Error('Beat has no image to use as reference'), { statusCode: 400 });
+  }
+  return beat;
+}
+
+/**
+ * Brand this beat — Creative AI remix with ATRISI brand theme (edit mode).
+ * Replaces the beat image; clears vision cache so Propose re-reads it.
+ */
+export async function brandStoryBeat(
+  ownerUserId: string,
+  storyId: string,
+  beatId: string,
+): Promise<{ story: StorySessionDto; provider: string; fileId: string }> {
+  const existing = await getOwnedStory(ownerUserId, storyId);
+  const beat = findBeatOrThrow(existing.beats, beatId);
+
+  const promptParts = [
+    'Restyle this reference creative into an ATRISI Marketing institutional acquisition visual.',
+    'Keep the core subject and composition recognizable.',
+    'Apply ATRISI teal and slate brand, premium institutional look, clean hierarchy.',
+    'Do not invent program names, prices, or stats that are not in the reference.',
+  ];
+  if (beat.title) promptParts.push(`Beat title context: ${beat.title}.`);
+  if (beat.caption) promptParts.push(`Caption context: ${beat.caption}.`);
+  if (beat.vision?.onImageText) promptParts.push(`Preserve readable text where possible: ${beat.vision.onImageText}.`);
+
+  const generated = await generateCreativeImages({
+    ownerUserId,
+    prompt: promptParts.join(' '),
+    style: 'marketing_poster',
+    quality: 'standard',
+    aspectRatio: '16x9',
+    titleHint: beat.title || 'ATRISI branded beat',
+    referenceFileIds: [beat.fileId!],
+    referenceMode: 'edit',
+    analyzeReferences: true,
+    variantCount: 1,
+    metadata: {
+      source: 'story_brand_beat',
+      storyId,
+      beatId,
+      originalFileId: beat.fileId,
+    },
+    precision: {
+      institutionName: 'ATRISI',
+      brandTheme: ATRISI_STORY_BRAND_THEME,
+      paletteType: 'institutional_navy',
+      avoid: 'neon colors, purple glow, cluttered stickers, fake logos, watermarks',
+      mustIncludeText: beat.vision?.onImageText || undefined,
+    },
+  });
+
+  const newFileId = generated.files[0]?.fileId;
+  if (!newFileId) {
+    throw Object.assign(new Error('Creative AI returned no branded image'), { statusCode: 502 });
+  }
+
+  const beats = existing.beats.map((b) =>
+    b.id === beatId
+      ? {
+          ...b,
+          fileId: newFileId,
+          vision: null,
+          notes: b.notes || 'Branded with ATRISI Creative AI',
+        }
+      : b,
+  );
+
+  const story = await updateStory(ownerUserId, storyId, { beats });
+  return { story, provider: generated.provider, fileId: newFileId };
+}
+
+/**
+ * Generate similar — Creative AI style-reference variants appended after the beat.
+ */
+export async function generateSimilarStoryBeats(
+  ownerUserId: string,
+  storyId: string,
+  beatId: string,
+  options?: { count?: number },
+): Promise<{ story: StorySessionDto; provider: string; addedBeatIds: string[] }> {
+  const existing = await getOwnedStory(ownerUserId, storyId);
+  const beat = findBeatOrThrow(existing.beats, beatId);
+  const count = Math.min(Math.max(options?.count || 1, 1), 3);
+
+  const promptParts = [
+    'Create a similar institutional acquisition creative inspired by the reference.',
+    'Same subject world and mood, fresh composition — not a duplicate.',
+    'ATRISI Marketing look: teal + slate, premium, trustworthy, sparse layout.',
+    'Suitable as a Story beat for Context / Proof / Ask narratives.',
+  ];
+  if (beat.vision?.what) promptParts.push(`Reference scene: ${beat.vision.what}.`);
+  if (beat.vision?.claimHint) promptParts.push(`Claim direction: ${beat.vision.claimHint}.`);
+  if (beat.title) promptParts.push(`Related to: ${beat.title}.`);
+
+  const generated = await generateCreativeImages({
+    ownerUserId,
+    prompt: promptParts.join(' '),
+    style: 'social_media',
+    quality: 'standard',
+    aspectRatio: '16x9',
+    titleHint: beat.title ? `Similar · ${beat.title}` : 'Similar beat',
+    referenceFileIds: [beat.fileId!],
+    referenceMode: 'style',
+    analyzeReferences: true,
+    variantCount: count,
+    metadata: {
+      source: 'story_generate_similar',
+      storyId,
+      beatId,
+      referenceFileId: beat.fileId,
+    },
+    precision: {
+      institutionName: 'ATRISI',
+      brandTheme: ATRISI_STORY_BRAND_THEME,
+      paletteType: 'institutional_navy',
+      avoid: 'exact copy of reference, neon, clutter, wrong logos',
+    },
+  });
+
+  const newFileIds = generated.files.map((f) => f.fileId).filter(Boolean);
+  if (newFileIds.length === 0) {
+    throw Object.assign(new Error('Creative AI returned no similar images'), { statusCode: 502 });
+  }
+
+  const insertAt = existing.beats.findIndex((b) => b.id === beatId);
+  const added: StoryBeat[] = newFileIds.map((fileId, index) => ({
+    id: randomUUID(),
+    fileId,
+    title: beat.title ? `${beat.title} · similar` : `Similar ${index + 1}`,
+    caption: beat.caption || '',
+    notes: 'Generated similar via Creative AI',
+    order: insertAt + 1 + index,
+    arcRole: beat.arcRole || 'other',
+    vision: null,
+  }));
+
+  const before = existing.beats.slice(0, insertAt + 1);
+  const after = existing.beats.slice(insertAt + 1);
+  const beats = [...before, ...added, ...after].map((b, order) => ({ ...b, order }));
+
+  const story = await updateStory(ownerUserId, storyId, { beats });
+  return {
+    story,
+    provider: generated.provider,
+    addedBeatIds: added.map((b) => b.id),
+  };
 }
 
 export async function proposeStoryline(

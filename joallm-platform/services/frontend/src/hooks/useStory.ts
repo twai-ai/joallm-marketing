@@ -142,6 +142,41 @@ export function useStorySession(storyId: string | undefined) {
     onError: () => showError('Could not generate beat'),
   });
 
+  const brandBeatMutation = useMutation({
+    mutationFn: async (beatId: string) => {
+      const res = await apiClient.post<ApiOk<StorySession> & { provider?: string }>(
+        API_ENDPOINTS.story.brandBeat(storyId!, beatId),
+      );
+      return res;
+    },
+    onSuccess: (res) => {
+      queryClient.setQueryData(['story', storyId], res.data);
+      showSuccess(
+        res.provider ? `Beat branded with ${res.provider}` : 'Beat branded with ATRISI look',
+      );
+    },
+    onError: () => showError('Could not brand beat — check Creative AI keys'),
+  });
+
+  const similarBeatMutation = useMutation({
+    mutationFn: async (input: { beatId: string; count?: number }) => {
+      const res = await apiClient.post<
+        ApiOk<StorySession> & { provider?: string; addedBeatIds?: string[] }
+      >(API_ENDPOINTS.story.similarBeat(storyId!, input.beatId), {
+        count: input.count || 1,
+      });
+      return res;
+    },
+    onSuccess: (res) => {
+      queryClient.setQueryData(['story', storyId], res.data);
+      const n = res.addedBeatIds?.length || 1;
+      showSuccess(
+        n > 1 ? `${n} similar beats added` : 'Similar beat added',
+      );
+    },
+    onError: () => showError('Could not generate similar — check Creative AI keys'),
+  });
+
   const exportPptx = useCallback(async () => {
     if (!storyId) return;
     try {
@@ -174,6 +209,10 @@ export function useStorySession(storyId: string | undefined) {
     isProposing: proposeMutation.isPending,
     generateBeat: generateBeatMutation.mutateAsync,
     isGenerating: generateBeatMutation.isPending,
+    brandBeat: brandBeatMutation.mutateAsync,
+    isBranding: brandBeatMutation.isPending,
+    generateSimilar: similarBeatMutation.mutateAsync,
+    isGeneratingSimilar: similarBeatMutation.isPending,
     exportPptx,
   };
 }

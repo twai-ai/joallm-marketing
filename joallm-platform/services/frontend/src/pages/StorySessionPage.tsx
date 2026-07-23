@@ -35,6 +35,10 @@ export function StorySessionPage() {
     isAddingFiles,
     proposeStoryline,
     isProposing,
+    brandBeat,
+    isBranding,
+    generateSimilar,
+    isGeneratingSimilar,
     exportPptx,
   } = useStorySession(storyId);
   const { uploadMultiple, isUploading } = useDocuments();
@@ -357,6 +361,26 @@ export function StorySessionPage() {
                 </div>
                 {selected.vision?.what ? (
                   <p className="text-xs leading-relaxed text-slate-400">{selected.vision.what}</p>
+                ) : null}
+                {selected.fileId ? (
+                  <div className="flex flex-col gap-2 pt-2">
+                    <button
+                      type="button"
+                      disabled={isBranding || isGeneratingSimilar}
+                      onClick={() => void brandBeat(selected.id)}
+                      className="text-left text-sm font-medium text-teal-700 transition hover:text-teal-900 disabled:opacity-40"
+                    >
+                      {isBranding ? 'Branding with ATRISI…' : 'Brand this beat'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBranding || isGeneratingSimilar}
+                      onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
+                      className="text-left text-sm font-medium text-slate-600 transition hover:text-slate-900 disabled:opacity-40"
+                    >
+                      {isGeneratingSimilar ? 'Generating similar…' : 'Generate similar'}
+                    </button>
+                  </div>
                 ) : null}
                 {isSaving ? (
                   <p className="text-xs text-slate-400">Saving…</p>

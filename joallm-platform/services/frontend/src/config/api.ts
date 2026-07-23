@@ -102,6 +102,10 @@ export const API_ENDPOINTS = {
     addFiles: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/beats/files`,
     propose: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/propose`,
     generateBeat: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/beats/generate`,
+    brandBeat: (storyId: string, beatId: string) =>
+      `${API_BASE_URL}/api/story/${storyId}/beats/${beatId}/brand`,
+    similarBeat: (storyId: string, beatId: string) =>
+      `${API_BASE_URL}/api/story/${storyId}/beats/${beatId}/similar`,
     exportPptx: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/pptx`,
   },
 };

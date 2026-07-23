@@ -576,23 +576,40 @@ function buildMediaResultsPayload(
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     .slice(0, 6)
     .map((insight, index) => {
-      const startTime = insight.startTime ?? 0;
-      const desiredMinDuration = intelligenceMode === 'creator' ? 15 : 20;
+      const mediaLen = durationSec > 0 ? durationSec : Number.POSITIVE_INFINITY;
+      // Prefer a useful clip length, but never invent time past the media.
+      const desiredMinDuration = Math.min(
+        intelligenceMode === 'creator' ? 15 : 20,
+        Math.max(2, mediaLen * 0.85),
+      );
+      const rawStart = Math.max(0, insight.startTime ?? 0);
+      const startTime = mediaLen > 0 && Number.isFinite(mediaLen)
+        ? Math.min(rawStart, Math.max(0, mediaLen - 0.5))
+        : rawStart;
       const rawEndTime = insight.endTime ?? startTime + desiredMinDuration;
-      const endTime = Math.max(rawEndTime, startTime + desiredMinDuration);
+      const uncappedEnd = Math.max(rawEndTime, startTime + Math.min(desiredMinDuration, 3));
+      const endTime = Number.isFinite(mediaLen)
+        ? Math.min(uncappedEnd, mediaLen)
+        : uncappedEnd;
+      // Drop degenerate ranges (e.g. start already at EOF)
+      if (endTime <= startTime + 0.05) {
+        return null;
+      }
       return {
         id: `clip-${insight.id}`,
         rank: index + 1,
         title: insight.title,
         hook: clipText(insight.description || insight.title, 110) || insight.title,
-        startTime,
-        endTime,
+        startTime: Number(startTime.toFixed(2)),
+        endTime: Number(endTime.toFixed(2)),
         duration: Number((endTime - startTime).toFixed(1)),
         whyItWorks: buildClipWhyItWorks(intelligenceMode, insight),
         confidence: insight.score ?? 0.7,
         tags: insight.tags,
       };
-    });
+    })
+    .filter((clip): clip is NonNullable<typeof clip> => clip !== null)
+    .map((clip, index) => ({ ...clip, rank: index + 1 }));
 
   return {
     overview: {
@@ -2039,14 +2056,30 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
       return reply.status(400).send({ error: 'Clip creation is only supported for media assets' });
     }
 
-    const duration = Number((endTime - startTime).toFixed(3));
-    const clipTitle = title?.trim() || `${file.originalName || file.filename} clip ${Math.floor(startTime / 60)}:${String(Math.floor(startTime % 60)).padStart(2, '0')}`;
+    const metaDuration = Number((file.metadata as { duration?: number } | null)?.duration);
+    let clipStart = Math.max(0, startTime);
+    let clipEnd = endTime;
+    if (Number.isFinite(metaDuration) && metaDuration > 0) {
+      clipStart = Math.min(clipStart, Math.max(0, metaDuration - 0.1));
+      clipEnd = Math.min(Math.max(clipEnd, clipStart + 0.1), metaDuration);
+    }
+    if (clipEnd <= clipStart) {
+      return reply.status(400).send({
+        error: 'Invalid clip range',
+        message: Number.isFinite(metaDuration) && metaDuration > 0
+          ? `End time cannot exceed media duration (${metaDuration.toFixed(1)}s).`
+          : 'endTime must be greater than startTime',
+      });
+    }
+
+    const duration = Number((clipEnd - clipStart).toFixed(3));
+    const clipTitle = title?.trim() || `${file.originalName || file.filename} clip ${Math.floor(clipStart / 60)}:${String(Math.floor(clipStart % 60)).padStart(2, '0')}`;
 
     const [editPlan] = await db.insert(editPlans).values({
       userId,
       fileId,
       title: clipTitle,
-      description: `Clip requested from ${startTime}s to ${endTime}s`,
+      description: `Clip requested from ${clipStart}s to ${clipEnd}s`,
       status: 'rendering',
       steps: [
         {
@@ -2054,8 +2087,8 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
           stepType: 'clip',
           order: 1,
           config: {
-            startTime,
-            endTime,
+            startTime: clipStart,
+            endTime: clipEnd,
             sourceInsightId: sourceInsightId ?? null,
           },
         },
@@ -2070,8 +2103,8 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
       const renderOutputId = await renderMediaClip({
         editPlanId: editPlan.id,
         fileId,
-        startTime,
-        endTime,
+        startTime: clipStart,
+        endTime: clipEnd,
         userId,
       });
 
@@ -2092,8 +2125,8 @@ export async function filesRoutes(fastify: FastifyInstance, options: FastifyPlug
         renderOutputId,
         editPlanId: editPlan.id,
         title: clipTitle,
-        startTime,
-        endTime,
+        startTime: clipStart,
+        endTime: clipEnd,
         duration,
         status: renderOutput.status,
         downloadUrl,

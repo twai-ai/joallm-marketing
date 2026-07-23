@@ -240,6 +240,29 @@ function getClipRange(clip: MediaClipSuggestion, drafts: Record<string, ClipRang
   return drafts[clip.id] ?? { startTime: clip.startTime, endTime: clip.endTime };
 }
 
+/** Keep clip ranges inside media bounds (AI often pads short videos to 15–20s). */
+function clampClipRange(
+  startTime: number,
+  endTime: number,
+  mediaDurationSec?: number,
+): ClipRangeDraft {
+  let start = Number.isFinite(startTime) ? Math.max(0, startTime) : 0;
+  let end = Number.isFinite(endTime) ? endTime : start;
+  if (mediaDurationSec && mediaDurationSec > 0) {
+    start = Math.min(start, Math.max(0, mediaDurationSec - 0.1));
+    end = Math.min(Math.max(end, start + 0.1), mediaDurationSec);
+  }
+  if (end <= start) {
+    end = mediaDurationSec && mediaDurationSec > start
+      ? mediaDurationSec
+      : start + 0.1;
+  }
+  return {
+    startTime: Number(start.toFixed(2)),
+    endTime: Number(end.toFixed(2)),
+  };
+}
+
 function validateClipRange(
   startTime: number,
   endTime: number,
@@ -733,7 +756,16 @@ export function MediaStatusPanel({ fileId, processingStage, filename, showExtend
   };
 
   const handleCreateClip = async (clip: MediaClipSuggestion) => {
-    const range = getClipRange(clip, clipRangeDrafts);
+    const rawRange = getClipRange(clip, clipRangeDrafts);
+    const range = clampClipRange(
+      rawRange.startTime,
+      rawRange.endTime,
+      mediaResults?.overview.durationSec,
+    );
+    // Persist clamp so UI timestamps match what we render
+    if (range.startTime !== rawRange.startTime || range.endTime !== rawRange.endTime) {
+      setClipRangeDrafts(current => ({ ...current, [clip.id]: range }));
+    }
     const validationError = validateClipRange(
       range.startTime,
       range.endTime,
@@ -1468,7 +1500,12 @@ export function MediaStatusPanel({ fileId, processingStage, filename, showExtend
                 </div>
                 <div className="space-y-3 p-3">
                   {mediaResults.clipSuggestions.map(clip => {
-                    const range = getClipRange(clip, clipRangeDrafts);
+                    const rawRange = getClipRange(clip, clipRangeDrafts);
+                    const range = clampClipRange(
+                      rawRange.startTime,
+                      rawRange.endTime,
+                      mediaResults.overview.durationSec,
+                    );
                     const durationSec = Math.max(0, Number((range.endTime - range.startTime).toFixed(1)));
                     const isEditing = editingClipId === clip.id;
                     const rangeChanged =

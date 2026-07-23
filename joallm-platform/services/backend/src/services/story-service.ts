@@ -35,12 +35,12 @@ export const ATRISI_STORY_BRAND_THEME: BrandThemeInput = {
   },
   theme: {
     mood: 'premium institutional, trustworthy, calm authority',
-    typography: 'bold clean sans-serif headlines, restrained supporting text',
-    layout: 'minimal, generous whitespace, clear hierarchy, logo-safe margins',
+    // Typography is applied in Story overlays — do not ask the image model for headlines
+    layout: 'minimal, generous whitespace, clear visual hierarchy, empty margins for text overlay',
     imagery: 'real institutional life — campus, learners, mentors; not stock-ad clichés',
     density: 'sparse',
     notes:
-      'ATRISI Marketing brand for Institution Acquisition. Teal + slate. No neon, no purple glow, no cluttered badge stacks.',
+      'ATRISI Marketing brand for Institution Acquisition. Teal + slate. No neon, no purple glow, no cluttered badge stacks. Images are text-free; copy lives in Story fields.',
   },
 };
 
@@ -324,32 +324,27 @@ export async function brandStoryBeat(
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
   const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
-  const exactText = safeMustIncludeText(beat.vision?.onImageText);
 
   const promptParts = [
     'Restyle the subject reference into an ATRISI Marketing institutional acquisition visual.',
     'Keep the core subject and composition recognizable.',
-    'Apply ATRISI teal and slate brand, premium institutional look, clean hierarchy.',
-    exactText
-      ? `If you render text, use EXACTLY this copy and nothing else: "${exactText}".`
-      : 'Do NOT invent headlines, CTAs, stats, or program names on the image. Prefer a clean photographic/illustrative composition with empty safe area for later text overlay.',
+    'Apply ATRISI teal and slate brand, premium institutional look, clean visual hierarchy.',
+    'TEXT-FREE: zero readable text on the image — no headlines, CTAs, captions, signs, or gibberish letters. Leave empty safe area for Story title/caption overlay.',
     'Do not add fake logos unless a logo reference image is provided.',
   ];
   if (kit.logoFileId) {
-    promptParts.push('Incorporate the provided ATRISI logo reference subtly (corner / clear space).');
+    promptParts.push('Place the official logo mark only (corner / clear space). No invented wordmark lettering.');
   }
-  if (beat.title) promptParts.push(`Narrative beat (for mood only, not on-image text): ${beat.title}.`);
+  if (beat.title) promptParts.push(`Mood only (do not render as text): ${beat.title}.`);
 
   const generated = await generateCreativeImages({
     ownerUserId,
     prompt: promptParts.join(' '),
-    // marketing_poster guidance pushes invented headlines — use photo when text-light
-    style: exactText ? 'marketing_poster' : 'photo_realistic',
+    style: 'photo_realistic',
     quality: 'standard',
     aspectRatio: '16x9',
     titleHint: beat.title || 'ATRISI branded beat',
     referenceFileIds: brandReferenceIds(kit, beat.fileId!),
-    // Style refs → Ideogram first; auto-falls back if Ideogram fails / FLUX if needed
     referenceMode: 'style',
     analyzeReferences: true,
     variantCount: 1,
@@ -361,13 +356,12 @@ export async function brandStoryBeat(
       usedBrandKit: Boolean(kit.logoFileId || (kit.styleFileIds && kit.styleFileIds.length)),
     },
     precision: {
-      institutionName: 'ATRISI',
+      textFree: true,
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
       useLogoReference: Boolean(kit.logoFileId),
       avoid:
-        'invented text, misspelled words, fake logos, neon, purple glow, cluttered stickers, watermarks, random CTAs, readable letters of any kind when no exact copy is provided',
-      mustIncludeText: exactText,
+        'any readable text, gibberish letters, misspelled words, fake logos, neon, purple glow, cluttered stickers, watermarks, CTAs, captions, signage',
     },
   });
 
@@ -408,15 +402,12 @@ export async function generateSimilarStoryBeats(
   const beat = findBeatOrThrow(existing.beats, beatId);
   const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
   const count = Math.min(Math.max(options?.count || 1, 1), 3);
-  const exactText = safeMustIncludeText(beat.vision?.onImageText);
 
   const promptParts = [
     'Create a similar institutional acquisition scene inspired by the reference.',
     'Same subject world and mood, fresh composition — not a duplicate.',
     'ATRISI Marketing look: teal + slate, premium, trustworthy, sparse layout.',
-    exactText
-      ? `If any text appears, it must be EXACTLY: "${exactText}". No other words.`
-      : 'CRITICAL: Do not put any readable text, headlines, CTAs, or logos on the image. Clean visual only — typography will be added in the Story editor.',
+    'TEXT-FREE: absolutely no readable text, headlines, CTAs, logos-as-words, or gibberish letters. Clean visual only — Story editor owns typography.',
   ];
   if (beat.vision?.what) promptParts.push(`Reference scene: ${beat.vision.what}.`);
   if (beat.vision?.mood) promptParts.push(`Mood: ${beat.vision.mood}.`);
@@ -446,13 +437,12 @@ export async function generateSimilarStoryBeats(
       referenceFileId: beat.fileId,
     },
     precision: {
-      institutionName: 'ATRISI',
+      textFree: true,
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
       useLogoReference: Boolean(kit.logoFileId),
       avoid:
-        'invented text, gibberish letters, readable words of any kind, fake logos, watermarks, neon, clutter, exact duplicate of reference',
-      mustIncludeText: exactText,
+        'any readable text, gibberish letters, fake logos, watermarks, neon, clutter, exact duplicate of reference',
     },
   });
 

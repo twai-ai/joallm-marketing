@@ -34,6 +34,11 @@ export type PromptPrecision = {
   cta?: string;
   /** Exact copy that must appear in the creative (program name, dates, etc.) */
   mustIncludeText?: string;
+  /**
+   * When true: no on-image typography at all (Story overlays titles/captions separately).
+   * Forces Magic Prompt OFF and strips OCR text from reference vision.
+   */
+  textFree?: boolean;
   /** Things to avoid (wrong logos, watermarks, clutter…) */
   avoid?: string;
   institutionName?: string;
@@ -259,8 +264,8 @@ function resolveMagicPrompt(
   userPrompt: string,
   precision?: PromptPrecision,
 ): 'ON' | 'OFF' | 'AUTO' {
-  // Exact copy must never be rewritten by Magic Prompt.
-  if (hasExactText(precision) || userPrompt.length >= 420) return 'OFF';
+  // Text-free and exact copy must never be rewritten by Magic Prompt.
+  if (precision?.textFree || hasExactText(precision) || userPrompt.length >= 420) return 'OFF';
   if (userPrompt.length < 140) return 'ON';
   return 'AUTO';
 }
@@ -278,13 +283,18 @@ export function buildEnhancedPrompt(options: {
   const base = options.prompt.trim();
   const p = options.precision || {};
   const parts: string[] = [];
-  const exact = hasExactText(p);
+  const textFree = Boolean(p.textFree);
+  const exact = !textFree && hasExactText(p);
 
   const headline = p.headline?.trim();
   const cta = p.cta?.trim();
   const must = p.mustIncludeText?.trim();
 
-  if (exact) {
+  if (textFree) {
+    parts.push(
+      'TEXT-FREE IMAGE (critical): produce a clean visual with absolutely NO readable text — no headlines, CTAs, captions, labels, watermarks, posters, signs, menus, badges, or gibberish letters. Empty safe margins for later typography overlay. Do not invent words of any language.',
+    );
+  } else if (exact) {
     parts.push(
       'TYPOGRAPHY (critical): render ONLY the following strings, letter-perfect, large high-contrast sans-serif, correctly spelled, sharp edges. Do not invent extra words, dates, slogans, or captions.',
     );
@@ -298,7 +308,8 @@ export function buildEnhancedPrompt(options: {
   parts.push(base);
 
   const institution = p.institutionName?.trim();
-  if (institution && !base.toLowerCase().includes(institution.toLowerCase()) && !exact) {
+  // Skip quoting institution when text-free — models turn it into on-image wordmarks
+  if (institution && !textFree && !base.toLowerCase().includes(institution.toLowerCase()) && !exact) {
     parts.push(`Institution / program context: "${institution}".`);
   }
 
@@ -321,12 +332,19 @@ export function buildEnhancedPrompt(options: {
   }
 
   if (parsedTheme?.promptLines.length) {
-    parts.push(...parsedTheme.promptLines);
+    const themeLines = textFree
+      ? parsedTheme.promptLines.filter(
+          (line) => !/typograph|headline|copy|font|wordmark|cta/i.test(line),
+        )
+      : parsedTheme.promptLines;
+    if (themeLines.length) parts.push(...themeLines);
   }
 
   if (p.useLogoReference) {
     parts.push(
-      'Use the official logo from the first reference image as a real brand mark (correct proportions; do not invent seals).',
+      textFree
+        ? 'If a logo reference is provided, place the official mark only (icon/seal). Do not invent or redraw wordmark lettering.'
+        : 'Use the official logo from the first reference image as a real brand mark (correct proportions; do not invent seals).',
     );
   }
 
@@ -336,7 +354,13 @@ export function buildEnhancedPrompt(options: {
     parts.push(`Reference look: ${visual.slice(0, 500)}`);
   }
 
-  parts.push(STYLE_PROMPT_GUIDANCE[options.style] || STYLE_PROMPT_GUIDANCE.other);
+  if (textFree) {
+    parts.push(
+      'Photoreal or clean illustrative scene: natural lighting, sharp focus, NO letters, NO words, NO captions, NO signage text — pure visual for later text overlay.',
+    );
+  } else {
+    parts.push(STYLE_PROMPT_GUIDANCE[options.style] || STYLE_PROMPT_GUIDANCE.other);
+  }
   parts.push('Sharp, high-resolution, professional marketing quality, clean edges and lighting.');
 
   if (options.transparentBackground) {
@@ -345,7 +369,14 @@ export function buildEnhancedPrompt(options: {
     );
   }
 
-  const avoid = [p.avoid?.trim(), DEFAULT_AVOID].filter(Boolean).join('; ');
+  const avoid = [
+    p.avoid?.trim(),
+    textFree
+      ? 'any readable text, gibberish letters, misspelled words, fake logos, watermarks, QR codes, captions, headlines, CTAs, subtitles, UI chrome with labels'
+      : DEFAULT_AVOID,
+  ]
+    .filter(Boolean)
+    .join('; ');
   parts.push(`Avoid: ${avoid}.`);
 
   // Shorter prompts = better text fidelity on Ideogram
@@ -354,7 +385,10 @@ export function buildEnhancedPrompt(options: {
   return {
     prompt: enhanced,
     magicPrompt: resolveMagicPrompt(base, options.precision),
-    styleType: ideogramStyleType(options.style, options.transparentBackground),
+    // REALISTIC reduces Ideogram "poster text" bias vs DESIGN
+    styleType: textFree
+      ? 'REALISTIC'
+      : ideogramStyleType(options.style, options.transparentBackground),
     paletteHex,
   };
 }
@@ -896,6 +930,7 @@ export async function generateCreativeImages(
       visionNotes = await describeCreativeReferenceImages(references, { apiKey: groqKey });
       if (visionNotes.length > 0) {
         const userHasExactText = hasExactText(input.precision);
+        const textFree = Boolean(input.precision?.textFree);
         referenceVisualContext = visionNotes
           .map((note, index) => {
             const bits = [
@@ -903,8 +938,8 @@ export async function generateCreativeImages(
             ];
             if (note.styleNotes.length) bits.push(note.styleNotes.slice(0, 4).join('; '));
             if (note.colors.length) bits.push(`colors ${note.colors.join(', ')}`);
-            // Competing OCR text hurts typography when the user already set headline/CTA
-            if (!userHasExactText && note.detectedText) {
+            // OCR text from refs makes Ideogram reinvent gibberish — never feed it when text-free
+            if (!textFree && !userHasExactText && note.detectedText) {
               bits.push(`seen text "${note.detectedText.slice(0, 80)}"`);
             }
             return bits.join(' — ');

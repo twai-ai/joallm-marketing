@@ -37,6 +37,10 @@ const BeatSchema = z.object({
       confidence: z.number(),
       model: z.string(),
       analyzedAt: z.string(),
+      promptVersion: z.string().optional(),
+      audienceHint: z.string().nullable().optional(),
+      claimHint: z.string().nullable().optional(),
+      narrativeFit: z.enum(['context', 'proof', 'ask', 'other']).nullable().optional(),
     })
     .nullable()
     .optional(),

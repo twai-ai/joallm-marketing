@@ -1,6 +1,6 @@
 /**
  * Story compose pipeline: See (Groq vision) → Structure → Speak.
- * Reuses Platform Groq vision models already used by Media AI.
+ * Context is ATRISI Marketing (Institution Acquisition), not generic ad copy.
  */
 
 import Groq from 'groq-sdk';
@@ -21,16 +21,53 @@ const TEXT_MODEL_GROQ = 'llama-3.3-70b-versatile';
 const VISION_DELAY_MS = 200;
 const MAX_IMAGE_BYTES = 4_500_000;
 
-const SEE_PROMPT = `You are ATRISI Marketing vision for Story compose.
-Analyse this marketing/creative image. Return ONLY JSON:
+/** Invalidate cached vision when this changes */
+export const STORY_VISION_PROMPT_VERSION = 'atrisi-v2';
+
+/**
+ * Shared product brief for every compose stage.
+ * Wrong brief → generic “marketing poster” copy. This is the acquisition job.
+ */
+const ATRISI_STORY_BRIEF = `You work inside ATRISI Marketing — the Institution Acquisition Platform.
+Job: help institutions acquire Program Interest from the market (prospects → interest → Education converts).
+Story is a Studio create workspace: turn uploaded creatives into one coherent multi-medium narrative
+(deck / carousel / brochure), not a generic ad agency slideshow.
+
+Audience defaults (unless the images clearly say otherwise):
+- Prospective learners / applicants and the people who influence them
+- Occasionally partners, employers, or alumni — only if the visual clearly signals that
+
+Voice:
+- Clear, credible, institutional — premium and trustworthy
+- Short titles; captions that advance the argument (not describe the photo)
+- Never invent program names, stats, prices, dates, or CTAs that are not visible on the image
+- Prefer exact on-image text when a headline/CTA is readable
+- Do NOT write “in this image…”, “this slide shows…”, or stock phrases like “unlock your potential”
+
+Narrative arc (Context → Proof → Ask):
+- context: world / program / who it’s for — set the frame
+- proof: outcomes, community, credibility, evidence — build trust
+- ask: clear next step toward interest / registration / conversation
+Constitution: Studio creates. Products operate. Platform remembers.`;
+
+const SEE_PROMPT = `${ATRISI_STORY_BRIEF}
+
+You are the See stage. Look at this single creative asset that may become a beat in an ATRISI acquisition story.
+Extract facts for later Structure/Speak stages. Return ONLY JSON:
 {
-  "what": "one sentence: dominant visual subject",
-  "onImageText": "readable text/logo/CTA on the image, or null",
-  "signals": ["people|product|campus|proof|brand|ui|crowd|empty|document|event — pick fitting tags"],
-  "mood": "2-4 word mood for institutional marketing",
+  "what": "one concrete sentence: what is visually dominant (people/setting/object/UI) — factual, not slogan",
+  "onImageText": "exact readable text/logo/CTA lines on the image, or null if none",
+  "claimHint": "the claim this creative appears to make for acquisition, or null if unclear",
+  "audienceHint": "prospect|influencer|partner|employer|alumni|internal|unclear",
+  "signals": ["people","product","campus","classroom","proof","brand","ui","crowd","document","event","testimonial","outcome"],
+  "narrativeFit": "context|proof|ask|other",
+  "mood": "2-4 words matching institutional acquisition tone",
   "confidence": 0.0
 }
-Do not invent text that is not visible. Be concise.`;
+Rules:
+- Do not invent text that is not visible.
+- Prefer precise nouns over vague marketing language.
+- If the image is decorative only, say so in what and set narrativeFit to other.`;
 
 function isUsableKey(value?: string | null): value is string {
   return Boolean(value && value.trim().length > 0 && !value.includes('PLACEHOLDER'));
@@ -51,6 +88,13 @@ function parseJsonObject(raw: string): Record<string, unknown> {
     }
     throw new Error('Model returned non-JSON');
   }
+}
+
+function asNarrativeFit(value: unknown): StoryBeatVision['narrativeFit'] {
+  if (value === 'context' || value === 'proof' || value === 'ask' || value === 'other') {
+    return value;
+  }
+  return null;
 }
 
 async function chatJson(options: {
@@ -98,7 +142,7 @@ async function chatJson(options: {
 async function loadBeatImage(
   ownerUserId: string,
   fileId: string,
-): Promise<{ mime: string; base64: string } | null> {
+): Promise<{ mime: string; base64: string; originalName?: string } | null> {
   const [fileRow] = await db
     .select()
     .from(files)
@@ -113,7 +157,11 @@ async function loadBeatImage(
   }
   const mime = fileRow.mimetype || 'image/jpeg';
   if (!mime.startsWith('image/')) return null;
-  return { mime, base64: buffer.toString('base64') };
+  return {
+    mime,
+    base64: buffer.toString('base64'),
+    originalName: fileRow.originalName || undefined,
+  };
 }
 
 async function seeOneImage(
@@ -121,20 +169,25 @@ async function seeOneImage(
   mime: string,
   base64: string,
   fileId: string,
+  filenameHint?: string,
 ): Promise<StoryBeatVision | null> {
   let lastError: unknown;
+  const seeUserText = filenameHint
+    ? `${SEE_PROMPT}\n\nFilename hint (may be noisy): ${filenameHint}`
+    : SEE_PROMPT;
+
   for (const model of VISION_MODELS) {
     try {
       const response = await client.chat.completions.create({
         model,
-        temperature: 0.15,
-        max_tokens: 350,
+        temperature: 0.1,
+        max_tokens: 420,
         messages: [
           {
             role: 'user',
             content: [
               { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
-              { type: 'text', text: SEE_PROMPT },
+              { type: 'text', text: seeUserText },
             ],
           },
         ],
@@ -153,11 +206,21 @@ async function seeOneImage(
           typeof parsed.onImageText === 'string' && parsed.onImageText.trim()
             ? parsed.onImageText.trim()
             : null,
+        claimHint:
+          typeof parsed.claimHint === 'string' && parsed.claimHint.trim()
+            ? parsed.claimHint.trim()
+            : null,
+        audienceHint:
+          typeof parsed.audienceHint === 'string' && parsed.audienceHint.trim()
+            ? parsed.audienceHint.trim()
+            : null,
+        narrativeFit: asNarrativeFit(parsed.narrativeFit),
         signals,
-        mood: typeof parsed.mood === 'string' ? parsed.mood.trim() : 'institutional',
+        mood: typeof parsed.mood === 'string' ? parsed.mood.trim() : 'premium institutional',
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.6,
         model,
         analyzedAt: new Date().toISOString(),
+        promptVersion: STORY_VISION_PROMPT_VERSION,
       };
     } catch (error) {
       lastError = error;
@@ -174,7 +237,17 @@ async function seeOneImage(
   return null;
 }
 
-/** Stage 1 — See: Groq vision cards per beat (cached unless refreshVision). */
+function visionCacheValid(beat: StoryBeat): boolean {
+  return Boolean(
+    beat.vision &&
+      beat.fileId &&
+      beat.vision.fileId === beat.fileId &&
+      beat.vision.what &&
+      beat.vision.promptVersion === STORY_VISION_PROMPT_VERSION,
+  );
+}
+
+/** Stage 1 — See: Groq vision cards per beat (cached unless refresh or prompt version bump). */
 export async function seeBeatVisionCards(
   ownerUserId: string,
   beats: StoryBeat[],
@@ -189,14 +262,7 @@ export async function seeBeatVisionCards(
   let visionCount = 0;
 
   for (const beat of beats) {
-    const cachedOk =
-      !refreshVision &&
-      beat.vision &&
-      beat.fileId &&
-      beat.vision.fileId === beat.fileId &&
-      beat.vision.what;
-
-    if (cachedOk) {
+    if (!refreshVision && visionCacheValid(beat)) {
       next.push(beat);
       visionCount += 1;
       continue;
@@ -213,7 +279,13 @@ export async function seeBeatVisionCards(
         next.push({ ...beat, vision: null });
         continue;
       }
-      const card = await seeOneImage(client, image.mime, image.base64, beat.fileId);
+      const card = await seeOneImage(
+        client,
+        image.mime,
+        image.base64,
+        beat.fileId,
+        image.originalName,
+      );
       if (card) visionCount += 1;
       next.push({ ...beat, vision: card });
       await delay(VISION_DELAY_MS);
@@ -249,16 +321,19 @@ export async function structureStoryline(
     currentTitle: b.title,
     what: b.vision?.what || null,
     onImageText: b.vision?.onImageText || null,
+    claimHint: b.vision?.claimHint || null,
+    audienceHint: b.vision?.audienceHint || null,
+    narrativeFit: b.vision?.narrativeFit || null,
     signals: b.vision?.signals || [],
     mood: b.vision?.mood || null,
   }));
 
-  const system = `You are ATRISI Marketing Story structurer.
-Constitution: Studio creates. Products operate. Platform remembers.
-Given beat vision cards, propose a coherent Context → Proof → Ask arc for institutional acquisition.
+  const system = `${ATRISI_STORY_BRIEF}
+
+You are the Structure stage. Using vision cards only, build the story spine.
 Return ONLY JSON:
 {
-  "title": "short story title",
+  "title": "short story title for an acquisition narrative (not a filename)",
   "arc": "context_proof_ask",
   "tone": "atrisi_institutional",
   "beats": [
@@ -267,14 +342,20 @@ Return ONLY JSON:
 }
 Rules:
 - Include every beat id exactly once.
-- Prefer context early, proof in the middle, ask at the end.
-- ${keepOrder ? 'KEEP the given index order; only assign arcRole.' : 'You may reorder for a stronger narrative.'}
-- Do not write captions here.`;
+- Use narrativeFit hints when sensible; still enforce overall Context → Proof → Ask pacing.
+- If the working title is meaningful (not "Untitled story"), respect its intent.
+- ${keepOrder ? 'KEEP the given index order; only assign arcRole.' : 'Reorder only when it clearly strengthens the acquisition argument.'}
+- Do not write captions or titles for beats here.`;
 
   const parsed = await chatJson({
     system,
-    user: JSON.stringify({ currentTitle: title, keepOrder, beats: cards }),
-    temperature: 0.3,
+    user: JSON.stringify({
+      workingTitle: title,
+      keepOrder,
+      purpose: 'multi-medium acquisition story (deck/carousel/brochure)',
+      beats: cards,
+    }),
+    temperature: 0.25,
   });
   if (!parsed) return null;
 
@@ -302,8 +383,22 @@ Rules:
     orderedIds.splice(0, orderedIds.length, ...beats.map((b) => b.id));
   }
 
+  // Prefer vision narrativeFit when model omitted a role
+  for (const beat of beats) {
+    if (!roles[beat.id] && beat.vision?.narrativeFit) {
+      roles[beat.id] = beat.vision.narrativeFit;
+    }
+  }
+
+  const resolvedTitle =
+    typeof parsed.title === 'string' && parsed.title.trim()
+      ? parsed.title.trim()
+      : title?.trim() && title !== 'Untitled story'
+        ? title.trim()
+        : 'Program interest story';
+
   return {
-    title: typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : title,
+    title: resolvedTitle,
     arc: typeof parsed.arc === 'string' ? parsed.arc : 'context_proof_ask',
     tone: typeof parsed.tone === 'string' ? parsed.tone : 'atrisi_institutional',
     orderedIds,
@@ -316,33 +411,50 @@ export async function speakStoryline(
   storyTitle: string,
   beats: StoryBeat[],
 ): Promise<Map<string, { title: string; caption: string; notes: string }> | null> {
-  const payload = beats.map((b) => ({
+  const payload = beats.map((b, index) => ({
     id: b.id,
+    order: index,
     arcRole: b.arcRole || 'other',
     what: b.vision?.what || null,
     onImageText: b.vision?.onImageText || null,
+    claimHint: b.vision?.claimHint || null,
+    audienceHint: b.vision?.audienceHint || null,
     signals: b.vision?.signals || [],
     mood: b.vision?.mood || null,
-    currentTitle: b.title,
   }));
 
-  const system = `You are ATRISI Marketing Story copywriter.
-Write beat titles and captions for a multi-medium institutional narrative.
+  const system = `${ATRISI_STORY_BRIEF}
+
+You are the Speak stage. Write beat titles and captions for the acquisition story.
 Return ONLY JSON:
 {
   "beats": [
-    { "id": "beat-id", "title": "≤6 words", "caption": "one sentence", "notes": "optional why this beat / speaker hint" }
+    {
+      "id": "beat-id",
+      "title": "≤6 words — argument headline, not a photo label",
+      "caption": "one sentence that moves Context/Proof/Ask forward",
+      "notes": "optional internal speaker hint"
+    }
   ]
 }
 Rules:
-- Ground copy in vision "what" and prefer visible onImageText when present (do not invent CTAs).
-- No "in this image we see…". Marketing voice, ATRISI institutional tone.
-- Preserve every beat id. Captions one sentence.`;
+- Titles argue; they do not describe (“Students in lab” ❌ → “Practice that employers trust” ✅ when evidence supports it).
+- If onImageText has a strong headline/CTA, reuse or lightly polish it — do not invent a conflicting CTA.
+- Captions must match arcRole:
+  - context: who/what this is for
+  - proof: why it’s credible
+  - ask: the next step toward Program Interest
+- Never invent stats, brand claims, or program names absent from onImageText/claimHint.
+- Preserve every beat id. No “in this image” language.`;
 
   const parsed = await chatJson({
     system,
-    user: JSON.stringify({ storyTitle, beats: payload }),
-    temperature: 0.4,
+    user: JSON.stringify({
+      storyTitle,
+      purpose: 'acquisition narrative for institutional growth',
+      beats: payload,
+    }),
+    temperature: 0.35,
   });
   if (!parsed) return null;
 
@@ -370,34 +482,33 @@ export function applyHeuristicFromVision(beats: StoryBeat[], title: string): {
 } {
   const n = beats.length;
   const proposed = beats.map((beat, index) => {
-    let arcRole: StoryBeat['arcRole'] = 'other';
-    if (n <= 1) arcRole = 'ask';
-    else if (index === 0) arcRole = 'context';
-    else if (index === n - 1) arcRole = 'ask';
-    else arcRole = 'proof';
+    let arcRole: StoryBeat['arcRole'] =
+      beat.vision?.narrativeFit ||
+      (n <= 1 ? 'ask' : index === 0 ? 'context' : index === n - 1 ? 'ask' : 'proof');
 
-    const what = beat.vision?.what;
     const onText = beat.vision?.onImageText;
+    const claim = beat.vision?.claimHint;
+    const roleCaption =
+      arcRole === 'context'
+        ? 'See who this program is for.'
+        : arcRole === 'proof'
+          ? 'Evidence that builds trust.'
+          : 'Take the next step toward interest.';
+
     return {
       ...beat,
       order: index,
       arcRole,
-      title: (onText || what || beat.title || `Beat ${index + 1}`).slice(0, 60),
-      caption:
-        what ||
-        (arcRole === 'context'
-          ? 'Set the scene for the audience.'
-          : arcRole === 'proof'
-            ? 'Show evidence that builds trust.'
-            : 'Close with a clear next step.'),
+      title: (onText?.split(/[\n|]/)[0] || claim || beat.title || `Beat ${index + 1}`).slice(0, 48),
+      caption: claim || roleCaption,
       notes: beat.vision
-        ? `${arcRole} — ${beat.vision.signals.join(', ') || 'visual'}`
+        ? `${arcRole} — ${beat.vision.what}`
         : beat.notes,
     };
   });
 
   return {
-    title: title?.trim() && title !== 'Untitled story' ? title : 'ATRISI story',
+    title: title?.trim() && title !== 'Untitled story' ? title : 'Program interest story',
     arc: 'context_proof_ask',
     tone: 'atrisi_institutional',
     beats: proposed,

@@ -10,6 +10,10 @@ export type StoryBeatVision = {
   confidence: number;
   model: string;
   analyzedAt: string;
+  promptVersion?: string;
+  audienceHint?: string | null;
+  claimHint?: string | null;
+  narrativeFit?: 'context' | 'proof' | 'ask' | 'other' | null;
 };
 
 export type StoryBeat = {

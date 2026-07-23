@@ -1487,6 +1487,14 @@ export type StoryBeatVision = {
   confidence: number;
   model: string;
   analyzedAt: string;
+  /** Bump when See prompt changes so cached cards re-run */
+  promptVersion?: string;
+  /** Who this beat seems aimed at (prospect, parent, partner, employer, internal) */
+  audienceHint?: string | null;
+  /** Visible claim / headline gist if any */
+  claimHint?: string | null;
+  /** Best narrative fit suggested by vision alone */
+  narrativeFit?: 'context' | 'proof' | 'ask' | 'other' | null;
 };
 
 export type StoryBeat = {

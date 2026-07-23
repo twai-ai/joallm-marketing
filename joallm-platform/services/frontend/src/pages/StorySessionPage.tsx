@@ -489,7 +489,9 @@ export function StorySessionPage() {
                     {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                   </span>
                   <span className="text-[10px] font-medium text-slate-300">
-                    FLUX + Ideogram · text scrubbed for your copy
+                    {selected.title?.trim()
+                      ? 'Fresh visual + your title (Ideogram)'
+                      : 'Add a title first for on-image copy'}
                   </span>
                 </button>
               </div>
@@ -503,7 +505,7 @@ export function StorySessionPage() {
               </button>
               {!selected.title?.trim() ? (
                 <p className="mt-2 text-center text-[11px] text-slate-400">
-                  Tip: add a title in Edit to Brand with on-image copy
+                  Tip: add a title in Edit so Brand and More visuals can put copy on the image
                 </p>
               ) : null}
             </div>
@@ -588,7 +590,7 @@ export function StorySessionPage() {
 
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                    2 · Copy for Brand
+                    2 · Copy for Brand &amp; More visuals
                   </p>
                   <label className="sr-only" htmlFor="story-beat-title">
                     Title
@@ -598,7 +600,7 @@ export function StorySessionPage() {
                     value={selected.title}
                     onChange={(e) => updateSelected({ title: e.target.value })}
                     onBlur={() => void commitSelected()}
-                    placeholder="Headline (used on Brand)"
+                    placeholder="Headline (on-image for Brand & More visuals)"
                     className="mt-2 w-full border-0 border-b border-slate-200 bg-transparent py-2 text-base font-semibold text-slate-950 outline-none placeholder:text-slate-300 focus:border-teal-500"
                   />
                   <label className="sr-only" htmlFor="story-caption">
@@ -654,7 +656,9 @@ export function StorySessionPage() {
                           {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                         </span>
                         <span className="mt-0.5 block text-[11px] text-slate-500">
-                          FLUX + Ideogram · blank for your text
+                          {selected.title?.trim()
+                            ? 'Fresh angle + title/caption on image'
+                            : 'Add a title above for on-image copy'}
                         </span>
                       </button>
                       <button

@@ -217,8 +217,8 @@ export function useStorySession(storyId: string | undefined) {
       const n = res.addedBeatIds?.length || 1;
       showSuccess(
         n > 1
-          ? `${n} matching photos added (${res.provider || 'AI'}) — text-free for your copy`
-          : `Matching photo added (${res.provider || 'AI'}) — text-free for your copy`,
+          ? `${n} visuals added (${res.provider || 'AI'})`
+          : `Visual added (${res.provider || 'AI'}) — uses beat title/caption when set`,
       );
     },
     onError: (error: unknown) => {

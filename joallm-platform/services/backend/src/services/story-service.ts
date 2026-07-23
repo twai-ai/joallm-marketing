@@ -512,9 +512,9 @@ export async function brandStoryBeat(
 }
 
 /**
- * Generate similar — associated photo variants (text-free for manual copy).
- * Uses FLUX + Ideogram when both keys exist (combo), each with strong text scrubbing.
- * Source photos often contain lettering — models are instructed to erase it.
+ * More visuals — fresh associated photos from the beat reference.
+ * When the beat has a title/caption, render that copy letter-perfect (Ideogram-first).
+ * Without copy, keep a text-scrubbed photo for manual overlay.
  */
 export async function generateSimilarStoryBeats(
   ownerUserId: string,
@@ -527,20 +527,36 @@ export async function generateSimilarStoryBeats(
   if (!beat.fileId) {
     throw Object.assign(new Error('Beat has no image for More visuals'), { statusCode: 400 });
   }
-  // 1 per provider when both available; options.count caps extras from each
   const perProvider = Math.min(Math.max(options?.count || 1, 1), 2);
 
-  const promptParts = [
-    'Associated photograph matching the first reference image.',
-    'Same people, place, and lighting — fresh angle or framing, not a duplicate.',
-    'Premium natural photo, institutional acquisition look.',
-    'Critical: strip all text from the reference — no letters, logos-as-words, signs, captions, or watermarks.',
-    'Blank clean surfaces where text was. Leave empty margins for a human to add typography later.',
-  ];
+  const headline = cleanStoryTypography(beat.title, 72);
+  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 48);
+  const useCopy = Boolean(headline);
+
+  const promptParts = useCopy
+    ? [
+        'Create an associated marketing visual matching the first reference photograph.',
+        'Keep the same people, place, and lighting — fresh angle or framing, not a duplicate.',
+        'Premium institutional acquisition look.',
+        `Typography — render this headline letter-perfect, large high-contrast sans-serif: "${headline}".`,
+        ...(cta && cta !== headline
+          ? [`Optional supporting line exactly: "${cta}".`]
+          : []),
+        'Replace any lettering from the reference with ONLY the Story copy above.',
+        'Do not invent other slogans, fake stats, dates, program names, or gibberish.',
+      ]
+    : [
+        'Associated photograph matching the first reference image.',
+        'Same people, place, and lighting — fresh angle or framing, not a duplicate.',
+        'Premium natural photo, institutional acquisition look.',
+        'Critical: strip all text from the reference — no letters, logos-as-words, signs, captions, or watermarks.',
+        'Blank clean surfaces where text was. Leave empty margins for a human to add typography later.',
+      ];
+
   if (beat.vision?.what) {
     promptParts.push(`Keep recognizable: ${beat.vision.what}.`);
   }
-  if (beat.vision?.onImageText) {
+  if (!useCopy && beat.vision?.onImageText) {
     promptParts.push(
       'The reference contains on-image lettering — erase it completely; do not redraw or invent replacement words.',
     );
@@ -550,18 +566,20 @@ export async function generateSimilarStoryBeats(
   }
 
   const similarRefs = [beat.fileId].slice(0, 1);
+  // Ideogram locks typography; FLUX edit remixes subject but mangles letters — skip FLUX when we need copy
+  const providers = (useCopy ? (['ideogram'] as const) : (['flux', 'ideogram'] as const));
 
   const generateOnce = (providerOverride: 'flux' | 'ideogram') =>
     generateCreativeImages({
       ownerUserId,
       prompt: promptParts.join(' '),
-      style: 'photo_realistic',
+      style: useCopy ? 'marketing_poster' : 'photo_realistic',
       quality: 'standard',
       aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
-      titleHint: 'Similar visual',
+      titleHint: useCopy ? beat.title || 'Story visual' : 'Similar visual',
       referenceFileIds: similarRefs,
-      referenceMode: 'edit',
-      analyzeReferences: false,
+      referenceMode: useCopy ? 'style' : 'edit',
+      analyzeReferences: useCopy,
       variantCount: perProvider,
       providerOverride,
       metadata: {
@@ -569,24 +587,29 @@ export async function generateSimilarStoryBeats(
         storyId,
         beatId,
         referenceFileId: beat.fileId,
-        textFree: true,
+        textFree: !useCopy,
+        withCopy: useCopy,
         format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
         providerOverride,
       },
       precision: {
-        textFree: true,
+        textFree: !useCopy,
+        headline: useCopy ? headline : undefined,
+        cta: useCopy ? cta : undefined,
+        mustIncludeText: useCopy ? headline : undefined,
         brandTheme: ATRISI_STORY_BRAND_THEME,
         paletteType: 'institutional_navy',
         useLogoReference: false,
-        avoid:
-          'any readable text, letters, words, gibberish, captions, headlines, CTAs, logos, watermarks, signage, posters, subtitles, UI chrome, neon, clutter, exact duplicate of reference',
+        avoid: useCopy
+          ? 'gibberish, misspellings, extra slogans beyond the given headline/CTA, fake logos, neon, purple glow, clutter, exact duplicate of reference'
+          : 'any readable text, letters, words, gibberish, captions, headlines, CTAs, logos, watermarks, signage, posters, subtitles, UI chrome, neon, clutter, exact duplicate of reference',
       },
     });
 
   const collected: Array<{ fileId: string; provider: string }> = [];
   const errors: string[] = [];
 
-  for (const provider of ['flux', 'ideogram'] as const) {
+  for (const provider of providers) {
     try {
       const batch = await generateOnce(provider);
       for (const file of batch.files) {
@@ -597,14 +620,16 @@ export async function generateSimilarStoryBeats(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push(`${provider}: ${message}`);
-      logger.warn('Story More visuals provider failed', { provider, error: message });
+      logger.warn('Story More visuals provider failed', { provider, error: message, useCopy });
     }
   }
 
   if (collected.length === 0) {
     throw Object.assign(
       new Error(
-        `More visuals failed. ${errors.join(' · ') || 'Check BFL/FLUX and Ideogram keys in Settings.'}`,
+        useCopy
+          ? `More visuals failed. ${errors.join(' · ') || 'Check Ideogram key in Settings — typography uses Ideogram.'}`
+          : `More visuals failed. ${errors.join(' · ') || 'Check BFL/FLUX and Ideogram keys in Settings.'}`,
       ),
       { statusCode: 502 },
     );
@@ -617,7 +642,9 @@ export async function generateSimilarStoryBeats(
     sourceFileId: beat.fileId,
     title: beat.title || `Visual ${index + 1}`,
     caption: beat.caption || '',
-    notes: `More visuals · ${item.provider} · text-free — add copy yourself`,
+    notes: useCopy
+      ? `More visuals · ${item.provider} · title/caption on image`
+      : `More visuals · ${item.provider} · text-free — add a title then re-run for on-image copy`,
     order: insertAt + 1 + index,
     arcRole: beat.arcRole || 'other',
     vision: null,

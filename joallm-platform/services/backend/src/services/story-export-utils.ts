@@ -234,11 +234,16 @@ function crc32(buf: Buffer): number {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-/** Clean Story field for exact Ideogram typography (never OCR). */
+/** Clean Story field for exact Ideogram typography (never OCR). Soft-truncates overlong lines. */
 export function cleanStoryTypography(text: string | null | undefined, maxLen: number): string | undefined {
   if (!text?.trim()) return undefined;
-  const cleaned = text.trim().replace(/\s+/g, ' ');
-  if (cleaned.length > maxLen) return undefined;
+  let cleaned = text.trim().replace(/\s+/g, ' ');
   if (/[|]{2,}|\uFFFD|[{}]|https?:\/\//i.test(cleaned)) return undefined;
+  if (cleaned.length > maxLen) {
+    const sliced = cleaned.slice(0, maxLen);
+    const lastSpace = sliced.lastIndexOf(' ');
+    cleaned = (lastSpace > Math.floor(maxLen * 0.55) ? sliced.slice(0, lastSpace) : sliced).trim();
+    if (!cleaned) return undefined;
+  }
   return cleaned;
 }

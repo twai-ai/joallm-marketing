@@ -281,19 +281,6 @@ function brandReferenceIds(kit: StoryBrandKit, beatFileId: string): string[] {
   return ids.slice(0, 4);
 }
 
-/**
- * Exact on-image text only when short and clean — otherwise images stay text-light
- * and Story captions carry the copy (avoids Creative AI inventing gibberish).
- */
-function safeMustIncludeText(onImageText?: string | null): string | undefined {
-  if (!onImageText?.trim()) return undefined;
-  const cleaned = onImageText.trim().replace(/\s+/g, ' ');
-  if (cleaned.length > 80) return undefined;
-  // Skip likely OCR noise
-  if (/[|]{2,}|\uFFFD|{.*}/.test(cleaned)) return undefined;
-  return cleaned;
-}
-
 export async function setStoryBrandKit(
   ownerUserId: string,
   storyId: string,

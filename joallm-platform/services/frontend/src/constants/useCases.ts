@@ -5,7 +5,8 @@ export type UseCaseId =
   | 'docs-ai'
   | 'data-intelligence'
   | 'acquisition'
-  | 'marketing-studio';
+  | 'marketing-studio'
+  | 'story';
 
 export interface UseCaseDefinition {
   id: UseCaseId;
@@ -93,6 +94,20 @@ export const USE_CASES: UseCaseDefinition[] = [
     helper:
       'Workflow: Goals → Campaigns → Creatives → Publish. Check People & inbox for replies.',
     audience: 'Growth and outreach teams',
+    supportsAssetDetail: true,
+  },
+  {
+    id: 'story',
+    label: 'Story',
+    shortLabel: 'Story',
+    homeRoute: '/studio/story',
+    assetRoute: (assetId: string) => `/studio/story/${assetId}`,
+    status: 'active',
+    description:
+      'Assemble assets into one ATRISI narrative, propose a storyline with Creative AI, then export to deck and other mediums.',
+    helper:
+      'Studio creates the story. Attach to a Program later; Campaigns still own publish. Platform remembers the files.',
+    audience: 'Growth, founders, and ops shaping multi-medium narratives',
     supportsAssetDetail: true,
   },
 ];

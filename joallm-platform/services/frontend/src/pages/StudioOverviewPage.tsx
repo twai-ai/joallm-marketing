@@ -21,7 +21,7 @@ export function StudioOverviewPage() {
               </h1>
               <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg">
                 {PLATFORM_CONSTITUTION} Each workspace aligns UX to the asset and outcome — Media,
-                Documents, People & inbox, Campaigns — instead of a generic builder.
+                Documents, People & inbox, Campaigns, Story — instead of a generic builder.
               </p>
               <p className="mt-3 text-sm text-slate-500">{PLATFORM_TAGLINE}</p>
             </div>
@@ -55,6 +55,15 @@ export function StudioOverviewPage() {
                   </div>
                   <p className="mt-2 text-sm text-slate-300">
                     Ingest documents into Knowledge for grounded Chat and retrieval.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-white">
+                    <Sparkles className="h-4 w-4 text-teal-300" />
+                    Story
+                  </div>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Compose multi-medium narratives with Creative AI storyline — attach to Campaigns later.
                   </p>
                 </div>
               </div>

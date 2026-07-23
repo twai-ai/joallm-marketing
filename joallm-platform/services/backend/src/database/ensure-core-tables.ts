@@ -824,6 +824,27 @@ export async function ensureCorePlatformTables(): Promise<void> {
     `,
   );
 
+  await exec(
+    'story_sessions',
+    sql`
+      CREATE TABLE IF NOT EXISTS "story_sessions" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "owner_user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "title" text NOT NULL DEFAULT 'Untitled story',
+        "status" text NOT NULL DEFAULT 'draft',
+        "program_id" text,
+        "campaign_id" uuid,
+        "arc" text NOT NULL DEFAULT 'context_proof_ask',
+        "tone" text NOT NULL DEFAULT 'atrisi_institutional',
+        "beats" jsonb NOT NULL DEFAULT '[]'::jsonb,
+        "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+
   logger.info('✓ Core platform tables ensured');
 
   try {

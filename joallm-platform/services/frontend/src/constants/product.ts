@@ -25,6 +25,7 @@ export const PRODUCT_LABELS = {
   acquisition: 'People & inbox',
   documentAi: 'Document AI',
   marketingStudio: 'Campaigns',
+  story: 'Story',
 } as const;
 
 export const PRODUCT_DESCRIPTIONS = {
@@ -38,6 +39,7 @@ export const PRODUCT_DESCRIPTIONS = {
   acquisition: 'Shared inbox for WhatsApp, Messenger, Instagram, and Lead Ads',
   documentAi: 'Ingest document sets and launch grounded retrieval',
   marketingStudio: 'Programs, goals, campaigns, creatives, and publish',
+  story: 'Compose a multi-medium narrative; propose storyline; export packs',
 } as const;
 
 export const PRODUCT_ROUTES = {
@@ -51,4 +53,5 @@ export const PRODUCT_ROUTES = {
   acquisition: '/studio/people',
   documentAi: '/studio/document-ai',
   marketingStudio: '/studio/campaigns',
+  story: '/studio/story',
 } as const;

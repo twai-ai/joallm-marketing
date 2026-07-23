@@ -3,6 +3,7 @@ import {
   Book,
   BookOpen,
   Bookmark,
+  Clapperboard,
   Database,
   FileText,
   History,
@@ -54,6 +55,7 @@ const STUDIO_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   'docs-ai': FileText,
   'data-intelligence': Database,
   'marketing-studio': Radio,
+  story: Clapperboard,
 };
 
 function StatusPill({ status }: { status: 'live' | 'soon' }) {

@@ -16,6 +16,8 @@ const AcquisitionIntelligencePage = lazy(() => import('./pages/AcquisitionIntell
 const MarketingStudioPage = lazy(() => import('./pages/MarketingStudioPage').then(module => ({ default: module.MarketingStudioPage })));
 const AcquisitionWorkspacePage = lazy(() => import('./pages/AcquisitionWorkspacePage').then(module => ({ default: module.AcquisitionWorkspacePage })));
 const DocumentAIPage = lazy(() => import('./pages/DocumentAIPage').then(module => ({ default: module.DocumentAIPage })));
+const StoryPage = lazy(() => import('./pages/StoryPage').then(module => ({ default: module.StoryPage })));
+const StorySessionPage = lazy(() => import('./pages/StorySessionPage').then(module => ({ default: module.StorySessionPage })));
 const MediaAssetPage = lazy(() => import('./pages/MediaAssetPage').then(module => ({ default: module.MediaAssetPage })));
 const WorkflowFamilyPlaceholderPage = lazy(() => import('./pages/WorkflowFamilyPlaceholderPage').then(module => ({ default: module.WorkflowFamilyPlaceholderPage })));
 const WorkflowBuilder = lazy(() => import('./components/workflow/WorkflowBuilder').then(module => ({ default: module.WorkflowBuilder })));
@@ -312,6 +314,16 @@ function AppLayout() {
               <Route path="/studio/campaigns/:programId" element={
                 <ProtectedRoute>
                   <AcquisitionWorkspacePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/story" element={
+                <ProtectedRoute>
+                  <StoryPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/story/:storyId" element={
+                <ProtectedRoute>
+                  <StorySessionPage />
                 </ProtectedRoute>
               } />
               {/* Legacy aliases — keep bookmarks working */}

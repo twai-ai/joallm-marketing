@@ -232,6 +232,32 @@ class APIClient {
     return this.request<T>(endpoint, { ...config, method: 'DELETE' });
   }
 
+  /** Binary download (e.g. Story PPTX export) */
+  async downloadBlob(endpoint: string, fallbackFilename = 'download.bin'): Promise<{ blob: Blob; filename: string }> {
+    const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
+    const token = await this.getAuthToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      let message = `Download failed (${response.status})`;
+      try {
+        const err = await response.json();
+        message = err.message || err.error || message;
+      } catch {
+        /* ignore */
+      }
+      throw Object.assign(new Error(message), { status: response.status });
+    }
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = /filename="([^"]+)"/i.exec(disposition);
+    const filename = match?.[1] || fallbackFilename;
+    const blob = await response.blob();
+    return { blob, filename };
+  }
+
   async uploadFile<T>(endpoint: string, file: File, additionalData?: Record<string, any>): Promise<T> {
     const formData = new FormData();
     formData.append('file', file);

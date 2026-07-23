@@ -48,13 +48,13 @@ export const ONTOLOGY = {
     name: 'Studio',
     role: 'Create',
     meaning:
-      'Capability Workspaces on Programs. Marketing Studio is the transitional entry to Program → Growth.',
+      'Capability Workspaces on Programs. Marketing Studio is the transitional entry to Program → Growth. Story is a free-floating compose workspace that attaches to Program/Campaign before Growth publish.',
   },
   platform: {
     name: 'Platform',
     role: 'Remember & execute',
     meaning:
-      'Timeline, Knowledge, Identity, Connectors, Creative AI — consumed by every Capability Workspace.',
+      'Timeline, Knowledge, Identity, Connectors, Creative AI — consumed by every Capability Workspace including Story storyline + gap-fill.',
   },
 
   /** Durable roots — capabilities never invent a new root */
@@ -150,6 +150,8 @@ export const ONTOLOGY = {
       'Time-bound execution of a Growth Intent under a Program — never a root aggregate.',
     creativeProject: 'Growth work unit under a Campaign producing Assets.',
     marketingAsset: 'Publishable creative under Growth.',
+    story:
+      'Studio draft narrative (beats + voice). Free-floating until attach; Send to Campaign writes Marketing Assets. Not a root aggregate.',
     channel: 'Business destination (WhatsApp, LinkedIn Organic, …).',
     connector: 'Platform technical integration.',
     person: 'Relationship aggregate with Timeline (prospect → learner → alumnus).',

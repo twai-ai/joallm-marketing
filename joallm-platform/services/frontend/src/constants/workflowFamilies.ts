@@ -59,6 +59,8 @@ export function getStudioFamilyById(id: string): StudioFamilyDefinition | undefi
     data: 'data-intelligence',
     'marketing-studio': 'marketing-studio',
     marketing: 'marketing-studio',
+    story: 'story',
+    narrative: 'story',
     custom: 'custom',
   };
 

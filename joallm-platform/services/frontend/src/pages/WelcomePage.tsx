@@ -274,6 +274,7 @@ export function WelcomePage() {
     'docs-ai': FileText,
     'data-intelligence': Database,
     'marketing-studio': Sparkles,
+    story: Layers3,
     custom: Workflow,
   } as const;
 

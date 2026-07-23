@@ -95,4 +95,13 @@ export const API_ENDPOINTS = {
     message: (messageId: string) => `${API_BASE_URL}/api/feedback/messages/${messageId}`,
     trainingConsent: `${API_BASE_URL}/api/feedback/training-consent`,
   },
+  story: {
+    list: `${API_BASE_URL}/api/story`,
+    create: `${API_BASE_URL}/api/story`,
+    story: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}`,
+    addFiles: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/beats/files`,
+    propose: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/propose`,
+    generateBeat: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/beats/generate`,
+    exportPptx: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/pptx`,
+  },
 };

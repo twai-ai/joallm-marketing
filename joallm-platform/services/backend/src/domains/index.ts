@@ -22,6 +22,7 @@ import { feedbackRoutes } from '../routes/feedback.js';
 import { integrationsRoutes } from '../routes/integrations.js';
 import { studioRoutes } from '../routes/studio.js';
 import { creativeAiRoutes } from '../routes/creative-ai.js';
+import { storyRoutes } from '../routes/story.js';
 import { operationsRoutes } from '../routes/operations.js';
 
 export async function registerDomains(fastify: FastifyInstance) {
@@ -62,6 +63,9 @@ export async function registerDomains(fastify: FastifyInstance) {
 
   // Creative AI Platform — Generation Profiles / image provider catalog
   fastify.register(creativeAiRoutes, { prefix: '/api/creative' });
+
+  // Story — Studio multi-medium narrative compose (free-floating until attach)
+  fastify.register(storyRoutes, { prefix: '/api/story' });
 
   // Operations Experience — Team Activity + ownership cutover tools
   fastify.register(operationsRoutes, { prefix: '/api/operations' });

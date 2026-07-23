@@ -1473,6 +1473,44 @@ export const publishingJobs = pgTable('publishing_jobs', {
   statusIdx: index('publishing_jobs_status_idx').on(table.status),
 }));
 
+/**
+ * Story session — Studio create workspace for multi-medium narrative compose.
+ * Free-floating until programId/campaignId attach. Not a durable aggregate root.
+ * Platform remembers files; Growth receives assets only via explicit Send to Campaign.
+ */
+export type StoryBeat = {
+  id: string;
+  fileId: string | null;
+  title: string;
+  caption: string;
+  notes: string;
+  order: number;
+  arcRole?: 'context' | 'proof' | 'ask' | 'other';
+};
+
+export const storySessions = pgTable('story_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: uuid('owner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
+  title: text('title').notNull().default('Untitled story'),
+  status: text('status', {
+    enum: ['draft', 'ready', 'archived'],
+  }).default('draft').notNull(),
+  programId: text('program_id'),
+  campaignId: uuid('campaign_id'),
+  arc: text('arc').notNull().default('context_proof_ask'),
+  tone: text('tone').notNull().default('atrisi_institutional'),
+  beats: jsonb('beats').$type<StoryBeat[]>().default([]).notNull(),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  ownerUserIdIdx: index('story_sessions_owner_user_id_idx').on(table.ownerUserId),
+  organizationIdIdx: index('story_sessions_organization_id_idx').on(table.organizationId),
+  statusIdx: index('story_sessions_status_idx').on(table.status),
+  programIdIdx: index('story_sessions_program_id_idx').on(table.ownerUserId, table.programId),
+}));
+
 /** Program Interest — Education pull contract (Acquire → Convert boundary) */
 export const programInterests = pgTable('program_interests', {
   id: uuid('id').primaryKey().defaultRandom(),

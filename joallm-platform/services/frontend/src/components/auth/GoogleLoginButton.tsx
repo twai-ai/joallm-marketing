@@ -1,4 +1,9 @@
-import { env, isApiUrlMisconfigured, resolveApiBaseUrl } from '../../config/env';
+import {
+  getCanonicalPlatformOrigin,
+  isApiUrlMisconfigured,
+  PRODUCTION_API_URL,
+  resolveApiBaseUrl,
+} from '../../config/env';
 import { showError } from '../../utils/toast';
 
 interface GoogleLoginButtonProps {
@@ -8,15 +13,35 @@ interface GoogleLoginButtonProps {
 
 export function GoogleLoginButton({ className = '', children }: GoogleLoginButtonProps) {
   const handleGoogleLogin = () => {
+    const canonical = getCanonicalPlatformOrigin();
+    if (canonical) {
+      // Old platform.joallm.ai stack talks to a different backend/OAuth redirect.
+      window.location.replace(`${canonical}/login`);
+      return;
+    }
+
     const apiUrl = resolveApiBaseUrl();
     if (isApiUrlMisconfigured()) {
       showError(
         'API URL not configured',
-        `Frontend resolved API as "${apiUrl}". Set VITE_API_URL=https://joallm-marketing-backend-production.up.railway.app and redeploy.`,
+        `Frontend resolved API as "${apiUrl}". Set VITE_API_URL=${PRODUCTION_API_URL} on the frontend service and redeploy.`,
       );
       return;
     }
-    window.location.href = `${apiUrl}/api/auth/google`;
+
+    try {
+      // Validate before navigating so a bad host never becomes a Chrome NXDOMAIN page
+      const target = new URL('/api/auth/google', apiUrl);
+      if (!/^https?:$/i.test(target.protocol) || !target.hostname) {
+        throw new Error('invalid host');
+      }
+      window.location.href = target.toString();
+    } catch {
+      showError(
+        'Invalid API URL',
+        `Could not start Google sign-in with API base "${apiUrl}". Expected something like ${PRODUCTION_API_URL}.`,
+      );
+    }
   };
 
   return (

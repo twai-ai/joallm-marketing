@@ -144,7 +144,7 @@ export const Demo: React.FC = () => {
                 ))}
               </ul>
               <div className="mt-5 flex flex-col sm:flex-row gap-3">
-                <button className="lp-btn-primary" onClick={() => window.open('https://platform.joallm.ai/', '_blank')}>
+                <button className="lp-btn-primary" onClick={() => window.open('https://platform.atrisi.org/', '_blank')}>
                   Try the platform
                 </button>
                 <button

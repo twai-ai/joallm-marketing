@@ -263,7 +263,7 @@ export const RAGModes: React.FC = () => {
         <div className="text-center flex flex-col sm:flex-row gap-4 justify-center">
           <button
             className="lp-btn-primary"
-            onClick={() => window.open('https://platform.joallm.ai/', '_blank')}
+            onClick={() => window.open('https://platform.atrisi.org/', '_blank')}
           >
             Try it on your documents
           </button>

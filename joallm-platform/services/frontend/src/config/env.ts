@@ -32,6 +32,10 @@ function normalizeApiUrl(raw: unknown, fallback: string): string {
   return `https://${value}`;
 }
 
+/** Public production API — used when runtime config is missing on ATRISI hosts. */
+export const PRODUCTION_API_URL =
+  'https://joallm-marketing-backend-production.up.railway.app';
+
 function isUnusableApiUrl(api: string): boolean {
   const value = api.trim().toLowerCase();
   return (
@@ -41,6 +45,18 @@ function isUnusableApiUrl(api: string): boolean {
     value.includes('railway.internal') ||
     isBuildPlaceholder(value)
   );
+}
+
+function isRunningOnPublicHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname.toLowerCase();
+  if (!host || host === 'localhost' || host.startsWith('127.')) return false;
+  return true;
+}
+
+function isLegacyPlatformHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.location.hostname.toLowerCase() === 'platform.joallm.ai';
 }
 
 const envSchema = z.object({
@@ -99,10 +115,28 @@ export function resolveApiBaseUrl(): string {
   // Prefer runtime config written by entrypoint (avoids brittle sed on the JS bundle)
   const runtime = readRuntimeEnv();
   const preferred = runtime.VITE_API_URL || runtime.VITE_API_BASE_URL || env.VITE_API_URL || env.VITE_API_BASE_URL;
-  return normalizeApiUrl(preferred, 'http://localhost:3001');
+  const normalized = normalizeApiUrl(preferred, 'http://localhost:3001');
+
+  // Public hosts must never fall back to localhost — that yields Chrome's
+  // "This site can't be reached / Check if there is a typo" on Google login.
+  if (isRunningOnPublicHost() && isUnusableApiUrl(normalized)) {
+    return PRODUCTION_API_URL;
+  }
+  return normalized;
 }
 
 export function isApiUrlMisconfigured(): boolean {
-  if ((readRuntimeEnv().VITE_APP_ENV || env.VITE_APP_ENV) !== 'production') return false;
-  return isUnusableApiUrl(resolveApiBaseUrl());
+  const api = resolveApiBaseUrl();
+  const appEnv = readRuntimeEnv().VITE_APP_ENV || env.VITE_APP_ENV;
+  const onPublicHost = isRunningOnPublicHost();
+
+  // Treat public deployments as production even if VITE_APP_ENV was baked wrong
+  if (appEnv !== 'production' && !onPublicHost) return false;
+  return isUnusableApiUrl(api);
+}
+
+/** Old JoaLLM hostname — Google OAuth / API point at a different stack. */
+export function getCanonicalPlatformOrigin(): string | null {
+  if (!isLegacyPlatformHost()) return null;
+  return 'https://platform.atrisi.org';
 }

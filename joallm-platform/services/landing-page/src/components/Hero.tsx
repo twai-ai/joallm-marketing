@@ -98,7 +98,7 @@ export const Hero: React.FC = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center mb-10">
-              <button className="lp-btn-primary" onClick={() => window.open('https://platform.joallm.ai/', '_blank')}>
+              <button className="lp-btn-primary" onClick={() => window.open('https://platform.atrisi.org/', '_blank')}>
                 Try Platform
                 <ArrowRight className="h-4 w-4" />
               </button>

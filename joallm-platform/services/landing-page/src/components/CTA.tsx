@@ -85,7 +85,7 @@ export const CTA: React.FC = () => {
 
           <div className="grid gap-5 lg:grid-cols-3 mb-12">
             <button
-              onClick={() => window.open('https://platform.joallm.ai/', '_blank')}
+              onClick={() => window.open('https://platform.atrisi.org/', '_blank')}
               className="lp-cta-lane text-left"
             >
               <div className="text-2xl mb-3">🧪</div>
@@ -123,7 +123,7 @@ export const CTA: React.FC = () => {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
             <button
-              onClick={() => window.open('https://platform.joallm.ai/', '_blank')}
+              onClick={() => window.open('https://platform.atrisi.org/', '_blank')}
               className="bg-white hover:bg-gray-50 text-joa-primary font-bold py-4 px-8 rounded-xl text-base transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
             >
               Explore Platform

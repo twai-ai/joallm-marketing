@@ -128,7 +128,7 @@ export const Features: React.FC = () => {
           <button className="lp-btn-primary" onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}>
             See Guided Demo
           </button>
-          <button className="lp-btn-secondary" onClick={() => window.open('https://platform.joallm.ai/', '_blank')}>
+          <button className="lp-btn-secondary" onClick={() => window.open('https://platform.atrisi.org/', '_blank')}>
             Try Live Platform
           </button>
         </div>

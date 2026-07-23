@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const platformUrl = import.meta.env.VITE_PLATFORM_URL || 'https://platform.joallm.ai/';
+const platformUrl = import.meta.env.VITE_PLATFORM_URL || 'https://platform.atrisi.org/';
 const razorpayPaymentLink = import.meta.env.VITE_RAZORPAY_PAYMENT_LINK_URL;
 
 const tiers = [

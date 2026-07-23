@@ -73,7 +73,7 @@ export const Navigation: React.FC = () => {
               Talk to Us
             </button>
             <button
-              onClick={() => window.open('https://platform.joallm.ai/', '_blank')}
+              onClick={() => window.open('https://platform.atrisi.org/', '_blank')}
               className="lp-btn-primary"
               style={{ padding: '8px 20px', fontSize: '14px' }}
             >
@@ -122,7 +122,7 @@ export const Navigation: React.FC = () => {
             <div className="pt-3 mt-2 border-t border-gray-100">
               <button
                 onClick={() => {
-                  window.open('https://platform.joallm.ai/', '_blank');
+                  window.open('https://platform.atrisi.org/', '_blank');
                   setIsMobileMenuOpen(false);
                 }}
                 className="lp-btn-primary w-full justify-center"

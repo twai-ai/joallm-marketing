@@ -27,7 +27,7 @@ const RAZORPAY_PAYMENT_LINK_URL = process.env.RAZORPAY_PAYMENT_LINK_URL ?? '';
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID ?? '';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET ?? '';
 const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET ?? '';
-const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://app.joallm.ai';
+const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://platform.atrisi.org';
 
 async function applyTierChange(userId: string, tier: 'free' | 'pro' | 'enterprise', event: string) {
   await db.update(users)

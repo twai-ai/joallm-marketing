@@ -427,6 +427,38 @@ export async function ensureCorePlatformTables(): Promise<void> {
     sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "settings" jsonb DEFAULT '{}'::jsonb`,
   );
 
+  await exec(
+    'memberships',
+    sql`
+      CREATE TABLE IF NOT EXISTS "memberships" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "organization_id" uuid NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
+        "workspace_id" uuid REFERENCES "workspaces"("id") ON DELETE CASCADE,
+        "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "invited_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+        "role" text NOT NULL DEFAULT 'member',
+        "status" text NOT NULL DEFAULT 'active',
+        "created_at" timestamp NOT NULL DEFAULT NOW(),
+        "updated_at" timestamp NOT NULL DEFAULT NOW()
+      )
+    `,
+  );
+  await exec(
+    'memberships.user_id_idx',
+    sql`CREATE INDEX IF NOT EXISTS "memberships_user_id_idx" ON "memberships" ("user_id")`,
+  );
+  await exec(
+    'memberships.organization_id_idx',
+    sql`CREATE INDEX IF NOT EXISTS "memberships_organization_id_idx" ON "memberships" ("organization_id")`,
+  );
+  await exec(
+    'memberships.org_user_workspace_unique',
+    sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS "memberships_org_user_workspace_unique"
+      ON "memberships" ("organization_id", "user_id", "workspace_id")
+    `,
+  );
+
   // Acquisition Intelligence tables (journal may lag behind)
   await exec(
     'acquisition_persons',

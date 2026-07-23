@@ -53,6 +53,35 @@ export async function ensureAtrisiInstitution(): Promise<{
   );
   await db.execute(sql`ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "code" text`);
 
+  // Enterprise scaffolding (0019) may never have applied on this database.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "memberships" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "organization_id" uuid NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
+      "workspace_id" uuid REFERENCES "workspaces"("id") ON DELETE CASCADE,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "invited_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+      "role" text NOT NULL DEFAULT 'member',
+      "status" text NOT NULL DEFAULT 'active',
+      "created_at" timestamp NOT NULL DEFAULT NOW(),
+      "updated_at" timestamp NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "organization_domains" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "organization_id" uuid NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
+      "domain" text NOT NULL,
+      "is_verified" boolean NOT NULL DEFAULT false,
+      "auto_join_enabled" boolean NOT NULL DEFAULT false,
+      "allowed_auth_methods" jsonb DEFAULT '["google","password"]'::jsonb,
+      "default_role" text NOT NULL DEFAULT 'member',
+      "created_at" timestamp NOT NULL DEFAULT NOW(),
+      "updated_at" timestamp NOT NULL DEFAULT NOW(),
+      CONSTRAINT "organization_domains_domain_unique" UNIQUE ("domain")
+    )
+  `);
+
   let [org] = await db
     .select({
       id: organizations.id,

@@ -204,11 +204,16 @@ export function useStorySession(storyId: string | undefined) {
   });
 
   const similarBeatMutation = useMutation({
-    mutationFn: async (input: { beatId: string; count?: number }) => {
+    mutationFn: async (input: {
+      beatId: string;
+      count?: number;
+      textMode?: 'none' | 'title' | 'title_caption';
+    }) => {
       const res = await apiClient.post<
         ApiOk<StorySession> & { provider?: string; addedBeatIds?: string[] }
       >(API_ENDPOINTS.story.similarBeat(storyId!, input.beatId), {
         count: input.count || 1,
+        textMode: input.textMode,
       }, { showErrorToast: false });
       return res;
     },
@@ -218,7 +223,7 @@ export function useStorySession(storyId: string | undefined) {
       showSuccess(
         n > 1
           ? `${n} visuals added (${res.provider || 'AI'})`
-          : `Visual added (${res.provider || 'AI'}) — uses beat title/caption when set`,
+          : `Visual added (${res.provider || 'AI'})`,
       );
     },
     onError: (error: unknown) => {

@@ -383,10 +383,12 @@ export async function setStoryBrandKit(
 export type StoryBrandTextMode = 'none' | 'title';
 
 /**
- * Brand this beat — ATRISI look + brand kit.
- * Branding typography from Story title/caption is intentional (default).
- * textMode=none is optional visual-only branding.
- * Keeps the original beat; inserts a branded variant after it.
+ * Brand this beat — ATRISI look applied to THIS photo via brand kit.
+ *
+ * Providers (distinct from More visuals):
+ * - textMode=none → BFL/FLUX edit remix (subject lock) + logo watermark
+ * - textMode=title → Ideogram typography + brand kit (logo/styles); beat described via vision,
+ *   not attached as a style photo (avoids remixed garbage letters)
  */
 export async function brandStoryBeat(
   ownerUserId: string,
@@ -400,33 +402,41 @@ export async function brandStoryBeat(
     throw Object.assign(new Error('Beat has no image to brand'), { statusCode: 400 });
   }
   const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
-  const headline = cleanStoryTypography(beat.title, 72);
-  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 48);
-  // Branding may include text. Default to Story title when present; Generate similar stays text-free.
+  const headline = cleanStoryTypography(beat.title, 56);
+  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 40);
   const textMode: StoryBrandTextMode =
     options?.textMode || (headline ? 'title' : 'none');
   const useBrandCopy = textMode === 'title' && Boolean(headline);
   const watermark = Boolean(kit.logoFileId) && kit.watermark !== false;
 
-  const promptParts = [
-    'Remix THIS uploaded subject photo into an ATRISI Marketing institutional acquisition visual.',
-    'Preserve the recognizable people, place, and composition from the first reference image.',
-    'Apply ATRISI teal and slate brand, premium institutional look, clean visual hierarchy.',
-  ];
+  const brandKitStyleIds: string[] = [];
+  if (kit.logoFileId && kit.logoFileId !== beat.fileId) brandKitStyleIds.push(kit.logoFileId);
+  for (const id of kit.styleFileIds || []) {
+    if (id && id !== beat.fileId && !brandKitStyleIds.includes(id)) brandKitStyleIds.push(id);
+  }
+
+  const promptParts = useBrandCopy
+    ? [
+        'ATRISI Marketing branded institutional acquisition creative for THIS subject (from scene description).',
+        'Apply ATRISI teal and slate brand, premium institutional look, clean visual hierarchy.',
+        'Preserve the recognizable people and place from the description — branded treatment of the same moment, not a random stock scene.',
+      ]
+    : [
+        'Remix THIS uploaded subject photo into an ATRISI Marketing institutional acquisition visual.',
+        'Preserve the recognizable people, place, and composition from the first reference image — subject-locked edit.',
+        'Apply ATRISI teal and slate color grade, premium institutional look.',
+        'TEXT-FREE brand pass: no readable text, headlines, CTAs, or gibberish. Empty margins for later overlay.',
+      ];
 
   if (useBrandCopy && headline) {
     promptParts.push(
-      `Brand typography — render this headline letter-perfect, large high-contrast sans-serif: "${headline}".`,
+      `Brand typography — render ONLY this headline letter-perfect: "${headline}".`,
     );
     if (cta && cta !== headline) {
       promptParts.push(`Optional supporting line exactly: "${cta}".`);
     }
     promptParts.push(
-      'Do not invent other slogans, fake stats, dates, or program names. Only the Story copy above.',
-    );
-  } else {
-    promptParts.push(
-      'TEXT-FREE visual brand pass: no readable text, headlines, CTAs, or gibberish letters. Empty margins for later overlay.',
+      'No other slogans, fake stats, dates, CTAs, or gibberish. Only the Story copy above.',
     );
   }
 
@@ -444,8 +454,8 @@ export async function brandStoryBeat(
     promptParts.push('Do not add fake logos.');
   }
 
-  // With brand copy → Ideogram for typography; without → edit remix prefers FLUX subject lock
-  const referenceMode = useBrandCopy ? 'style' : 'edit';
+  // Brand look = BFL/FLUX subject remix. Brand + title = Ideogram + brand kit (not the same as More visuals).
+  const providerOverride = useBrandCopy ? 'ideogram' : 'flux';
 
   const generated = await generateCreativeImages({
     ownerUserId,
@@ -454,10 +464,14 @@ export async function brandStoryBeat(
     quality: 'standard',
     aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
     titleHint: beat.title || 'ATRISI branded beat',
+    // Vision always sees the beat (+ kit). Provider attach differs by mode.
     referenceFileIds: brandReferenceIds(kit, beat.fileId),
-    referenceMode,
+    referenceMode: useBrandCopy ? 'style' : 'edit',
+    visionOnlyReferences: useBrandCopy,
+    providerReferenceFileIds: useBrandCopy ? brandKitStyleIds.slice(0, 3) : undefined,
     analyzeReferences: true,
     variantCount: 1,
+    providerOverride,
     metadata: {
       source: 'story_brand_beat',
       storyId,
@@ -465,19 +479,20 @@ export async function brandStoryBeat(
       originalFileId: beat.fileId,
       textMode,
       watermark,
+      providerRole: useBrandCopy ? 'ideogram_brand_typography' : 'flux_brand_remix',
       usedBrandKit: Boolean(kit.logoFileId || (kit.styleFileIds && kit.styleFileIds.length)),
       format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
     },
     precision: {
       textFree: !useBrandCopy,
       headline: useBrandCopy ? headline : undefined,
-      cta: useBrandCopy ? cta : undefined,
+      cta: useBrandCopy && cta && cta !== headline ? cta : undefined,
       mustIncludeText: useBrandCopy ? headline : undefined,
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
       useLogoReference: watermark,
       avoid: useBrandCopy
-        ? 'gibberish, misspellings, extra slogans beyond the given headline/CTA, fake logos, neon, purple glow, clutter'
+        ? 'any text except the quoted headline/supporting line, gibberish, misspellings, extra slogans, fake CTAs, Apply Now, Learn More, neon, purple glow, clutter'
         : 'any readable text, gibberish letters, misspelled words, fake logos, neon, purple glow, cluttered stickers, CTAs, captions, signage',
     },
   });
@@ -496,8 +511,8 @@ export async function brandStoryBeat(
     title: beat.title,
     caption: beat.caption,
     notes: useBrandCopy
-      ? 'Branded variant · Story title/caption on image · original kept'
-      : 'Branded variant · visual only · original kept',
+      ? `Brand · Ideogram + brand kit · title on image · original kept`
+      : `Brand · FLUX/BFL subject remix · visual only · original kept`,
     order: insertAt + 1,
     arcRole: beat.arcRole || 'other',
     vision: null,
@@ -512,15 +527,18 @@ export async function brandStoryBeat(
 }
 
 /**
- * More visuals — fresh associated photos from the beat reference.
- * When the beat has a title/caption, render that copy letter-perfect (Ideogram-first).
- * Without copy, keep a text-scrubbed photo for manual overlay.
+ * More visuals — alternate associated shots (not a brand-kit pass).
+ *
+ * Providers (distinct from Brand):
+ * - textMode=none → BFL/FLUX only: fresh angle / framing of the same subject
+ * - textMode=title|title_caption → Ideogram only: new poster from scene description + Story copy
+ *   (no brand kit / logo watermark — use Brand for that)
  */
 export async function generateSimilarStoryBeats(
   ownerUserId: string,
   storyId: string,
   beatId: string,
-  options?: { count?: number },
+  options?: { count?: number; textMode?: 'none' | 'title' | 'title_caption' },
 ): Promise<{ story: StorySessionDto; provider: string; addedBeatIds: string[] }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
@@ -529,28 +547,26 @@ export async function generateSimilarStoryBeats(
   }
   const perProvider = Math.min(Math.max(options?.count || 1, 1), 2);
 
-  const headline = cleanStoryTypography(beat.title, 72);
-  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 48);
-  const useCopy = Boolean(headline);
+  const headline = cleanStoryTypography(beat.title, 56);
+  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 40);
+  const requestedMode = options?.textMode;
+  const textMode: 'none' | 'title' | 'title_caption' =
+    requestedMode || (headline ? 'title' : 'none');
+  const useCopy = textMode !== 'none' && Boolean(headline);
+  const includeCaption = textMode === 'title_caption' && Boolean(cta) && cta !== headline;
 
   const promptParts = useCopy
     ? [
-        'Create an associated marketing visual matching the first reference photograph.',
-        'Keep the same people, place, and lighting — fresh angle or framing, not a duplicate.',
-        'Premium institutional acquisition look.',
-        `Typography — render this headline letter-perfect, large high-contrast sans-serif: "${headline}".`,
-        ...(cta && cta !== headline
-          ? [`Optional supporting line exactly: "${cta}".`]
-          : []),
-        'Replace any lettering from the reference with ONLY the Story copy above.',
-        'Do not invent other slogans, fake stats, dates, program names, or gibberish.',
+        'New institutional acquisition marketing visual inspired by this scene description.',
+        'Fresh framing and composition — an associated shot, not a brand-kit restyle of the same frame.',
+        'Premium look, natural lighting, recognizable subject from the description.',
+        'Do not add logos or watermarks.',
       ]
     : [
-        'Associated photograph matching the first reference image.',
-        'Same people, place, and lighting — fresh angle or framing, not a duplicate.',
-        'Premium natural photo, institutional acquisition look.',
-        'Critical: strip all text from the reference — no letters, logos-as-words, signs, captions, or watermarks.',
-        'Blank clean surfaces where text was. Leave empty margins for a human to add typography later.',
+        'Associated photograph matching the first reference image — fresh angle or framing, not a duplicate.',
+        'Same people, place, and lighting. Subject-locked photo remix (BFL/FLUX).',
+        'Premium natural photo. Do not apply brand logos or poster layouts.',
+        'Critical: strip all text — no letters, signs, captions, or watermarks. Blank surfaces for later copy.',
       ];
 
   if (beat.vision?.what) {
@@ -565,21 +581,22 @@ export async function generateSimilarStoryBeats(
     promptParts.push(`Mood: ${beat.vision.mood}.`);
   }
 
-  const similarRefs = [beat.fileId].slice(0, 1);
-  // Ideogram locks typography; FLUX edit remixes subject but mangles letters — skip FLUX when we need copy
-  const providers = (useCopy ? (['ideogram'] as const) : (['flux', 'ideogram'] as const));
+  // More visuals: Ideogram for copy posters; FLUX/BFL alone for photo variants (not both)
+  const providerOverride = useCopy ? 'ideogram' : 'flux';
 
-  const generateOnce = (providerOverride: 'flux' | 'ideogram') =>
-    generateCreativeImages({
+  let batch;
+  try {
+    batch = await generateCreativeImages({
       ownerUserId,
       prompt: promptParts.join(' '),
       style: useCopy ? 'marketing_poster' : 'photo_realistic',
       quality: 'standard',
       aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
       titleHint: useCopy ? beat.title || 'Story visual' : 'Similar visual',
-      referenceFileIds: similarRefs,
+      referenceFileIds: [beat.fileId],
       referenceMode: useCopy ? 'style' : 'edit',
-      analyzeReferences: useCopy,
+      visionOnlyReferences: useCopy,
+      analyzeReferences: true,
       variantCount: perProvider,
       providerOverride,
       metadata: {
@@ -589,50 +606,43 @@ export async function generateSimilarStoryBeats(
         referenceFileId: beat.fileId,
         textFree: !useCopy,
         withCopy: useCopy,
+        textMode,
+        providerRole: useCopy ? 'ideogram_story_poster' : 'flux_associated_photo',
         format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
-        providerOverride,
       },
       precision: {
         textFree: !useCopy,
         headline: useCopy ? headline : undefined,
-        cta: useCopy ? cta : undefined,
+        cta: includeCaption ? cta : undefined,
         mustIncludeText: useCopy ? headline : undefined,
         brandTheme: ATRISI_STORY_BRAND_THEME,
         paletteType: 'institutional_navy',
         useLogoReference: false,
         avoid: useCopy
-          ? 'gibberish, misspellings, extra slogans beyond the given headline/CTA, fake logos, neon, purple glow, clutter, exact duplicate of reference'
+          ? 'any text except the quoted headline' +
+            (includeCaption ? '/supporting line' : '') +
+            ', gibberish, misspellings, extra slogans, fake CTAs, Apply Now, Learn More, logos, watermarks, badge stacks, neon, clutter'
           : 'any readable text, letters, words, gibberish, captions, headlines, CTAs, logos, watermarks, signage, posters, subtitles, UI chrome, neon, clutter, exact duplicate of reference',
       },
     });
-
-  const collected: Array<{ fileId: string; provider: string }> = [];
-  const errors: string[] = [];
-
-  for (const provider of providers) {
-    try {
-      const batch = await generateOnce(provider);
-      for (const file of batch.files) {
-        if (file.fileId) {
-          collected.push({ fileId: file.fileId, provider: batch.provider });
-        }
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      errors.push(`${provider}: ${message}`);
-      logger.warn('Story More visuals provider failed', { provider, error: message, useCopy });
-    }
-  }
-
-  if (collected.length === 0) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     throw Object.assign(
       new Error(
         useCopy
-          ? `More visuals failed. ${errors.join(' · ') || 'Check Ideogram key in Settings — typography uses Ideogram.'}`
-          : `More visuals failed. ${errors.join(' · ') || 'Check BFL/FLUX and Ideogram keys in Settings.'}`,
+          ? `More visuals failed (Ideogram). ${message}`
+          : `More visuals failed (FLUX/BFL). ${message} — add a BFL key in Settings for photo variants, or set on-image text to Title for Ideogram posters.`,
       ),
-      { statusCode: 502 },
+      { statusCode: (error as { statusCode?: number })?.statusCode || 502 },
     );
+  }
+
+  const collected = batch.files
+    .filter((f) => f.fileId)
+    .map((f) => ({ fileId: f.fileId, provider: batch.provider }));
+
+  if (collected.length === 0) {
+    throw Object.assign(new Error('More visuals returned no images'), { statusCode: 502 });
   }
 
   const insertAt = existing.beats.findIndex((b) => b.id === beatId);
@@ -643,8 +653,8 @@ export async function generateSimilarStoryBeats(
     title: beat.title || `Visual ${index + 1}`,
     caption: beat.caption || '',
     notes: useCopy
-      ? `More visuals · ${item.provider} · title/caption on image`
-      : `More visuals · ${item.provider} · text-free — add a title then re-run for on-image copy`,
+      ? `More visuals · Ideogram poster · ${textMode === 'title_caption' ? 'title+caption' : 'title only'} · no brand kit`
+      : `More visuals · FLUX/BFL associated photo · text-free`,
     order: insertAt + 1 + index,
     arcRole: beat.arcRole || 'other',
     vision: null,
@@ -655,10 +665,9 @@ export async function generateSimilarStoryBeats(
   const beats = [...before, ...added, ...after].map((b, order) => ({ ...b, order }));
 
   const story = await updateStory(ownerUserId, storyId, { beats });
-  const providersUsed = [...new Set(collected.map((c) => c.provider))].join('+');
   return {
     story,
-    provider: providersUsed,
+    provider: batch.provider,
     addedBeatIds: added.map((b) => b.id),
   };
 }

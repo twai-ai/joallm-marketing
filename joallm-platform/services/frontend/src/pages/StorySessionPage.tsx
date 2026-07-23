@@ -58,6 +58,9 @@ export function StorySessionPage() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [moreVisualsTextMode, setMoreVisualsTextMode] = useState<
+    'none' | 'title' | 'title_caption'
+  >('title');
 
   useEffect(() => {
     if (!story) return;
@@ -475,25 +478,50 @@ export function StorySessionPage() {
                   </span>
                   <span className="text-[10px] font-medium text-teal-100">
                     {selected.title?.trim()
-                      ? 'Remix upload + your title · original kept'
-                      : 'Remix upload · add a title for on-image copy'}
+                      ? 'Ideogram + brand kit · title on image'
+                      : 'FLUX/BFL remix of this photo · add title for copy'}
                   </span>
                 </button>
                 <button
                   type="button"
                   disabled={isBranding || isGeneratingSimilar}
-                  onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
+                  onClick={() =>
+                    void generateSimilar({
+                      beatId: selected.id,
+                      count: 1,
+                      textMode: moreVisualsTextMode,
+                    })
+                  }
                   className="inline-flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 text-white transition hover:bg-white/10 disabled:opacity-40"
                 >
                   <span className="text-sm font-semibold">
                     {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                   </span>
                   <span className="text-[10px] font-medium text-slate-300">
-                    {selected.title?.trim()
-                      ? 'Fresh visual + your title (Ideogram)'
-                      : 'Add a title first for on-image copy'}
+                    {moreVisualsTextMode === 'none'
+                      ? 'FLUX/BFL · fresh angle · no brand kit'
+                      : moreVisualsTextMode === 'title_caption'
+                        ? 'Ideogram poster · title + caption'
+                        : 'Ideogram poster · title only'}
                   </span>
                 </button>
+              </div>
+              <div className="mx-auto mt-2 flex max-w-xl items-center justify-center gap-2">
+                <label htmlFor="more-visuals-text" className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                  On-image text
+                </label>
+                <select
+                  id="more-visuals-text"
+                  value={moreVisualsTextMode}
+                  onChange={(e) =>
+                    setMoreVisualsTextMode(e.target.value as 'none' | 'title' | 'title_caption')
+                  }
+                  className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 outline-none"
+                >
+                  <option value="title">Title only (recommended)</option>
+                  <option value="title_caption">Title + caption</option>
+                  <option value="none">None (scrub text)</option>
+                </select>
               </div>
               <button
                 type="button"
@@ -642,32 +670,56 @@ export function StorySessionPage() {
                         </span>
                         <span className="mt-0.5 block text-[11px] text-teal-100">
                           {selected.title?.trim()
-                            ? 'Remix upload + title/caption · original kept'
-                            : 'Remix upload · original kept'}
+                            ? 'Ideogram + brand kit · original kept'
+                            : 'FLUX/BFL subject remix · original kept'}
                         </span>
                       </button>
                       <button
                         type="button"
                         disabled={isBranding || isGeneratingSimilar}
-                        onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
+                        onClick={() =>
+                          void generateSimilar({
+                            beatId: selected.id,
+                            count: 1,
+                            textMode: moreVisualsTextMode,
+                          })
+                        }
                         className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
                       >
                         <span className="block text-sm font-semibold text-slate-800">
                           {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                         </span>
                         <span className="mt-0.5 block text-[11px] text-slate-500">
-                          {selected.title?.trim()
-                            ? 'Fresh angle + title/caption on image'
-                            : 'Add a title above for on-image copy'}
+                          {moreVisualsTextMode === 'none'
+                            ? 'FLUX/BFL associated photo · no brand kit'
+                            : moreVisualsTextMode === 'title_caption'
+                              ? 'Ideogram · title + caption poster'
+                              : 'Ideogram · title-only poster'}
                         </span>
                       </button>
+                      <label className="block text-[11px] text-slate-500">
+                        On-image text for More visuals
+                        <select
+                          value={moreVisualsTextMode}
+                          onChange={(e) =>
+                            setMoreVisualsTextMode(
+                              e.target.value as 'none' | 'title' | 'title_caption',
+                            )
+                          }
+                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none"
+                        >
+                          <option value="title">Title only (recommended)</option>
+                          <option value="title_caption">Title + caption</option>
+                          <option value="none">None (scrub text)</option>
+                        </select>
+                      </label>
                       <button
                         type="button"
                         disabled={isBranding || isGeneratingSimilar}
                         onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
                         className="text-left text-[11px] text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline disabled:opacity-40"
                       >
-                        Brand look only (no on-image text)
+                        Brand look only (FLUX/BFL · no on-image text)
                       </button>
                     </div>
                   </div>

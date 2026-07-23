@@ -404,7 +404,10 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
       const userId = (request as { user: { id: string } }).user.id;
       const { storyId, beatId } = request.params as { storyId: string; beatId: string };
       const body = z
-        .object({ count: z.number().int().min(1).max(3).optional() })
+        .object({
+          count: z.number().int().min(1).max(3).optional(),
+          textMode: z.enum(['none', 'title', 'title_caption']).optional(),
+        })
         .parse(request.body || {});
       const result = await generateSimilarStoryBeats(userId, storyId, beatId, body);
       return reply.status(201).send({

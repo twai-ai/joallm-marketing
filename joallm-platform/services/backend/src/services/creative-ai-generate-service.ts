@@ -87,6 +87,16 @@ export type GenerateImageInput = {
    * edit — FLUX input_image remix / composition
    */
   referenceMode?: 'style' | 'edit';
+  /**
+   * Analyze refs for subject/look, but do not attach images to Ideogram/FLUX.
+   * Use with exact typography so source-photo lettering is not remixed into garbage.
+   */
+  visionOnlyReferences?: boolean;
+  /**
+   * Still attach these file ids to the provider even when visionOnlyReferences is set
+   * (e.g. Brand logo / style kit without the beat photo).
+   */
+  providerReferenceFileIds?: string[];
   /** Ideogram transparent PNG path (logos / stickers / overlays) */
   transparentBackground?: boolean;
   /** How many variants to generate (1–4). Creates one Platform file each. */
@@ -178,6 +188,10 @@ const IDEOGRAM_NEGATIVE_PROMPT =
 
 const IDEOGRAM_TEXT_FREE_NEGATIVE =
   'text, letters, words, typography, writing, caption, headline, subtitle, watermark, logo text, signage, poster text, menu, label, UI text, numbers as text, alphabet, calligraphy, graffiti, banner text, misspelled words, gibberish';
+
+/** When rendering exact Story copy — block invented / garbled extra lettering. */
+const IDEOGRAM_EXACT_TEXT_NEGATIVE =
+  'gibberish, nonsense words, misspelled words, random letters, extra slogans, extra captions, duplicate headlines, fake CTAs, Apply Now, Learn More, Register, lorem ipsum, placeholder text, watermark text, signage text from photo, unreadable tiny text, distorted letters';
 
 /** Highest Ideogram 3 ResolutionV3 per aspect (used for standard/premium). */
 const IDEOGRAM_RESOLUTION_BY_ASPECT: Record<string, string> = {
@@ -301,12 +315,14 @@ export function buildEnhancedPrompt(options: {
     );
   } else if (exact) {
     parts.push(
-      'TYPOGRAPHY (critical): render ONLY the following strings, letter-perfect, large high-contrast sans-serif, correctly spelled, sharp edges. Do not invent extra words, dates, slogans, or captions.',
+      'TYPOGRAPHY LOCK (critical): the ONLY readable text in the entire image must be the quoted strings below — nothing else.',
     );
-    if (headline) parts.push(`Headline: "${headline}"`);
-    if (cta) parts.push(`CTA button label: "${cta}"`);
-    if (must && must !== headline) parts.push(`Also include exactly: "${must}"`);
-    parts.push('No gibberish. No misspellings. No placeholder text.');
+    if (headline) parts.push(`Headline (exact): "${headline}"`);
+    if (cta) parts.push(`Supporting line (exact): "${cta}"`);
+    if (must && must !== headline && must !== cta) parts.push(`Also exact: "${must}"`);
+    parts.push(
+      'No other words, numbers-as-text, buttons, badges, watermarks, signage, or gibberish. Blank surfaces everywhere else.',
+    );
   }
 
   // Visual brief after text — keeps Ideogram focused on the quoted copy
@@ -337,7 +353,7 @@ export function buildEnhancedPrompt(options: {
   }
 
   if (parsedTheme?.promptLines.length) {
-    const themeLines = textFree
+    const themeLines = textFree || exact
       ? parsedTheme.promptLines.filter(
           (line) => !/typograph|headline|copy|font|wordmark|cta/i.test(line),
         )
@@ -363,6 +379,10 @@ export function buildEnhancedPrompt(options: {
     parts.push(
       'Photoreal or clean illustrative scene: natural lighting, sharp focus, NO letters, NO words, NO captions, NO signage text — pure visual for later text overlay.',
     );
+  } else if (exact) {
+    parts.push(
+      'Clean institutional photo-led layout: one large exact headline, optional short exact supporting line, generous empty margins, no invented CTA buttons or badge clusters.',
+    );
   } else {
     parts.push(STYLE_PROMPT_GUIDANCE[options.style] || STYLE_PROMPT_GUIDANCE.other);
   }
@@ -378,14 +398,16 @@ export function buildEnhancedPrompt(options: {
     p.avoid?.trim(),
     textFree
       ? 'any readable text, gibberish letters, misspelled words, fake logos, watermarks, QR codes, captions, headlines, CTAs, subtitles, UI chrome with labels'
-      : DEFAULT_AVOID,
+      : exact
+        ? 'any text except the quoted headline/supporting line, gibberish, misspellings, extra slogans, fake CTAs, Apply Now, Learn More, Register Now, badge stacks, watermarks, signage copied from reference photos'
+        : DEFAULT_AVOID,
   ]
     .filter(Boolean)
     .join('; ');
   parts.push(`Avoid: ${avoid}.`);
 
   // Shorter prompts = better text fidelity on Ideogram
-  const enhanced = parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, exact ? 2200 : 3500);
+  const enhanced = parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, exact ? 1800 : 3500);
 
   return {
     prompt: enhanced,
@@ -668,6 +690,8 @@ async function generateWithIdeogram(options: {
   transparentBackground?: boolean;
   variantCount?: number;
   textFree?: boolean;
+  /** Strengthen negative prompt when rendering locked Story copy. */
+  exactText?: boolean;
 }): Promise<Array<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }>> {
   const form = new FormData();
   form.append('prompt', options.prompt);
@@ -683,7 +707,9 @@ async function generateWithIdeogram(options: {
   if (options.quality !== 'draft') {
     const negative = options.textFree
       ? `${IDEOGRAM_NEGATIVE_PROMPT}, ${IDEOGRAM_TEXT_FREE_NEGATIVE}`
-      : IDEOGRAM_NEGATIVE_PROMPT;
+      : options.exactText
+        ? `${IDEOGRAM_NEGATIVE_PROMPT}, ${IDEOGRAM_EXACT_TEXT_NEGATIVE}`
+        : IDEOGRAM_NEGATIVE_PROMPT;
     form.append('negative_prompt', negative);
   }
 
@@ -985,6 +1011,14 @@ export async function generateCreativeImages(
     MAX_REFERENCE_IMAGES,
   );
 
+  let providerAttachRefs: ReferenceImageBlob[] = [];
+  if (input.visionOnlyReferences) {
+    const attachIds = [...new Set((input.providerReferenceFileIds || []).filter(Boolean))];
+    if (attachIds.length > 0) {
+      providerAttachRefs = await loadReferenceImages(input.ownerUserId, attachIds);
+    }
+  }
+
   let visionNotes: Awaited<ReturnType<typeof describeCreativeReferenceImages>> = [];
   let referenceVisualContext: string | undefined;
   let inferredPalette: string[] = [];
@@ -1065,6 +1099,11 @@ export async function generateCreativeImages(
   });
   const prompt = enhanced.prompt;
 
+  // Exact typography: keep vision description; optionally attach logo/style kit only
+  const providerReferences = input.visionOnlyReferences
+    ? providerAttachRefs.slice(0, MAX_REFERENCE_IMAGES)
+    : references;
+
   const preferLegibleText = hasExactText(input.precision);
   const dims = resolveDimensions(style, input.aspectRatio);
   const providerCandidates = await listExecutableProviders(
@@ -1072,7 +1111,7 @@ export async function generateCreativeImages(
     style,
     input.providerOverride,
     {
-      hasReferences: references.length > 0,
+      hasReferences: providerReferences.length > 0,
       referenceMode,
       transparentBackground,
       preferLegibleText,
@@ -1104,8 +1143,9 @@ export async function generateCreativeImages(
       styleType: enhanced.styleType,
       palette: enhanced.paletteHex,
       visionRefs: visionNotes.length,
-      referenceCount: references.length,
-      referenceMode: references.length ? referenceMode : undefined,
+      referenceCount: providerReferences.length,
+      referenceMode: providerReferences.length ? referenceMode : undefined,
+      visionOnlyReferences: Boolean(input.visionOnlyReferences),
       transparentBackground,
       variantCount,
     });
@@ -1120,10 +1160,11 @@ export async function generateCreativeImages(
           magicPrompt: enhanced.magicPrompt,
           styleType: enhanced.styleType,
           paletteHex: enhanced.paletteHex,
-          references,
+          references: providerReferences,
           transparentBackground,
           variantCount,
           textFree: Boolean(input.precision?.textFree),
+          exactText: preferLegibleText,
         });
       } else {
         outputs = [];
@@ -1135,7 +1176,7 @@ export async function generateCreativeImages(
             width: dims.width,
             height: dims.height,
             style,
-            references,
+            references: providerReferences,
             textFree: Boolean(input.precision?.textFree),
           });
           outputs.push(one);

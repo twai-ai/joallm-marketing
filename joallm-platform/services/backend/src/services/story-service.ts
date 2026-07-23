@@ -457,9 +457,9 @@ export async function brandStoryBeat(
 }
 
 /**
- * Generate similar — associated photo variants only (no on-image copy).
- * Prefer FLUX remix of the beat; Ideogram often invents text — keep prompts visual-only
- * so users can caption manually in Story / design tools.
+ * Generate similar — associated photo variants (text-free for manual copy).
+ * Uses FLUX + Ideogram when both keys exist (combo), each with strong text scrubbing.
+ * Source photos often contain lettering — models are instructed to erase it.
  */
 export async function generateSimilarStoryBeats(
   ownerUserId: string,
@@ -472,31 +472,31 @@ export async function generateSimilarStoryBeats(
   if (!beat.fileId) {
     throw Object.assign(new Error('Beat has no image for More visuals'), { statusCode: 400 });
   }
-  const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
-  const count = Math.min(Math.max(options?.count || 1, 1), 3);
+  // 1 per provider when both available; options.count caps extras from each
+  const perProvider = Math.min(Math.max(options?.count || 1, 1), 2);
 
-  // Visual-only brief — never quote Story titles/captions (models burn them as letters).
   const promptParts = [
-    'Create an associated photograph inspired by the first reference image.',
-    'Same subject, people, place, and lighting — new camera angle or framing, not a duplicate.',
-    'Premium institutional photo look, natural color, clean composition.',
-    'Absolutely no text, letters, logos-as-words, signs, posters, UI labels, or watermarks in the frame.',
-    'Leave empty clean margins suitable for later typography overlay by a human editor.',
+    'Associated photograph matching the first reference image.',
+    'Same people, place, and lighting — fresh angle or framing, not a duplicate.',
+    'Premium natural photo, institutional acquisition look.',
+    'Critical: strip all text from the reference — no letters, logos-as-words, signs, captions, or watermarks.',
+    'Blank clean surfaces where text was. Leave empty margins for a human to add typography later.',
   ];
   if (beat.vision?.what) {
-    // Factual scene only (from vision), not marketing copy
-    promptParts.push(`What to keep recognizable: ${beat.vision.what}.`);
+    promptParts.push(`Keep recognizable: ${beat.vision.what}.`);
+  }
+  if (beat.vision?.onImageText) {
+    promptParts.push(
+      'The reference contains on-image lettering — erase it completely; do not redraw or invent replacement words.',
+    );
   }
   if (beat.vision?.mood) {
     promptParts.push(`Mood: ${beat.vision.mood}.`);
   }
 
-  const similarRefs = [
-    beat.fileId,
-    ...brandReferenceIds(kit, beat.fileId).filter((id) => id !== beat.fileId && id !== kit.logoFileId),
-  ].slice(0, 3);
+  const similarRefs = [beat.fileId].slice(0, 1);
 
-  const generateOnce = (providerOverride: 'flux' | 'ideogram' | null) =>
+  const generateOnce = (providerOverride: 'flux' | 'ideogram') =>
     generateCreativeImages({
       ownerUserId,
       prompt: promptParts.join(' '),
@@ -506,10 +506,9 @@ export async function generateSimilarStoryBeats(
       titleHint: 'Similar visual',
       referenceFileIds: similarRefs,
       referenceMode: 'edit',
-      // Skip ref OCR — it feeds Ideogram into inventing letters
       analyzeReferences: false,
-      variantCount: count,
-      providerOverride: providerOverride || undefined,
+      variantCount: perProvider,
+      providerOverride,
       metadata: {
         source: 'story_generate_similar',
         storyId,
@@ -517,6 +516,7 @@ export async function generateSimilarStoryBeats(
         referenceFileId: beat.fileId,
         textFree: true,
         format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
+        providerOverride,
       },
       precision: {
         textFree: true,
@@ -528,41 +528,41 @@ export async function generateSimilarStoryBeats(
       },
     });
 
-  let generated: Awaited<ReturnType<typeof generateCreativeImages>>;
-  try {
-    // FLUX remix keeps the photo association; Ideogram often paints junk typography
-    generated = await generateOnce('flux');
-  } catch (fluxError) {
-    logger.warn('Story More visuals: FLUX failed, trying Ideogram text-free fallback', {
-      error: fluxError instanceof Error ? fluxError.message : String(fluxError),
-    });
+  const collected: Array<{ fileId: string; provider: string }> = [];
+  const errors: string[] = [];
+
+  for (const provider of ['flux', 'ideogram'] as const) {
     try {
-      generated = await generateOnce('ideogram');
-    } catch (ideoError) {
-      const fluxMsg = fluxError instanceof Error ? fluxError.message : String(fluxError);
-      const ideoMsg = ideoError instanceof Error ? ideoError.message : String(ideoError);
-      throw Object.assign(
-        new Error(
-          `More visuals failed. FLUX: ${fluxMsg}. Ideogram: ${ideoMsg}. Add BFL/FLUX for best photo remix.`,
-        ),
-        { statusCode: 502 },
-      );
+      const batch = await generateOnce(provider);
+      for (const file of batch.files) {
+        if (file.fileId) {
+          collected.push({ fileId: file.fileId, provider: batch.provider });
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`${provider}: ${message}`);
+      logger.warn('Story More visuals provider failed', { provider, error: message });
     }
   }
 
-  const newFileIds = generated.files.map((f) => f.fileId).filter(Boolean);
-  if (newFileIds.length === 0) {
-    throw Object.assign(new Error('Creative AI returned no similar images'), { statusCode: 502 });
+  if (collected.length === 0) {
+    throw Object.assign(
+      new Error(
+        `More visuals failed. ${errors.join(' · ') || 'Check BFL/FLUX and Ideogram keys in Settings.'}`,
+      ),
+      { statusCode: 502 },
+    );
   }
 
   const insertAt = existing.beats.findIndex((b) => b.id === beatId);
-  const added: StoryBeat[] = newFileIds.map((fileId, index) => ({
+  const added: StoryBeat[] = collected.map((item, index) => ({
     id: randomUUID(),
-    fileId,
+    fileId: item.fileId,
     sourceFileId: beat.fileId,
     title: beat.title || `Visual ${index + 1}`,
     caption: beat.caption || '',
-    notes: 'More visuals · text-free photo · add copy yourself in Edit / design tools',
+    notes: `More visuals · ${item.provider} · text-free — add copy yourself`,
     order: insertAt + 1 + index,
     arcRole: beat.arcRole || 'other',
     vision: null,
@@ -573,9 +573,10 @@ export async function generateSimilarStoryBeats(
   const beats = [...before, ...added, ...after].map((b, order) => ({ ...b, order }));
 
   const story = await updateStory(ownerUserId, storyId, { beats });
+  const providersUsed = [...new Set(collected.map((c) => c.provider))].join('+');
   return {
     story,
-    provider: generated.provider,
+    provider: providersUsed,
     addedBeatIds: added.map((b) => b.id),
   };
 }

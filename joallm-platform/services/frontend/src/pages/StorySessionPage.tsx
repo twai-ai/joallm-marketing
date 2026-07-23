@@ -482,7 +482,7 @@ export function StorySessionPage() {
                     {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                   </span>
                   <span className="text-[10px] font-medium text-slate-300">
-                    Matching photo · no text — add copy yourself
+                    FLUX + Ideogram · text scrubbed for your copy
                   </span>
                 </button>
               </div>
@@ -647,7 +647,7 @@ export function StorySessionPage() {
                           {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                         </span>
                         <span className="mt-0.5 block text-[11px] text-slate-500">
-                          Matching photo · blank for your text
+                          FLUX + Ideogram · blank for your text
                         </span>
                       </button>
                       <button

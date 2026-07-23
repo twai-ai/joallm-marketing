@@ -13,7 +13,7 @@ const PROVIDER_KEY_SLOTS: Record<
 > = {
   openai: ['openai'],
   google_imagen: ['google_imagen', 'google'],
-  flux: ['flux'],
+  flux: ['flux', 'bfl', 'black_forest_labs', 'blackforest'],
   ideogram: ['ideogram'],
   stability: ['stability'],
   adobe_firefly: ['adobe_firefly', 'adobe'],

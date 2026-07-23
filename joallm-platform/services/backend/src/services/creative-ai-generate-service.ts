@@ -175,6 +175,9 @@ export function resolveDimensions(
 const IDEOGRAM_NEGATIVE_PROMPT =
   'blurry, low resolution, pixelated, jpeg artifacts, noisy, muddy colors, amateur layout, distorted typography';
 
+const IDEOGRAM_TEXT_FREE_NEGATIVE =
+  'text, letters, words, typography, writing, caption, headline, subtitle, watermark, logo text, signage, poster text, menu, label, UI text, numbers as text, alphabet, calligraphy, graffiti, banner text, misspelled words, gibberish';
+
 /** Highest Ideogram 3 ResolutionV3 per aspect (used for standard/premium). */
 const IDEOGRAM_RESOLUTION_BY_ASPECT: Record<string, string> = {
   '1x1': '1024x1024',
@@ -657,6 +660,7 @@ async function generateWithIdeogram(options: {
   references?: ReferenceImageBlob[];
   transparentBackground?: boolean;
   variantCount?: number;
+  textFree?: boolean;
 }): Promise<Array<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }>> {
   const form = new FormData();
   form.append('prompt', options.prompt);
@@ -670,7 +674,10 @@ async function generateWithIdeogram(options: {
   form.append('magic_prompt', options.magicPrompt || 'AUTO');
   form.append('rendering_speed', ideogramRenderingSpeed(options.quality));
   if (options.quality !== 'draft') {
-    form.append('negative_prompt', IDEOGRAM_NEGATIVE_PROMPT);
+    const negative = options.textFree
+      ? `${IDEOGRAM_NEGATIVE_PROMPT}, ${IDEOGRAM_TEXT_FREE_NEGATIVE}`
+      : IDEOGRAM_NEGATIVE_PROMPT;
+    form.append('negative_prompt', negative);
   }
 
   const refs = options.references || [];
@@ -760,13 +767,26 @@ async function generateWithFlux(options: {
   height: number;
   style: ImageGenerationStyle;
   references?: ReferenceImageBlob[];
+  textFree?: boolean;
 }): Promise<{ buffer: Buffer; contentType: string; modelId: string; sourceUrl: string }> {
   const refs = options.references || [];
   const modelId = fluxModelForQuality(options.quality, refs.length > 0, options.style);
   const sized = scaleFluxSize(options.width, options.height, options.quality);
 
+  let prompt = options.prompt;
+  if (options.textFree && refs.length > 0) {
+    prompt = [
+      'Edit the reference photograph.',
+      'Keep the same people, place, lighting, and composition.',
+      'Remove every readable character: headlines, captions, logos-as-words, signs, posters, UI labels, watermarks, and gibberish letters.',
+      'Where text was, use blank walls, plain clothing, empty boards, or clean surfaces — no replacement lettering.',
+      'Final frame must contain zero letters of any language.',
+      prompt,
+    ].join(' ');
+  }
+
   const body: Record<string, unknown> = {
-    prompt: options.prompt,
+    prompt,
     width: sized.width,
     height: sized.height,
     output_format: 'png',
@@ -1096,6 +1116,7 @@ export async function generateCreativeImages(
           references,
           transparentBackground,
           variantCount,
+          textFree: Boolean(input.precision?.textFree),
         });
       } else {
         outputs = [];
@@ -1108,6 +1129,7 @@ export async function generateCreativeImages(
             height: dims.height,
             style,
             references,
+            textFree: Boolean(input.precision?.textFree),
           });
           outputs.push(one);
         }

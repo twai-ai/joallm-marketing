@@ -108,6 +108,7 @@ export function StorySessionPage() {
       await saveBrandKit({
         logoFileId,
         styleFileIds: brandKit.styleFileIds || [],
+        watermark: brandKit.watermark !== false,
       });
     } catch {
       showError('Logo upload failed');
@@ -126,6 +127,7 @@ export function StorySessionPage() {
       await saveBrandKit({
         logoFileId: brandKit.logoFileId ?? null,
         styleFileIds,
+        watermark: brandKit.watermark !== false,
       });
     } catch {
       showError('Style upload failed');
@@ -133,7 +135,15 @@ export function StorySessionPage() {
   };
 
   const clearBrandKit = async () => {
-    await saveBrandKit({ logoFileId: null, styleFileIds: [] });
+    await saveBrandKit({ logoFileId: null, styleFileIds: [], watermark: true });
+  };
+
+  const toggleWatermark = async () => {
+    await saveBrandKit({
+      logoFileId: brandKit.logoFileId ?? null,
+      styleFileIds: brandKit.styleFileIds || [],
+      watermark: !(brandKit.watermark !== false),
+    });
   };
 
   const updateSelected = (patch: Partial<StoryBeat>) => {
@@ -243,6 +253,11 @@ export function StorySessionPage() {
                         hint: 'HTML · images + copy by arc',
                       },
                       {
+                        id: 'images' as const,
+                        label: 'HQ images',
+                        hint: 'ZIP · original-quality PNGs by arc',
+                      },
+                      {
                         id: 'markdown' as const,
                         label: 'Copy brief',
                         hint: 'Markdown · titles & captions by arc',
@@ -250,7 +265,7 @@ export function StorySessionPage() {
                       {
                         id: 'pptx' as const,
                         label: 'Slide deck',
-                        hint: 'PPTX · one slide per beat',
+                        hint: 'PPTX · arc order, no stretch',
                       },
                       {
                         id: 'json' as const,
@@ -401,11 +416,20 @@ export function StorySessionPage() {
               <button
                 type="button"
                 disabled={isBranding || isGeneratingSimilar}
-                onClick={() => void brandBeat(selected.id)}
+                onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
                 className="inline-flex items-center gap-2 rounded-full bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:opacity-40"
               >
                 {isBranding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {isBranding ? 'Branding…' : 'Brand this beat'}
+                {isBranding ? 'Branding…' : 'Brand · text-free'}
+              </button>
+              <button
+                type="button"
+                disabled={isBranding || isGeneratingSimilar || !selected.title?.trim()}
+                onClick={() => void brandBeat({ beatId: selected.id, textMode: 'title' })}
+                className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-40"
+                title="Burn the Edit beat title onto the image exactly"
+              >
+                Brand · with title
               </button>
               <button
                 type="button"
@@ -507,10 +531,18 @@ export function StorySessionPage() {
                     <button
                       type="button"
                       disabled={isBranding || isGeneratingSimilar}
-                      onClick={() => void brandBeat(selected.id)}
+                      onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
                       className="w-full rounded-full bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-40"
                     >
-                      {isBranding ? 'Branding with ATRISI…' : 'Brand this beat'}
+                      {isBranding ? 'Branding…' : 'Brand · text-free'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBranding || isGeneratingSimilar || !selected.title?.trim()}
+                      onClick={() => void brandBeat({ beatId: selected.id, textMode: 'title' })}
+                      className="w-full rounded-full border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      Brand · with title
                     </button>
                     <button
                       type="button"
@@ -521,7 +553,7 @@ export function StorySessionPage() {
                       {isGeneratingSimilar ? 'Generating similar…' : 'Generate similar'}
                     </button>
                     <p className="pt-1 text-[11px] leading-relaxed text-slate-400">
-                      Visuals stay text-light. Titles and captions live here — not invented on the image.
+                      Prefer text-free visuals. Use “with title” only when you want the Edit title burned in letter-perfect — captions stay in Story, not invented by the model.
                     </p>
                   </div>
                 ) : null}
@@ -531,7 +563,7 @@ export function StorySessionPage() {
                     Brand refs
                   </p>
                   <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-                    Logo + 1–3 on-brand examples guide Brand and Generate similar.
+                    Logo + 1–3 on-brand examples guide Brand and Generate similar. Logo also watermarks gens and exports when enabled.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {brandKit.logoFileId ? (
@@ -570,6 +602,18 @@ export function StorySessionPage() {
                         ? 'Replace style refs'
                         : 'Upload style refs'}
                     </button>
+                    {brandKit.logoFileId ? (
+                      <button
+                        type="button"
+                        disabled={isSavingBrandKit}
+                        onClick={() => void toggleWatermark()}
+                        className="text-left text-sm text-slate-600 transition hover:text-slate-900 disabled:opacity-40"
+                      >
+                        {brandKit.watermark !== false
+                          ? 'Watermark on · turn off'
+                          : 'Watermark off · turn on'}
+                      </button>
+                    ) : null}
                     {brandKit.logoFileId || (brandKit.styleFileIds || []).length > 0 ? (
                       <button
                         type="button"

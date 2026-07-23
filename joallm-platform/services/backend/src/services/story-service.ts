@@ -23,6 +23,15 @@ import {
   resolveOrganizationIdForUser,
 } from './organization-ownership.js';
 import { logger } from '../utils/logger.js';
+import {
+  buildZipArchive,
+  cleanStoryTypography,
+  fitImageInBox,
+  groupBeatsByArc,
+  readImagePixelSize,
+  safeExportSlug,
+  sortBeatsByStoryArc,
+} from './story-export-utils.js';
 
 const requirePptx = createRequire(import.meta.url);
 
@@ -258,11 +267,13 @@ function findBeatOrThrow(beats: StoryBeat[], beatId: string): StoryBeat {
 export type StoryBrandKit = {
   logoFileId?: string | null;
   styleFileIds?: string[];
+  /** Burn logo as corner watermark on Brand / Similar (default true when logo set) */
+  watermark?: boolean;
 };
 
 export function getStoryBrandKit(metadata: Record<string, unknown> | null | undefined): StoryBrandKit {
   const raw = metadata?.brandKit;
-  if (!raw || typeof raw !== 'object') return { logoFileId: null, styleFileIds: [] };
+  if (!raw || typeof raw !== 'object') return { logoFileId: null, styleFileIds: [], watermark: true };
   const kit = raw as Record<string, unknown>;
   const styleFileIds = Array.isArray(kit.styleFileIds)
     ? kit.styleFileIds.filter((id): id is string => typeof id === 'string').slice(0, 3)
@@ -270,6 +281,7 @@ export function getStoryBrandKit(metadata: Record<string, unknown> | null | unde
   return {
     logoFileId: typeof kit.logoFileId === 'string' ? kit.logoFileId : null,
     styleFileIds,
+    watermark: kit.watermark !== false,
   };
 }
 
@@ -292,6 +304,7 @@ export async function setStoryBrandKit(
   const nextKit: StoryBrandKit = {
     logoFileId: kit.logoFileId ?? null,
     styleFileIds: [...new Set(kit.styleFileIds || [])].slice(0, 3),
+    watermark: kit.watermark !== false,
   };
   return updateStory(ownerUserId, storyId, {
     metadata: {
@@ -301,35 +314,63 @@ export async function setStoryBrandKit(
   });
 }
 
+export type StoryBrandTextMode = 'none' | 'title';
+
 /**
  * Brand this beat — Creative AI remix with ATRISI theme + optional brand kit refs.
- * Prefer clean visuals; Story titles/captions hold messaging (not invented poster text).
+ * textMode=none → text-free visual; textMode=title → exact Story title (no OCR garbage).
  */
 export async function brandStoryBeat(
   ownerUserId: string,
   storyId: string,
   beatId: string,
+  options?: { textMode?: StoryBrandTextMode },
 ): Promise<{ story: StorySessionDto; provider: string; fileId: string }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
   const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
+  const headline = cleanStoryTypography(beat.title, 72);
+  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 36);
+  // Default text-free — Ideogram invents gibberish when left to invent copy.
+  // Pass textMode=title only when the user wants exact Story title typography.
+  const textMode: StoryBrandTextMode = options?.textMode || 'none';
+  const useTitleCopy = textMode === 'title' && Boolean(headline);
+  const watermark = Boolean(kit.logoFileId) && kit.watermark !== false;
 
   const promptParts = [
     'Restyle the subject reference into an ATRISI Marketing institutional acquisition visual.',
     'Keep the core subject and composition recognizable.',
     'Apply ATRISI teal and slate brand, premium institutional look, clean visual hierarchy.',
-    'TEXT-FREE: zero readable text on the image — no headlines, CTAs, captions, signs, or gibberish letters. Leave empty safe area for Story title/caption overlay.',
-    'Do not add fake logos unless a logo reference image is provided.',
   ];
-  if (kit.logoFileId) {
-    promptParts.push('Place the official logo mark only (corner / clear space). No invented wordmark lettering.');
+
+  if (useTitleCopy && headline) {
+    promptParts.push(
+      `Render ONLY this headline letter-perfect, large high-contrast sans-serif: "${headline}".`,
+    );
+    if (cta && cta !== headline) {
+      promptParts.push(`Optional short supporting line exactly: "${cta}".`);
+    }
+    promptParts.push('Do not invent any other words, dates, stats, or slogans.');
+  } else {
+    promptParts.push(
+      'TEXT-FREE: zero readable text on the image — no headlines, CTAs, captions, signs, or gibberish letters. Empty safe margins for later overlay.',
+    );
   }
-  if (beat.title) promptParts.push(`Mood only (do not render as text): ${beat.title}.`);
+
+  if (watermark) {
+    promptParts.push(
+      'Place the official logo reference as a small corner watermark (bottom-right preferred), about 8–12% of frame width, clean clear-space, no invented seals or wordmarks.',
+    );
+  } else if (kit.logoFileId) {
+    promptParts.push('Do not invent logos. Logo reference may inform brand color only.');
+  } else {
+    promptParts.push('Do not add fake logos.');
+  }
 
   const generated = await generateCreativeImages({
     ownerUserId,
     prompt: promptParts.join(' '),
-    style: 'photo_realistic',
+    style: useTitleCopy ? 'marketing_poster' : 'photo_realistic',
     quality: 'standard',
     aspectRatio: '16x9',
     titleHint: beat.title || 'ATRISI branded beat',
@@ -342,15 +383,21 @@ export async function brandStoryBeat(
       storyId,
       beatId,
       originalFileId: beat.fileId,
+      textMode,
+      watermark,
       usedBrandKit: Boolean(kit.logoFileId || (kit.styleFileIds && kit.styleFileIds.length)),
     },
     precision: {
-      textFree: true,
+      textFree: !useTitleCopy,
+      headline: useTitleCopy ? headline : undefined,
+      cta: useTitleCopy ? cta : undefined,
+      mustIncludeText: useTitleCopy ? headline : undefined,
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
-      useLogoReference: Boolean(kit.logoFileId),
-      avoid:
-        'any readable text, gibberish letters, misspelled words, fake logos, neon, purple glow, cluttered stickers, watermarks, CTAs, captions, signage',
+      useLogoReference: watermark,
+      avoid: useTitleCopy
+        ? 'gibberish, misspellings, extra slogans, fake logos, neon, purple glow, clutter'
+        : 'any readable text, gibberish letters, misspelled words, fake logos, neon, purple glow, cluttered stickers, CTAs, captions, signage',
     },
   });
 
@@ -365,10 +412,11 @@ export async function brandStoryBeat(
           ...b,
           fileId: newFileId,
           vision: null,
-          // Keep story copy — do not replace with AI-invented poster text
           title: b.title,
           caption: b.caption,
-          notes: 'Branded with ATRISI Creative AI (copy stays in Story fields)',
+          notes: useTitleCopy
+            ? 'Branded with ATRISI · title typography from Story field'
+            : 'Branded with ATRISI · text-free visual (copy in Story fields)',
         }
       : b,
   );
@@ -391,6 +439,7 @@ export async function generateSimilarStoryBeats(
   const beat = findBeatOrThrow(existing.beats, beatId);
   const kit = getStoryBrandKit(existing.metadata as Record<string, unknown>);
   const count = Math.min(Math.max(options?.count || 1, 1), 3);
+  const watermark = Boolean(kit.logoFileId) && kit.watermark !== false;
 
   const promptParts = [
     'Create a similar institutional acquisition scene inspired by the reference.',
@@ -398,11 +447,15 @@ export async function generateSimilarStoryBeats(
     'ATRISI Marketing look: teal + slate, premium, trustworthy, sparse layout.',
     'TEXT-FREE: absolutely no readable text, headlines, CTAs, logos-as-words, or gibberish letters. Clean visual only — Story editor owns typography.',
   ];
+  if (watermark) {
+    promptParts.push(
+      'Place the official logo reference as a small corner watermark (bottom-right), ~10% width, no invented lettering.',
+    );
+  }
   if (beat.vision?.what) promptParts.push(`Reference scene: ${beat.vision.what}.`);
   if (beat.vision?.mood) promptParts.push(`Mood: ${beat.vision.mood}.`);
 
   const refs = brandReferenceIds(kit, beat.fileId!);
-  // For similar, put beat first as primary style, then brand kit
   const similarRefs = [
     beat.fileId!,
     ...refs.filter((id) => id !== beat.fileId),
@@ -424,14 +477,15 @@ export async function generateSimilarStoryBeats(
       storyId,
       beatId,
       referenceFileId: beat.fileId,
+      watermark,
     },
     precision: {
       textFree: true,
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
-      useLogoReference: Boolean(kit.logoFileId),
+      useLogoReference: watermark,
       avoid:
-        'any readable text, gibberish letters, fake logos, watermarks, neon, clutter, exact duplicate of reference',
+        'any readable text, gibberish letters, fake logos, watermarks text, neon, clutter, exact duplicate of reference',
     },
   });
 
@@ -636,7 +690,12 @@ export async function exportStoryPptx(
   storyId: string,
 ): Promise<{ buffer: Buffer; filename: string }> {
   const story = await getOwnedStory(ownerUserId, storyId);
-  const beats = [...story.beats].sort((a, b) => a.order - b.order);
+  const beats = sortBeatsByStoryArc([...story.beats]);
+  const kit = getStoryBrandKit(story.metadata as Record<string, unknown>);
+  let watermarkLogo: { mime: string; base64: string } | null = null;
+  if (kit.logoFileId && kit.watermark !== false) {
+    watermarkLogo = await loadBeatImageForExport(ownerUserId, kit.logoFileId, { allowWebp: true });
+  }
 
   if (beats.length === 0) {
     throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
@@ -664,103 +723,218 @@ export async function exportStoryPptx(
   const pptx = new PptxCtor();
   pptx.author = 'ATRISI Marketing';
   pptx.title = story.title;
-  pptx.subject = 'Story export — Studio creates. Products operate. Platform remembers.';
+  pptx.subject = 'Story export — Context → Proof → Ask';
+  pptx.defineLayout({ name: 'LAYOUT_16x9', width: 13.333, height: 7.5 });
+  pptx.layout = 'LAYOUT_16x9';
+
+  const thesis =
+    typeof (story.metadata as Record<string, unknown>)?.lastThesis === 'string'
+      ? String((story.metadata as Record<string, unknown>).lastThesis)
+      : 'Context → Proof → Ask';
 
   // Title slide
   {
     const slide = pptx.addSlide();
     slide.background = { color: '0F172A' };
     slide.addText('ATRISI', {
-      x: 0.5,
-      y: 1.6,
-      w: 9,
-      h: 0.5,
-      fontSize: 18,
+      x: 0.7,
+      y: 2.2,
+      w: 12,
+      h: 0.4,
+      fontSize: 16,
       color: '2DD4BF',
       fontFace: 'Arial',
       bold: true,
     });
     slide.addText(story.title || 'Untitled story', {
-      x: 0.5,
-      y: 2.2,
-      w: 9,
+      x: 0.7,
+      y: 2.7,
+      w: 12,
       h: 1,
-      fontSize: 32,
+      fontSize: 36,
       color: 'F8FAFC',
       fontFace: 'Arial',
       bold: true,
     });
-    const thesis =
-      typeof (story.metadata as Record<string, unknown>)?.lastThesis === 'string'
-        ? String((story.metadata as Record<string, unknown>).lastThesis)
-        : 'Story · Context → Proof → Ask';
     slide.addText(thesis, {
-      x: 0.5,
-      y: 3.4,
-      w: 9,
+      x: 0.7,
+      y: 4.0,
+      w: 11,
       h: 0.8,
-      fontSize: 14,
+      fontSize: 16,
       color: '94A3B8',
       fontFace: 'Arial',
     });
+    if (watermarkLogo) {
+      const logoRaw = Buffer.from(watermarkLogo.base64, 'base64');
+      const logoPx = readImagePixelSize(logoRaw) || { width: 400, height: 200 };
+      const logoFit = fitImageInBox(logoPx.width, logoPx.height, 11.5, 6.4, 1.3, 0.7);
+      slide.addImage({
+        data: `data:${watermarkLogo.mime};base64,${watermarkLogo.base64}`,
+        x: logoFit.x,
+        y: logoFit.y,
+        w: logoFit.w,
+        h: logoFit.h,
+      });
+    }
   }
 
-  for (const beat of beats) {
-    const slide = pptx.addSlide();
-    slide.background = { color: 'F8FAFC' };
+  const grouped = groupBeatsByArc(beats);
+  let slideIndex = 0;
+  for (const role of ['context', 'proof', 'ask', 'other'] as const) {
+    const group = grouped[role];
+    if (group.length === 0) continue;
 
-    const role = ARC_LABELS[beat.arcRole || 'other'] || 'Beat';
-    slide.addText(role.toUpperCase(), {
-      x: 0.4,
-      y: 0.25,
-      w: 4,
-      h: 0.3,
-      fontSize: 11,
-      color: '0D9488',
-      fontFace: 'Arial',
-      bold: true,
-    });
-    slide.addText(beat.title || 'Beat', {
-      x: 0.4,
-      y: 0.55,
-      w: 9.2,
-      h: 0.45,
-      fontSize: 22,
-      color: '0F172A',
-      fontFace: 'Arial',
-      bold: true,
-    });
-
-    if (beat.fileId) {
-      const image = await loadBeatImageForExport(ownerUserId, beat.fileId);
-      if (image) {
-        try {
-          slide.addImage({
-            data: `data:${image.mime};base64,${image.base64}`,
-            x: 0.4,
-            y: 1.15,
-            w: 9.2,
-            h: 3.6,
-            sizing: { type: 'contain', w: 9.2, h: 3.6 },
-          });
-        } catch (error) {
-          logger.warn('Story PPTX addImage failed', {
-            beatId: beat.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+    // Section divider aligned to story arc
+    {
+      const divider = pptx.addSlide();
+      divider.background = { color: '0F172A' };
+      divider.addText(ARC_LABELS[role].toUpperCase(), {
+        x: 0.7,
+        y: 3.0,
+        w: 12,
+        h: 0.6,
+        fontSize: 28,
+        color: '2DD4BF',
+        fontFace: 'Arial',
+        bold: true,
+      });
+      divider.addText(`${group.length} beat${group.length === 1 ? '' : 's'}`, {
+        x: 0.7,
+        y: 3.7,
+        w: 12,
+        h: 0.4,
+        fontSize: 14,
+        color: '94A3B8',
+        fontFace: 'Arial',
+      });
     }
 
-    if (beat.caption) {
-      slide.addText(beat.caption, {
-        x: 0.4,
-        y: 4.9,
-        w: 9.2,
-        h: 0.45,
-        fontSize: 13,
-        color: '334155',
+    for (const beat of group) {
+      slideIndex += 1;
+      const slide = pptx.addSlide();
+      slide.background = { color: 'F8FAFC' };
+
+      slide.addText(`${ARC_LABELS[role].toUpperCase()}  ·  ${slideIndex}`, {
+        x: 0.5,
+        y: 0.28,
+        w: 8,
+        h: 0.3,
+        fontSize: 11,
+        color: '0D9488',
         fontFace: 'Arial',
+        bold: true,
+      });
+      slide.addText(beat.title || 'Beat', {
+        x: 0.5,
+        y: 0.55,
+        w: 12.3,
+        h: 0.5,
+        fontSize: 24,
+        color: '0F172A',
+        fontFace: 'Arial',
+        bold: true,
+      });
+
+      const imageBox = { x: 0.5, y: 1.15, w: 12.3, h: 4.2 };
+      if (beat.fileId) {
+        const image = await loadBeatImageForExport(ownerUserId, beat.fileId);
+        if (image) {
+          try {
+            const raw = Buffer.from(image.base64, 'base64');
+            const pixels = readImagePixelSize(raw) || { width: 1920, height: 1080 };
+            const fitted = fitImageInBox(
+              pixels.width,
+              pixels.height,
+              imageBox.x,
+              imageBox.y,
+              imageBox.w,
+              imageBox.h,
+            );
+            slide.addImage({
+              data: `data:${image.mime};base64,${image.base64}`,
+              x: fitted.x,
+              y: fitted.y,
+              w: fitted.w,
+              h: fitted.h,
+            });
+          } catch (error) {
+            logger.warn('Story PPTX addImage failed', {
+              beatId: beat.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+
+      const storyLine = [beat.caption, beat.notes].filter(Boolean).join(' — ');
+      if (storyLine) {
+        slide.addText(storyLine, {
+          x: 0.5,
+          y: 5.5,
+          w: 11.2,
+          h: 1.15,
+          fontSize: 14,
+          color: '334155',
+          fontFace: 'Arial',
+          valign: 'top',
+        });
+      }
+
+      if (watermarkLogo) {
+        const logoRaw = Buffer.from(watermarkLogo.base64, 'base64');
+        const logoPx = readImagePixelSize(logoRaw) || { width: 400, height: 200 };
+        const logoFit = fitImageInBox(logoPx.width, logoPx.height, 11.9, 6.75, 1.0, 0.55);
+        slide.addImage({
+          data: `data:${watermarkLogo.mime};base64,${watermarkLogo.base64}`,
+          x: logoFit.x,
+          y: logoFit.y,
+          w: logoFit.w,
+          h: logoFit.h,
+        });
+      }
+    }
+  }
+
+  // Closing ask slide — story CTA from last Ask beat or thesis
+  {
+    const askBeats = grouped.ask;
+    const closing =
+      askBeats[askBeats.length - 1]?.caption ||
+      askBeats[askBeats.length - 1]?.title ||
+      thesis;
+    const close = pptx.addSlide();
+    close.background = { color: '0F172A' };
+    close.addText('ASK', {
+      x: 0.7,
+      y: 2.4,
+      w: 12,
+      h: 0.35,
+      fontSize: 14,
+      color: '2DD4BF',
+      fontFace: 'Arial',
+      bold: true,
+    });
+    close.addText(closing, {
+      x: 0.7,
+      y: 2.9,
+      w: 11.5,
+      h: 1.6,
+      fontSize: 28,
+      color: 'F8FAFC',
+      fontFace: 'Arial',
+      bold: true,
+    });
+    if (watermarkLogo) {
+      const logoRaw = Buffer.from(watermarkLogo.base64, 'base64');
+      const logoPx = readImagePixelSize(logoRaw) || { width: 400, height: 200 };
+      const logoFit = fitImageInBox(logoPx.width, logoPx.height, 11.5, 6.4, 1.3, 0.7);
+      close.addImage({
+        data: `data:${watermarkLogo.mime};base64,${watermarkLogo.base64}`,
+        x: logoFit.x,
+        y: logoFit.y,
+        w: logoFit.w,
+        h: logoFit.h,
       });
     }
   }
@@ -785,6 +959,58 @@ export async function exportStoryPptx(
       { statusCode: 500 },
     );
   }
+}
+
+/** High-quality image ZIP — one file per beat, ordered Context → Proof → Ask */
+export async function exportStoryImagesZip(
+  ownerUserId: string,
+  storyId: string,
+): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  const story = await getOwnedStory(ownerUserId, storyId);
+  const beats = sortBeatsByStoryArc([...story.beats]);
+  if (beats.length === 0) {
+    throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
+  }
+
+  const entries: Array<{ name: string; data: Buffer }> = [];
+  let index = 0;
+  for (const beat of beats) {
+    if (!beat.fileId) continue;
+    const image = await loadBeatImageForExport(ownerUserId, beat.fileId, { allowWebp: true });
+    if (!image) continue;
+    index += 1;
+    const role = beat.arcRole || 'other';
+    const ext = image.mime.includes('jpeg') || image.mime.includes('jpg')
+      ? 'jpg'
+      : image.mime.includes('webp')
+        ? 'webp'
+        : 'png';
+    const name = `${String(index).padStart(2, '0')}-${role}-${safeExportSlug(beat.title || 'beat')}.${ext}`;
+    entries.push({ name, data: Buffer.from(image.base64, 'base64') });
+  }
+
+  if (entries.length === 0) {
+    throw Object.assign(
+      new Error('No beat images available to export. Re-upload assets and try again.'),
+      { statusCode: 400 },
+    );
+  }
+
+  const manifest = [
+    `# ${story.title || 'ATRISI Story'}`,
+    '',
+    'High-quality beat images · Context → Proof → Ask',
+    '',
+    ...entries.map((e) => `- ${e.name}`),
+    '',
+  ].join('\n');
+  entries.unshift({ name: 'README.md', data: Buffer.from(manifest, 'utf8') });
+
+  return {
+    buffer: buildZipArchive(entries),
+    filename: storySafeFilename(story.title, 'zip'),
+    contentType: 'application/zip',
+  };
 }
 
 /** Carousel / social copy brief aligned to Context → Proof → Ask */
@@ -891,7 +1117,7 @@ export async function exportStoryHtml(
   storyId: string,
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
   const story = await getOwnedStory(ownerUserId, storyId);
-  const beats = [...story.beats].sort((a, b) => a.order - b.order);
+  const beats = sortBeatsByStoryArc([...story.beats]);
   if (beats.length === 0) {
     throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
   }
@@ -902,16 +1128,7 @@ export async function exportStoryHtml(
       : '';
 
   const cards: string[] = [];
-  const byArc: Record<string, typeof beats> = {
-    context: [],
-    proof: [],
-    ask: [],
-    other: [],
-  };
-  for (const beat of beats) {
-    const role = beat.arcRole && byArc[beat.arcRole] ? beat.arcRole : 'other';
-    byArc[role].push(beat);
-  }
+  const byArc = groupBeatsByArc(beats);
 
   let globalIndex = 0;
   for (const role of ['context', 'proof', 'ask', 'other'] as const) {

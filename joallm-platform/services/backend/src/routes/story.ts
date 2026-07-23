@@ -13,6 +13,7 @@ import {
   createStory,
   deleteStory,
   exportStoryHtml,
+  exportStoryImagesZip,
   exportStoryJson,
   exportStoryMarkdown,
   exportStoryPptx,
@@ -319,11 +320,13 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
         .object({
           logoFileId: z.string().uuid().nullable().optional(),
           styleFileIds: z.array(z.string().uuid()).max(3).optional(),
+          watermark: z.boolean().optional(),
         })
         .parse(request.body || {});
       const data = await setStoryBrandKit(userId, storyId, {
         logoFileId: body.logoFileId ?? null,
         styleFileIds: body.styleFileIds || [],
+        watermark: body.watermark,
       });
       return reply.send({
         success: true,
@@ -348,7 +351,14 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
     try {
       const userId = (request as { user: { id: string } }).user.id;
       const { storyId, beatId } = request.params as { storyId: string; beatId: string };
-      const result = await brandStoryBeat(userId, storyId, beatId);
+      const body = z
+        .object({
+          textMode: z.enum(['none', 'title']).optional(),
+        })
+        .parse(request.body || {});
+      const result = await brandStoryBeat(userId, storyId, beatId, {
+        textMode: body.textMode,
+      });
       return reply.status(201).send({
         success: true,
         data: result.story,
@@ -488,6 +498,29 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
       return reply.status(statusFromError(error)).send({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to export HTML',
+      });
+    }
+  });
+
+  fastify.get('/:storyId/export/images', {
+    preHandler: [authenticateToken],
+    schema: {
+      description: 'Export Story beat images as a high-quality ZIP (Context → Proof → Ask)',
+      tags: ['story'],
+    },
+  }, async (request, reply) => {
+    try {
+      const userId = (request as { user: { id: string } }).user.id;
+      const { storyId } = request.params as { storyId: string };
+      const { buffer, filename, contentType } = await exportStoryImagesZip(userId, storyId);
+      return reply
+        .header('Content-Type', contentType)
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        .send(buffer);
+    } catch (error) {
+      return reply.status(statusFromError(error)).send({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to export images',
       });
     }
   });

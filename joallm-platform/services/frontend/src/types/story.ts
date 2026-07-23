@@ -45,16 +45,21 @@ export type StorySession = {
 export type StoryBrandKit = {
   logoFileId?: string | null;
   styleFileIds?: string[];
+  /** Burn logo onto Brand / Similar + exports (default true when logo set) */
+  watermark?: boolean;
 };
+
+export type StoryBrandTextMode = 'none' | 'title';
 
 export function readStoryBrandKit(metadata?: Record<string, unknown> | null): StoryBrandKit {
   const raw = metadata?.brandKit;
-  if (!raw || typeof raw !== 'object') return { logoFileId: null, styleFileIds: [] };
+  if (!raw || typeof raw !== 'object') return { logoFileId: null, styleFileIds: [], watermark: true };
   const kit = raw as Record<string, unknown>;
   return {
     logoFileId: typeof kit.logoFileId === 'string' ? kit.logoFileId : null,
     styleFileIds: Array.isArray(kit.styleFileIds)
       ? kit.styleFileIds.filter((id): id is string => typeof id === 'string').slice(0, 3)
       : [],
+    watermark: kit.watermark !== false,
   };
 }

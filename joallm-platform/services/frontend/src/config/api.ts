@@ -111,5 +111,6 @@ export const API_ENDPOINTS = {
     exportMarkdown: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/markdown`,
     exportJson: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/json`,
     exportHtml: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/html`,
+    exportImages: (storyId: string) => `${API_BASE_URL}/api/story/${storyId}/export/images`,
   },
 };

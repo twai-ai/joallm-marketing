@@ -152,10 +152,10 @@ export function useStorySession(storyId: string | undefined) {
   });
 
   const brandBeatMutation = useMutation({
-    mutationFn: async (beatId: string) => {
+    mutationFn: async (input: { beatId: string; textMode?: 'none' | 'title' }) => {
       const res = await apiClient.post<ApiOk<StorySession> & { provider?: string }>(
-        API_ENDPOINTS.story.brandBeat(storyId!, beatId),
-        undefined,
+        API_ENDPOINTS.story.brandBeat(storyId!, input.beatId),
+        { textMode: input.textMode || 'none' },
         { showErrorToast: false },
       );
       return res;
@@ -213,6 +213,7 @@ export function useStorySession(storyId: string | undefined) {
         {
           logoFileId: kit.logoFileId ?? null,
           styleFileIds: kit.styleFileIds || [],
+          watermark: kit.watermark !== false,
         },
       );
       return res.data;
@@ -250,7 +251,7 @@ export function useStorySession(storyId: string | undefined) {
   );
 
   const exportStory = useCallback(
-    async (format: 'pptx' | 'markdown' | 'json' | 'html') => {
+    async (format: 'pptx' | 'markdown' | 'json' | 'html' | 'images') => {
       if (!storyId) return;
       if (format === 'pptx') {
         await downloadExport(
@@ -273,6 +274,14 @@ export function useStorySession(storyId: string | undefined) {
           API_ENDPOINTS.story.exportJson(storyId),
           'atrisi-story.json',
           'Story JSON downloaded',
+        );
+        return;
+      }
+      if (format === 'images') {
+        await downloadExport(
+          API_ENDPOINTS.story.exportImages(storyId),
+          'atrisi-story-images.zip',
+          'HQ images ZIP downloaded',
         );
         return;
       }

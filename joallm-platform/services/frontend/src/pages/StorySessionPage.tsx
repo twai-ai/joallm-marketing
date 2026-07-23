@@ -329,6 +329,28 @@ export function StorySessionPage() {
               </div>
             ) : null}
           </div>
+          {selected?.fileId ? (
+            <div className="flex flex-wrap items-center justify-center gap-2 border-t border-white/10 px-4 py-3">
+              <button
+                type="button"
+                disabled={isBranding || isGeneratingSimilar}
+                onClick={() => void brandBeat(selected.id)}
+                className="inline-flex items-center gap-2 rounded-full bg-teal-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-500 disabled:opacity-40"
+              >
+                {isBranding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {isBranding ? 'Branding…' : 'Brand this beat'}
+              </button>
+              <button
+                type="button"
+                disabled={isBranding || isGeneratingSimilar}
+                onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
+                className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-40"
+              >
+                {isGeneratingSimilar ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {isGeneratingSimilar ? 'Generating…' : 'Generate similar'}
+              </button>
+            </div>
+          ) : null}
           {beats.length > 1 ? (
             <div className="flex justify-center gap-1.5 overflow-x-auto px-4 pb-4">
               {beats.map((beat) => (
@@ -419,7 +441,7 @@ export function StorySessionPage() {
                       type="button"
                       disabled={isBranding || isGeneratingSimilar}
                       onClick={() => void brandBeat(selected.id)}
-                      className="text-left text-sm font-medium text-teal-700 transition hover:text-teal-900 disabled:opacity-40"
+                      className="w-full rounded-full bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-40"
                     >
                       {isBranding ? 'Branding with ATRISI…' : 'Brand this beat'}
                     </button>
@@ -427,7 +449,7 @@ export function StorySessionPage() {
                       type="button"
                       disabled={isBranding || isGeneratingSimilar}
                       onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
-                      className="text-left text-sm font-medium text-slate-600 transition hover:text-slate-900 disabled:opacity-40"
+                      className="w-full rounded-full border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
                     >
                       {isGeneratingSimilar ? 'Generating similar…' : 'Generate similar'}
                     </button>

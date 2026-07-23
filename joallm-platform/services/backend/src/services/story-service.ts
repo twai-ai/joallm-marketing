@@ -14,6 +14,8 @@ import {
   applyHeuristicFromVision,
   combineVisionIntoStory,
   enforceAndValidateStoryArc,
+  sanitizeBeatCaption,
+  sanitizeBeatTitle,
   seeBeatVisionCards,
   speakStoryline,
   structureStoryline,
@@ -735,8 +737,10 @@ export async function proposeStoryline(
             : beat.notes;
           return {
             ...beat,
-            title: spoken?.title || beat.title,
-            caption: spoken?.caption || beat.vision?.claimHint || beat.caption,
+            title: sanitizeBeatTitle(spoken?.title || beat.title),
+            caption: sanitizeBeatCaption(
+              spoken?.caption || beat.vision?.claimHint || beat.caption,
+            ),
             notes: spoken?.notes || notesFromVision,
           };
         }),

@@ -23,7 +23,7 @@ const VISION_DELAY_MS = 200;
 const MAX_IMAGE_BYTES = 4_500_000;
 
 /** Invalidate cached vision when this changes */
-export const STORY_VISION_PROMPT_VERSION = 'atrisi-v3';
+export const STORY_VISION_PROMPT_VERSION = 'atrisi-v4';
 
 /**
  * Shared product brief for every compose stage.
@@ -39,11 +39,13 @@ Audience defaults (unless the images clearly say otherwise):
 - Occasionally partners, employers, or alumni — only if the visual clearly signals that
 
 Voice:
-- Clear, credible, institutional — premium and trustworthy
-- Short titles; captions that advance the argument (not describe the photo)
-- Never invent program names, stats, prices, dates, or CTAs that are not visible on the image
-- Prefer exact on-image text when a headline/CTA is readable
-- Do NOT write “in this image…”, “this slide shows…”, or stock phrases like “unlock your potential”
+- Clear, credible, institutional — premium and trustworthy (ATRISI teal + navy feel)
+- Titles must work ON the image (Brand / More visuals burn them in) AND in the deck
+- Short titles (≤6 words, ≤48 characters); captions are one short supporting line (≤14 words)
+- Never invent program names, stats, prices, dates, or hard CTAs that are not visible on the image
+- Prefer exact on-image text when a strong headline/CTA is already readable
+- Do NOT write “in this image…”, “this slide shows…”, or stock phrases like “unlock your potential”,
+  “shape the future”, “empower tomorrow”, “join the journey”, “excellence awaits”
 
 Narrative arc (Context → Proof → Ask) — ALWAYS assign one; the user may not have labeled beats:
 - context: world / program / who it’s for — set the frame
@@ -590,7 +592,8 @@ Return ONLY JSON:
 Rules:
 - Include every beat id from the upload list exactly once (ids without images still belong in order).
 - ${keepOrder ? 'Keep upload order; only assign roles.' : 'YOU MUST reorder for the strongest Context → Proof → Ask. Do not leave weak upload order if a better sequence exists.'}
-- Thesis must unify the set — not summarize each image separately.`,
+- Thesis must unify the set as one Program Interest argument — not summarize each image separately.
+- Prefer opening with who/for (context), middle with visible evidence (proof), close with a soft ask.`,
   });
 
   try {
@@ -761,7 +764,7 @@ Include every beat id once. ${keepOrder ? 'Keep order.' : 'Reorder for strongest
   };
 }
 
-/** Stage 3 — Speak: titles/captions grounded in combined thesis + vision + roles. */
+/** Stage 3 — Speak: titles/captions grounded in thesis + vision; fit on-image and acquisition arc. */
 export async function speakStoryline(
   storyTitle: string,
   beats: StoryBeat[],
@@ -781,24 +784,31 @@ export async function speakStoryline(
 
   const system = `${ATRISI_STORY_BRIEF}
 
-You are the Speak stage. Write beat titles and captions that serve the UNIFIED story thesis.
+You are the Speak stage. Write beat titles and captions for an Institution Acquisition story.
+Each title will be burned onto that beat’s image — it must feel native on THAT visual while advancing the thesis.
 Return ONLY JSON:
 {
   "beats": [
     {
       "id": "beat-id",
-      "title": "≤6 words — argument headline for THIS step in the thesis",
-      "caption": "one sentence advancing the thesis (not a photo description)",
-      "notes": "optional"
+      "title": "≤6 words, ≤48 chars — acquisition headline for THIS beat",
+      "caption": "≤14 words — one supporting line (not a photo description)",
+      "notes": "optional: how this beat serves Program Interest"
     }
   ]
 }
-Rules:
-- Every caption must connect to the thesis — the set should read as one argument.
-- Titles argue; they do not label the photo.
-- If onImageText has a strong headline/CTA, reuse or lightly polish — do not invent conflicting CTAs.
-- Match arcRole: context = who/for; proof = why trust; ask = next step to Program Interest.
-- Never invent stats/names absent from onImageText/claimHint.
+Role patterns (follow arcRole):
+- context: who it’s for / the frame / the opportunity — grounded in what you see (people, campus, setting)
+- proof: trust / outcomes / community / craft — grounded in visible evidence (not invented metrics)
+- ask: soft next step toward Program Interest — e.g. “Talk with us”, “Explore the program”, “Take the next step”
+  Only reuse a hard CTA (Apply / Register / Enroll) if it already appears in onImageText
+
+Hard rules:
+- Ground every title in that beat’s "what" (setting/people/object) so it belongs on the image — not a floating slogan.
+- The full set must read as one Context → Proof → Ask argument toward Program Interest.
+- Prefer polishing onImageText when it is already a strong institutional headline.
+- Never invent stats, program names, campuses, or dates absent from onImageText/claimHint.
+- Ban fluff: unlock, empower, journey, excellence awaits, transform your future, shape tomorrow.
 - Preserve every beat id.`;
 
   const parsed = await chatJson({
@@ -806,10 +816,10 @@ Rules:
     user: JSON.stringify({
       storyTitle,
       thesis: thesis || null,
-      purpose: 'unified acquisition narrative',
+      purpose: 'acquisition narrative — titles must sit well on each beat image',
       beats: payload,
     }),
-    temperature: 0.3,
+    temperature: 0.25,
   });
   if (!parsed) return null;
 
@@ -821,12 +831,47 @@ Rules:
     const id = typeof row.id === 'string' ? row.id : '';
     if (!id) continue;
     map.set(id, {
-      title: typeof row.title === 'string' ? row.title.trim() : '',
-      caption: typeof row.caption === 'string' ? row.caption.trim() : '',
+      title: sanitizeBeatTitle(typeof row.title === 'string' ? row.title : ''),
+      caption: sanitizeBeatCaption(typeof row.caption === 'string' ? row.caption : ''),
       notes: typeof row.notes === 'string' ? row.notes.trim() : '',
     });
   }
   return map.size ? map : null;
+}
+
+const FLUFF_TITLE =
+  /\b(unlock|empower|journey|excellence awaits|transform your future|shape (the )?tomorrow|dream big|limitless)\b/i;
+
+/** Keep Speak output short enough for Ideogram / Brand on-image burn. */
+export function sanitizeBeatTitle(raw: string): string {
+  let t = raw.trim().replace(/\s+/g, ' ');
+  if (!t) return '';
+  if (FLUFF_TITLE.test(t)) {
+    t = t.replace(FLUFF_TITLE, '').replace(/\s+/g, ' ').trim();
+  }
+  // Drop trailing punctuation noise
+  t = t.replace(/[|•·]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (t.length > 48) {
+    const sliced = t.slice(0, 48);
+    const lastSpace = sliced.lastIndexOf(' ');
+    t = (lastSpace > 24 ? sliced.slice(0, lastSpace) : sliced).trim();
+  }
+  // Prefer ≤6 words for on-image
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length > 6) t = words.slice(0, 6).join(' ');
+  return t;
+}
+
+export function sanitizeBeatCaption(raw: string): string {
+  let c = raw.trim().replace(/\s+/g, ' ');
+  if (!c) return '';
+  // First sentence only
+  const sentence = c.split(/(?<=[.!?])\s+/)[0] || c;
+  c = sentence.replace(/^["']+|["']+$/g, '').trim();
+  const words = c.split(/\s+/).filter(Boolean);
+  if (words.length > 14) c = `${words.slice(0, 14).join(' ')}`;
+  if (c.length > 90) c = c.slice(0, 90).trim();
+  return c;
 }
 
 export function applyHeuristicFromVision(beats: StoryBeat[], title: string): {
@@ -845,19 +890,23 @@ export function applyHeuristicFromVision(beats: StoryBeat[], title: string): {
 
     const onText = beat.vision?.onImageText;
     const claim = beat.vision?.claimHint;
+    const what = beat.vision?.what;
     const roleCaption =
       arcRole === 'context'
-        ? 'See who this program is for.'
+        ? 'Built for people ready to grow.'
         : arcRole === 'proof'
-          ? 'Evidence that builds trust.'
-          : 'Take the next step toward interest.';
+          ? 'Trust earned in practice.'
+          : 'Take the next step with us.';
+
+    const fallbackTitle =
+      (onText?.split(/[\n|]/)[0] || claim || what || beat.title || `Beat ${index + 1}`).slice(0, 48);
 
     return {
       ...beat,
       order: index,
       arcRole,
-      title: (onText?.split(/[\n|]/)[0] || claim || beat.title || `Beat ${index + 1}`).slice(0, 48),
-      caption: claim || roleCaption,
+      title: sanitizeBeatTitle(fallbackTitle),
+      caption: sanitizeBeatCaption(claim || roleCaption),
       notes: beat.vision ? `${arcRole} — ${beat.vision.what}` : beat.notes,
     };
   });

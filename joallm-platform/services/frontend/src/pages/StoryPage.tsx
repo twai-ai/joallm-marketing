@@ -1,8 +1,8 @@
 import { useRef } from 'react';
-import { ArrowRight, Clapperboard, Loader2, Plus, Sparkles } from 'lucide-react';
+import { Clapperboard, Loader2, Plus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UseCaseHomeShell } from '../components/use-cases/UseCaseHomeShell';
-import { PRODUCT_LABELS, PLATFORM_CONSTITUTION } from '../constants/product';
+import { PRODUCT_LABELS } from '../constants/product';
 import { getUseCaseById } from '../constants/useCases';
 import { useStories } from '../hooks/useStory';
 import { showError } from '../utils/toast';
@@ -39,8 +39,8 @@ export function StoryPage() {
           {PRODUCT_LABELS.story}
         </div>
       }
-      title="Assemble assets into one ATRISI narrative — then export to any medium."
-      description="Story is a Studio create workspace. Sessions stay free-floating until you attach them to a Program. Campaigns still own publish; Platform remembers the files."
+      title="Assemble assets into one narrative."
+      description="Upload images, propose a storyline, preview, and export. Attach to a campaign when you’re ready to publish."
       primaryAction={
         <button
           type="button"
@@ -52,96 +52,53 @@ export function StoryPage() {
           New story
         </button>
       }
-      secondaryPanelTitle="Studio creates the line"
-      secondaryPanelBody={PLATFORM_CONSTITUTION}
-      secondaryPanelContent={
-        <>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-white">
-              <Sparkles className="h-4 w-4 text-teal-300" />
-              See → Structure → Speak
-            </div>
-            <p className="mt-2 text-sm text-slate-300">
-              Groq vision reads your assets, then ATRISI composes Context → Proof → Ask titles and captions.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-white">
-              <Clapperboard className="h-4 w-4 text-cyan-300" />
-              Export packs
-            </div>
-            <p className="mt-2 text-sm text-slate-300">
-              Preview in Studio, download PPTX now. Attach and send to Campaigns when ready to publish.
-            </p>
-          </div>
-        </>
-      }
+      secondaryPanelTitle="Studio creates"
+      secondaryPanelBody="Vision reads your assets. You shape the arc. Campaigns still own publish."
+      secondaryPanelContent={null}
     >
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-950">Your stories</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Draft narratives live here until you attach them to Growth.
-            </p>
-          </div>
-        </div>
+        <h2 className="text-lg font-semibold text-slate-950">Your stories</h2>
 
         {isLoading ? (
           <div className="mt-8 flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading stories…
+            Loading…
           </div>
         ) : stories.length === 0 ? (
           <button
             type="button"
             onClick={() => void handleNewStory()}
-            className="mt-6 flex w-full flex-col items-center justify-center rounded-2xl border border-dashed border-teal-300 bg-teal-50/40 px-6 py-16 text-center transition hover:border-teal-400 hover:bg-teal-50"
+            className="mt-6 flex w-full flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 px-6 py-16 text-center text-slate-500 transition hover:border-teal-300 hover:text-teal-800"
           >
-            <Clapperboard className="h-8 w-8 text-teal-700" />
-            <p className="mt-3 text-base font-semibold text-slate-900">Drop into a new story</p>
-            <p className="mt-1 max-w-md text-sm text-slate-600">
-              Add images, propose a storyline, preview, and export — no campaign required yet.
-            </p>
+            <Clapperboard className="h-7 w-7" />
+            <p className="mt-3 text-sm font-medium">Start with a few images</p>
           </button>
         ) : (
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-6 divide-y divide-slate-100">
             {stories.map((story) => (
-              <div
-                key={story.id}
-                className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:border-teal-300/80"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-950">{story.title}</h3>
-                    <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
-                      {story.attached ? 'Attached' : 'Unattached'} · {story.beats.length} beats ·{' '}
-                      {story.status}
-                    </p>
-                  </div>
-                </div>
-                <p className="mt-3 line-clamp-2 text-sm text-slate-600">
-                  {story.beats[0]?.caption || 'No storyline yet — open and propose one.'}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
-                    to={`/studio/story/${story.id}`}
-                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-                  >
-                    Open
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => void deleteStory(story.id)}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:border-rose-200 hover:text-rose-700"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
+              <li key={story.id} className="flex items-center gap-4 py-4 first:pt-0">
+                <Link to={`/studio/story/${story.id}`} className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-900">{story.title}</p>
+                  <p className="mt-0.5 text-sm text-slate-500">
+                    {story.beats.length} {story.beats.length === 1 ? 'beat' : 'beats'}
+                  </p>
+                </Link>
+                <Link
+                  to={`/studio/story/${story.id}`}
+                  className="text-sm font-medium text-teal-700 hover:text-teal-900"
+                >
+                  Open
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void deleteStory(story.id)}
+                  className="text-sm text-slate-400 hover:text-rose-600"
+                >
+                  Delete
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
     </UseCaseHomeShell>

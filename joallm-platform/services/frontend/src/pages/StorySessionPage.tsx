@@ -3,17 +3,14 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  Clapperboard,
   Download,
   Loader2,
   Sparkles,
   Upload,
-  Wand2,
   X,
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { AuthPreviewImage } from '../components/story/AuthPreviewImage';
-import { PLATFORM_CONSTITUTION } from '../constants/product';
 import { useDocuments } from '../hooks/useDocuments';
 import { useStorySession } from '../hooks/useStory';
 import type { StoryBeat } from '../types/story';
@@ -23,7 +20,7 @@ const ARC_LABEL: Record<string, string> = {
   context: 'Context',
   proof: 'Proof',
   ask: 'Ask',
-  other: 'Beat',
+  other: '',
 };
 
 export function StorySessionPage() {
@@ -38,8 +35,6 @@ export function StorySessionPage() {
     isAddingFiles,
     proposeStoryline,
     isProposing,
-    generateBeat,
-    isGenerating,
     exportPptx,
   } = useStorySession(storyId);
   const { uploadMultiple, isUploading } = useDocuments();
@@ -49,10 +44,7 @@ export function StorySessionPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
-  const [generatePrompt, setGeneratePrompt] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
-  const [keepOrder, setKeepOrder] = useState(false);
-  const [refreshVision, setRefreshVision] = useState(false);
 
   useEffect(() => {
     if (!story) return;
@@ -92,8 +84,7 @@ export function StorySessionPage() {
 
   const updateSelected = (patch: Partial<StoryBeat>) => {
     if (!selected) return;
-    const next = beats.map((b) => (b.id === selected.id ? { ...b, ...patch } : b));
-    setBeats(next);
+    setBeats(beats.map((b) => (b.id === selected.id ? { ...b, ...patch } : b)));
   };
 
   const commitSelected = async () => {
@@ -120,376 +111,293 @@ export function StorySessionPage() {
 
   if (isLoading || !story) {
     return (
-      <div className="atrisi-page flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
         <Loader2 className="h-6 w-6 animate-spin text-teal-700" />
       </div>
     );
   }
 
   return (
-    <div className="atrisi-page min-h-screen bg-slate-50">
-      <div className="workspace-shell flex flex-col gap-4 px-0 py-4">
-        <header className="overflow-hidden rounded-3xl border border-atrisi-gray-dark bg-white shadow-sm">
-          <div className="atrisi-accent-line w-full" aria-hidden />
-          <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <Link
-                to="/studio/story"
-                className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-teal-300"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Stories
-              </Link>
-              <div className="min-w-0 flex-1">
-                <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
-                  <Clapperboard className="h-3.5 w-3.5" />
-                  Story · Studio
-                </div>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  onBlur={() => void saveStory({ title })}
-                  className="mt-1 w-full truncate border-0 bg-transparent text-2xl font-bold tracking-tight text-slate-950 outline-none"
-                />
-                <p className="mt-1 text-xs text-slate-500">
-                  {story.attached ? 'Attached to Program' : 'Unattached'} · {PLATFORM_CONSTITUTION}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={keepOrder}
-                  onChange={(e) => setKeepOrder(e.target.checked)}
-                  className="rounded border-slate-300"
-                />
-                Keep my order
-              </label>
-              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={refreshVision}
-                  onChange={(e) => setRefreshVision(e.target.checked)}
-                  className="rounded border-slate-300"
-                />
-                Refresh vision
-              </label>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                Attach soon
-              </span>
-              <button
-                type="button"
-                disabled={beats.length === 0 || isProposing}
-                onClick={() => void proposeStoryline({ keepOrder, refreshVision })}
-                className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-              >
-                {isProposing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {isProposing ? 'Reading assets…' : 'Propose storyline'}
-              </button>
-              <button
-                type="button"
-                disabled={beats.length === 0}
-                onClick={() => {
-                  setPreviewIndex(Math.max(0, beats.findIndex((b) => b.id === selected?.id)));
-                  setPreviewOpen(true);
-                }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
-              >
-                Preview
-              </button>
-              <button
-                type="button"
-                disabled={beats.length === 0}
-                onClick={() => void exportPptx()}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-              >
-                <Download className="h-4 w-4" />
-                Export PPTX
-              </button>
-            </div>
-          </div>
-        </header>
+    <div className="flex min-h-screen flex-col bg-slate-100">
+      {/* Slim bar */}
+      <header className="flex items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
+        <Link
+          to="/studio/story"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+          aria-label="Back to stories"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => void saveStory({ title })}
+          className="min-w-0 flex-1 border-0 bg-transparent text-lg font-semibold tracking-tight text-slate-950 outline-none"
+          placeholder="Story title"
+        />
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            disabled={beats.length === 0 || isProposing}
+            onClick={() => void proposeStoryline({})}
+            className="inline-flex items-center gap-2 rounded-full bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-40"
+          >
+            {isProposing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            <span className="hidden sm:inline">{isProposing ? 'Reading…' : 'Propose'}</span>
+          </button>
+          <button
+            type="button"
+            disabled={beats.length === 0}
+            onClick={() => {
+              setPreviewIndex(Math.max(0, beats.findIndex((b) => b.id === selected?.id)));
+              setPreviewOpen(true);
+            }}
+            className="hidden rounded-full px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 sm:inline"
+          >
+            Preview
+          </button>
+          <button
+            type="button"
+            disabled={beats.length === 0}
+            onClick={() => void exportPptx()}
+            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-40"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
+          </button>
+        </div>
+      </header>
 
-        <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
-          {/* Assets */}
-          <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900">Assets</h2>
+      <div className="mx-auto grid w-full max-w-[1400px] flex-1 gap-0 lg:grid-cols-[200px_minmax(0,1fr)_260px]">
+        {/* Assets — quiet strip */}
+        <aside className="flex flex-col border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
+              Assets
+            </span>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading || isAddingFiles}
+              className="text-slate-400 transition hover:text-teal-700 disabled:opacity-40"
+              aria-label="Add assets"
+            >
+              {isUploading || isAddingFiles ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => void handleUpload(e.target.files)}
+            />
+          </div>
+          <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
+            {beats.length === 0 ? (
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading || isAddingFiles}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:border-teal-300"
+                className="mx-2 flex w-[calc(100%-1rem)] flex-col items-center rounded-2xl border border-dashed border-slate-200 px-3 py-10 text-center text-slate-400 transition hover:border-teal-300 hover:text-teal-700"
               >
-                {isUploading || isAddingFiles ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Upload className="h-3.5 w-3.5" />
-                )}
-                Add
+                <Upload className="h-5 w-5" />
+                <span className="mt-2 text-xs">Add images</span>
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => void handleUpload(e.target.files)}
-              />
-            </div>
-            <p className="mt-1 text-xs text-slate-500">Upload images. Campaign browse comes later.</p>
-
-            <div className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto">
-              {beats.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full flex-col items-center rounded-2xl border border-dashed border-teal-300 bg-teal-50/50 px-3 py-10 text-center"
+            ) : (
+              beats.map((beat, index) => (
+                <div
+                  key={beat.id}
+                  draggable
+                  onDragStart={() => setDragId(beat.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragId) void reorder(dragId, beat.id);
+                    setDragId(null);
+                  }}
+                  onClick={() => setSelectedId(beat.id)}
+                  className={`group flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 transition ${
+                    selected?.id === beat.id ? 'bg-teal-50' : 'hover:bg-slate-50'
+                  }`}
                 >
-                  <Upload className="h-5 w-5 text-teal-700" />
-                  <span className="mt-2 text-sm font-medium text-slate-800">Add assets</span>
-                </button>
-              ) : (
-                beats.map((beat) => {
-                  return (
-                    <div
-                      key={beat.id}
-                      draggable
-                      onDragStart={() => setDragId(beat.id)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => {
-                        if (dragId) void reorder(dragId, beat.id);
-                        setDragId(null);
-                      }}
-                      onClick={() => setSelectedId(beat.id)}
-                      className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2 transition ${
-                        selected?.id === beat.id
-                          ? 'border-teal-400 bg-teal-50'
-                          : 'border-slate-200 bg-slate-50 hover:border-teal-200'
-                      }`}
-                    >
-                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-200">
-                        {beat.fileId ? (
-                          <AuthPreviewImage fileId={beat.fileId} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-[10px] text-slate-500">
-                            AI
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold text-slate-900">{beat.title || 'Beat'}</p>
-                        <p className="truncate text-[10px] uppercase tracking-wide text-slate-500">
-                          {ARC_LABEL[beat.arcRole || 'other']}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="rounded p-1 text-slate-400 hover:bg-white hover:text-rose-600"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void removeBeat(beat.id);
-                        }}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="mt-4 border-t border-slate-100 pt-4">
-              <label className="text-xs font-semibold text-slate-700">Generate gap-fill beat</label>
-              <textarea
-                value={generatePrompt}
-                onChange={(e) => setGeneratePrompt(e.target.value)}
-                rows={3}
-                placeholder="Describe the missing beat visual…"
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-teal-400"
-              />
-              <button
-                type="button"
-                disabled={!generatePrompt.trim() || isGenerating}
-                onClick={() =>
-                  void generateBeat({ prompt: generatePrompt.trim(), titleHint: 'Generated beat' }).then(
-                    () => setGeneratePrompt(''),
-                  )
-                }
-                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                Generate with Creative AI
-              </button>
-            </div>
-          </aside>
-
-          {/* Stage */}
-          <section className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 shadow-sm">
-            <div className="relative flex min-h-[420px] items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 p-4">
-              {selected?.fileId ? (
-                <AuthPreviewImage
-                  fileId={selected.fileId}
-                  alt={selected.title}
-                  className="max-h-[520px] w-full object-contain transition duration-300"
-                />
-              ) : (
-                <div className="px-6 text-center">
-                  <Clapperboard className="mx-auto h-10 w-10 text-teal-400/80" />
-                  <p className="mt-3 text-lg font-semibold text-white">Stage</p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Add assets, then propose a storyline to shape the arc.
-                  </p>
-                </div>
-              )}
-              {selected && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-5 pt-16">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">
-                    {ARC_LABEL[selected.arcRole || 'other']}
-                  </p>
-                  <p className="mt-1 text-xl font-semibold text-white">{selected.title || 'Untitled beat'}</p>
-                  {selected.caption ? (
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-200">{selected.caption}</p>
-                  ) : null}
-                </div>
-              )}
-            </div>
-            {beats.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto border-t border-white/10 bg-slate-900/80 p-3">
-                {beats.map((beat, index) => (
-                  <button
-                    key={beat.id}
-                    type="button"
-                    onClick={() => setSelectedId(beat.id)}
-                    className={`relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border ${
-                      selected?.id === beat.id ? 'border-teal-400' : 'border-white/10'
-                    }`}
-                  >
+                  <span className="w-4 text-[10px] tabular-nums text-slate-300">{index + 1}</span>
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-slate-100">
                     {beat.fileId ? (
                       <AuthPreviewImage fileId={beat.fileId} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-slate-800 text-xs text-slate-400">
-                        {index + 1}
-                      </div>
-                    )}
+                    ) : null}
+                  </div>
+                  <p className="min-w-0 flex-1 truncate text-xs text-slate-700">
+                    {beat.title || `Beat ${index + 1}`}
+                  </p>
+                  <button
+                    type="button"
+                    className="opacity-0 transition group-hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void removeBeat(beat.id);
+                    }}
+                    aria-label="Remove beat"
+                  >
+                    <X className="h-3.5 w-3.5 text-slate-400 hover:text-rose-600" />
                   </button>
-                ))}
-              </div>
+                </div>
+              ))
             )}
-          </section>
+          </div>
+        </aside>
 
-          {/* Narrative */}
-          <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Narrative</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Arc: Context → Proof → Ask · Tone: ATRISI institutional
-            </p>
+        {/* Stage — dominant */}
+        <section className="relative flex min-h-[50vh] flex-col bg-slate-950 lg:min-h-0">
+          <div className="relative flex flex-1 items-center justify-center p-6">
+            {selected?.fileId ? (
+              <AuthPreviewImage
+                fileId={selected.fileId}
+                alt={selected.title}
+                className="max-h-[min(68vh,640px)] w-full object-contain"
+              />
+            ) : (
+              <p className="text-sm text-slate-500">Select or add an asset</p>
+            )}
+            {selected?.title || selected?.caption ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-6 pb-5 pt-16">
+                {selected.arcRole && selected.arcRole !== 'other' ? (
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-teal-300/90">
+                    {ARC_LABEL[selected.arcRole]}
+                  </p>
+                ) : null}
+                {selected.title ? (
+                  <p className="mt-1 text-xl font-semibold text-white">{selected.title}</p>
+                ) : null}
+                {selected.caption ? (
+                  <p className="mt-1 max-w-2xl text-sm text-slate-300">{selected.caption}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          {beats.length > 1 ? (
+            <div className="flex justify-center gap-1.5 overflow-x-auto px-4 pb-4">
+              {beats.map((beat) => (
+                <button
+                  key={beat.id}
+                  type="button"
+                  onClick={() => setSelectedId(beat.id)}
+                  className={`h-14 w-20 shrink-0 overflow-hidden rounded-md transition ${
+                    selected?.id === beat.id
+                      ? 'ring-2 ring-teal-400 ring-offset-2 ring-offset-slate-950'
+                      : 'opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  {beat.fileId ? (
+                    <AuthPreviewImage fileId={beat.fileId} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full bg-slate-800" />
+                  )}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </section>
 
+        {/* Edit — only what you need */}
+        <aside className="border-t border-slate-200 bg-white lg:border-l lg:border-t-0">
+          <div className="px-5 py-4">
+            <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
+              Edit beat
+            </span>
             {selected ? (
-              <div className="mt-4 space-y-3">
+              <div className="mt-5 space-y-4">
                 <div>
-                  <label className="text-xs font-medium text-slate-600">Arc role</label>
+                  <label className="sr-only" htmlFor="story-arc">
+                    Arc
+                  </label>
                   <select
+                    id="story-arc"
                     value={selected.arcRole || 'other'}
                     onChange={(e) =>
                       updateSelected({ arcRole: e.target.value as StoryBeat['arcRole'] })
                     }
                     onBlur={() => void commitSelected()}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    className="w-full border-0 border-b border-slate-200 bg-transparent py-2 text-sm text-slate-800 outline-none focus:border-teal-500"
                   >
                     <option value="context">Context</option>
                     <option value="proof">Proof</option>
                     <option value="ask">Ask</option>
-                    <option value="other">Other</option>
+                    <option value="other">Beat</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-600">Title</label>
+                  <label className="sr-only" htmlFor="story-beat-title">
+                    Title
+                  </label>
                   <input
+                    id="story-beat-title"
                     value={selected.title}
                     onChange={(e) => updateSelected({ title: e.target.value })}
                     onBlur={() => void commitSelected()}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    placeholder="Title"
+                    className="w-full border-0 border-b border-slate-200 bg-transparent py-2 text-base font-semibold text-slate-950 outline-none placeholder:text-slate-300 focus:border-teal-500"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-600">Caption</label>
+                  <label className="sr-only" htmlFor="story-caption">
+                    Caption
+                  </label>
                   <textarea
+                    id="story-caption"
                     value={selected.caption}
                     onChange={(e) => updateSelected({ caption: e.target.value })}
                     onBlur={() => void commitSelected()}
+                    placeholder="Caption"
                     rows={4}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600">Notes</label>
-                  <textarea
-                    value={selected.notes}
-                    onChange={(e) => updateSelected({ notes: e.target.value })}
-                    onBlur={() => void commitSelected()}
-                    rows={3}
-                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    className="w-full resize-none border-0 bg-transparent py-2 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300"
                   />
                 </div>
                 {selected.vision?.what ? (
-                  <div className="rounded-xl border border-teal-100 bg-teal-50/60 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-teal-800">
-                      Vision read
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-700">{selected.vision.what}</p>
-                    {selected.vision.onImageText ? (
-                      <p className="mt-1 text-xs text-slate-500">
-                        On image: {selected.vision.onImageText}
-                      </p>
-                    ) : null}
-                    {selected.vision.signals?.length ? (
-                      <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
-                        {selected.vision.signals.join(' · ')}
-                      </p>
-                    ) : null}
-                  </div>
+                  <p className="text-xs leading-relaxed text-slate-400">{selected.vision.what}</p>
                 ) : null}
                 {isSaving ? (
-                  <p className="flex items-center gap-2 text-xs text-slate-500">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Saving…
-                  </p>
+                  <p className="text-xs text-slate-400">Saving…</p>
                 ) : null}
               </div>
             ) : (
-              <p className="mt-6 text-sm text-slate-500">Select a beat to edit narrative.</p>
+              <p className="mt-6 text-sm text-slate-400">Select a beat</p>
             )}
-          </aside>
-        </div>
+          </div>
+        </aside>
       </div>
 
-      {previewOpen && beats.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4">
+      {previewOpen && beats.length > 0 ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 p-4">
           <button
             type="button"
-            className="absolute right-4 top-4 rounded-full border border-white/20 p-2 text-white"
+            className="absolute right-4 top-4 p-2 text-white/70 hover:text-white"
             onClick={() => setPreviewOpen(false)}
+            aria-label="Close preview"
           >
             <X className="h-5 w-5" />
           </button>
           <button
             type="button"
-            className="absolute left-4 rounded-full border border-white/20 p-2 text-white"
+            className="absolute left-3 p-2 text-white/70 hover:text-white sm:left-6"
             onClick={() => setPreviewIndex((i) => (i - 1 + beats.length) % beats.length)}
+            aria-label="Previous"
           >
-            <ChevronLeft className="h-6 w-6" />
+            <ChevronLeft className="h-7 w-7" />
           </button>
           <button
             type="button"
-            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full border border-white/20 p-2 text-white sm:right-16"
+            className="absolute right-3 p-2 text-white/70 hover:text-white sm:right-6"
             onClick={() => setPreviewIndex((i) => (i + 1) % beats.length)}
+            aria-label="Next"
           >
-            <ChevronRight className="h-6 w-6" />
+            <ChevronRight className="h-7 w-7" />
           </button>
           <div className="max-w-5xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">
-              {ARC_LABEL[beats[previewIndex]?.arcRole || 'other']} · {previewIndex + 1}/{beats.length}
+            <p className="text-sm text-slate-400">
+              {previewIndex + 1} / {beats.length}
             </p>
             <h3 className="mt-2 text-2xl font-semibold text-white">
               {beats[previewIndex]?.title || 'Beat'}
@@ -497,15 +405,17 @@ export function StorySessionPage() {
             {beats[previewIndex]?.fileId ? (
               <AuthPreviewImage
                 fileId={beats[previewIndex].fileId!}
-                className="mx-auto mt-4 max-h-[65vh] rounded-lg object-contain"
+                className="mx-auto mt-6 max-h-[70vh] object-contain"
               />
             ) : null}
             {beats[previewIndex]?.caption ? (
-              <p className="mx-auto mt-4 max-w-2xl text-sm text-slate-200">{beats[previewIndex].caption}</p>
+              <p className="mx-auto mt-4 max-w-xl text-sm text-slate-300">
+                {beats[previewIndex].caption}
+              </p>
             ) : null}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

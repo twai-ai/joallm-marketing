@@ -125,7 +125,7 @@ function ChannelsPanel({ onGoToInbox }: { onGoToInbox: () => void }) {
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Link
-            to="/studio/acquisition"
+            to="/studio/people"
             onClick={onGoToInbox}
             className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
@@ -229,7 +229,7 @@ function AnalyticsPanel({
           </p>
         </button>
         <Link
-          to="/studio/acquisition"
+          to="/studio/people"
           onClick={onGoToInbox}
           className="border border-slate-200 bg-white px-5 py-4 text-left transition hover:border-teal-300"
         >
@@ -795,7 +795,7 @@ export function AcquisitionWorkspacePage() {
 
   if (!useCase) return null;
   if (!program) {
-    return <Navigate to="/studio/marketing" replace />;
+    return <Navigate to="/studio/campaigns" replace />;
   }
 
   const openIntentCampaigns = (intentId: GrowthIntentId) => {
@@ -812,7 +812,7 @@ export function AcquisitionWorkspacePage() {
     <UseCaseHomeShell
       brand={brand}
       useCase={useCase}
-      backHref="/studio/marketing"
+      backHref="/studio/campaigns"
       backLabel="All programs"
       badge={
         <div className="mt-4 inline-flex flex-wrap items-center gap-2">
@@ -838,7 +838,7 @@ export function AcquisitionWorkspacePage() {
             <ArrowRight className="h-4 w-4" />
           </button>
           <Link
-            to="/studio/acquisition"
+            to="/studio/people"
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300"
           >
             People & inbox
@@ -927,7 +927,7 @@ export function AcquisitionWorkspacePage() {
                 title: 'Watch replies',
                 body: 'Inbound WhatsApp / leads appear in People & inbox for the whole team.',
                 action: () => undefined,
-                href: '/studio/acquisition',
+                href: '/studio/people',
                 cta: 'Open inbox',
               },
             ].map((card) => (

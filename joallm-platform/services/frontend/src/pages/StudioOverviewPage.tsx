@@ -21,7 +21,7 @@ export function StudioOverviewPage() {
               </h1>
               <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg">
                 {PLATFORM_CONSTITUTION} Each workspace aligns UX to the asset and outcome — Media,
-                Documents, Acquisition Channels, Marketing Assets — instead of a generic builder.
+                Documents, People & inbox, Campaigns — instead of a generic builder.
               </p>
               <p className="mt-3 text-sm text-slate-500">{PLATFORM_TAGLINE}</p>
             </div>
@@ -42,10 +42,10 @@ export function StudioOverviewPage() {
                 <div className="rounded-2xl border border-teal-500/20 bg-teal-500/5 p-4">
                   <div className="flex items-center gap-2 text-sm font-medium text-white">
                     <Sparkles className="h-4 w-4 text-teal-300" />
-                    Acquisition Intelligence
+                    People & inbox
                   </div>
                   <p className="mt-2 text-sm text-slate-300">
-                    Channels + Connectors feed a unified Person Timeline.
+                    Shared team inbox for WhatsApp, Messenger, Instagram, and leads.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -97,12 +97,12 @@ export function StudioOverviewPage() {
                   <Link
                     to={
                       workspace.id === 'marketing-studio'
-                        ? `/studio/marketing/${PRIMARY_GROWTH_PROGRAM.id}`
+                        ? `/studio/campaigns/${PRIMARY_GROWTH_PROGRAM.id}`
                         : workspace.homeRoute
                     }
                     className="btn-atrisi-primary mt-4 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm"
                   >
-                    {workspace.id === 'marketing-studio' ? 'Open Acquisition Workspace' : 'Open workspace'}
+                    Open {workspace.label}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 ) : (

@@ -28,13 +28,13 @@ export function RegisterPage() {
     },
     {
       icon: Search,
-      title: 'Acquisition Intelligence',
-      description: 'Channels via Connectors into one Person Timeline'
+      title: 'People & inbox',
+      description: 'Shared team inbox for WhatsApp, Messenger, Instagram, and leads'
     },
     {
       icon: Workflow,
       title: 'Studio workspaces',
-      description: 'Media AI, Document AI, and Marketing Assets — create intent'
+      description: 'Media AI, Document AI, and Campaigns — create and publish'
     },
     {
       icon: ShieldCheck,

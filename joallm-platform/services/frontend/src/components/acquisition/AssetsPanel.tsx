@@ -284,10 +284,20 @@ export function AssetsPanel({
       setCampaignId(preferredCampaignId);
       return;
     }
-    if (!campaignId && campaigns[0]) {
-      setCampaignId(campaigns[0].id);
+    if (campaignId && campaigns.some((c) => c.id === campaignId)) {
+      return;
     }
+    if (campaigns[0]) {
+      setCampaignId(campaigns[0].id);
+      return;
+    }
+    setCampaignId('');
   }, [campaigns, campaignId, preferredCampaignId]);
+
+  useEffect(() => {
+    setGalleryProjectFilter('');
+    setProjectId('');
+  }, [programId]);
 
   useEffect(() => {
     // Prefill prompt + brief when campaign/program changes and user hasn't customized yet
@@ -835,9 +845,9 @@ export function AssetsPanel({
           <div>
             <h2 className="text-xl font-semibold text-slate-950">Generate creatives</h2>
             <p className="mt-1 max-w-2xl text-sm text-slate-600">
-              Creative AI builds a flyer/poster for this acquisition campaign (Ideogram for text-heavy
-              posters, FLUX for photoreal drafts). Result is saved as a draft Marketing Asset you can
-              publish.
+              Creative AI builds a flyer/poster for this campaign (Ideogram for text-heavy posters,
+              FLUX for photoreal drafts). Results are saved under the selected campaign — switch
+              campaigns above to browse older creatives.
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-800 ring-1 ring-teal-200">
@@ -1484,11 +1494,20 @@ export function AssetsPanel({
             Loading assets…
           </div>
         ) : visibleAssets.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-600">
-            {galleryProjectFilter
-              ? 'No assets in this project — switch to All assets or generate a new creative.'
-              : 'No assets yet — generate a flyer above or upload a file.'}
-          </p>
+          <div className="mt-4 space-y-2 text-sm text-slate-600">
+            <p>
+              {galleryProjectFilter
+                ? 'No assets in this project — switch to All assets or generate a new creative.'
+                : 'No assets yet for this campaign — generate a flyer above or upload a file.'}
+            </p>
+            {!galleryProjectFilter && campaigns.length > 1 && (
+              <p className="text-xs text-slate-500">
+                Creatives are saved per campaign. Use the Campaign dropdown above to check your
+                other {campaigns.length - 1} campaign{campaigns.length === 2 ? '' : 's'} — older
+                images often live there.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visibleAssets.map((asset) => {

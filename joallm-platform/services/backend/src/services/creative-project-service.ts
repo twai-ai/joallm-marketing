@@ -10,6 +10,10 @@ import {
   creativeProjects,
   marketingAssets,
 } from '../database/schema.js';
+import {
+  buildOrgDualReadScope,
+  resolveOrganizationIdForUser,
+} from './organization-ownership.js';
 
 export type CreativeProjectStatus = 'draft' | 'active' | 'archived';
 export type GrowthAssetKind =
@@ -63,15 +67,18 @@ async function assertCampaignOwned(
   programId: string,
   campaignId: string,
 ) {
+  const organizationId = await resolveOrganizationIdForUser(ownerUserId);
+  const scope = buildOrgDualReadScope({
+    organizationId,
+    ownerUserId,
+    organizationColumn: acquisitionCampaigns.organizationId,
+    ownerColumn: acquisitionCampaigns.ownerUserId,
+  });
+
   const [row] = await db
     .select()
     .from(acquisitionCampaigns)
-    .where(
-      and(
-        eq(acquisitionCampaigns.id, campaignId),
-        eq(acquisitionCampaigns.ownerUserId, ownerUserId),
-      ),
-    )
+    .where(and(eq(acquisitionCampaigns.id, campaignId), scope))
     .limit(1);
 
   if (!row) return null;
@@ -130,15 +137,18 @@ export async function listCreativeProjects(
   const campaign = await assertCampaignOwned(ownerUserId, programId, campaignId);
   if (!campaign) return [];
 
+  const organizationId = await resolveOrganizationIdForUser(ownerUserId);
+  const scope = buildOrgDualReadScope({
+    organizationId,
+    ownerUserId,
+    organizationColumn: creativeProjects.organizationId,
+    ownerColumn: creativeProjects.ownerUserId,
+  });
+
   const rows = await db
     .select()
     .from(creativeProjects)
-    .where(
-      and(
-        eq(creativeProjects.ownerUserId, ownerUserId),
-        eq(creativeProjects.campaignId, campaignId),
-      ),
-    )
+    .where(and(scope, eq(creativeProjects.campaignId, campaignId)))
     .orderBy(desc(creativeProjects.updatedAt));
 
   return rows.map((row) => mapProject(row, programId));
@@ -169,6 +179,7 @@ export async function createCreativeProject(options: {
     .insert(creativeProjects)
     .values({
       ownerUserId: options.ownerUserId,
+      organizationId: (await resolveOrganizationIdForUser(options.ownerUserId)) || null,
       campaignId: options.campaignId,
       programId: options.programId,
       name: options.name.trim(),
@@ -274,15 +285,18 @@ export async function listCampaignAssets(
   const campaign = await assertCampaignOwned(ownerUserId, programId, campaignId);
   if (!campaign) return [];
 
+  const organizationId = await resolveOrganizationIdForUser(ownerUserId);
+  const scope = buildOrgDualReadScope({
+    organizationId,
+    ownerUserId,
+    organizationColumn: marketingAssets.organizationId,
+    ownerColumn: marketingAssets.ownerUserId,
+  });
+
   const rows = await db
     .select()
     .from(marketingAssets)
-    .where(
-      and(
-        eq(marketingAssets.ownerUserId, ownerUserId),
-        eq(marketingAssets.campaignId, campaignId),
-      ),
-    )
+    .where(and(scope, eq(marketingAssets.campaignId, campaignId)))
     .orderBy(desc(marketingAssets.updatedAt));
 
   return rows.map((row) => mapAsset(row, programId));
@@ -318,6 +332,7 @@ export async function createMarketingAsset(options: {
     .insert(marketingAssets)
     .values({
       ownerUserId: options.ownerUserId,
+      organizationId: (await resolveOrganizationIdForUser(options.ownerUserId)) || null,
       campaignId: options.campaignId,
       creativeProjectId: options.creativeProjectId,
       programId: options.programId,

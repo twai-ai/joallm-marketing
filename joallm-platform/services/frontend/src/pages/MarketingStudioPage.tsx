@@ -27,14 +27,14 @@ export function MarketingStudioPage() {
       primaryAction={
         <>
           <Link
-            to={`/studio/marketing/${PRIMARY_GROWTH_PROGRAM.id}`}
+            to={`/studio/campaigns/${PRIMARY_GROWTH_PROGRAM.id}`}
             className="btn-atrisi-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm"
           >
             Open {PRIMARY_GROWTH_PROGRAM.name}
             <ArrowRight className="h-4 w-4" />
           </Link>
           <Link
-            to="/studio/acquisition"
+            to="/studio/people"
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-teal-300 hover:bg-teal-50/40"
           >
             People & inbox
@@ -74,7 +74,7 @@ export function MarketingStudioPage() {
               >
                 atrisi.org/programs
               </a>
-              . Click a Program to open its Acquisition Workspace.
+              . Click a Program to open its campaign workspace.
             </p>
           </div>
           <div className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-teal-800">
@@ -88,7 +88,7 @@ export function MarketingStudioPage() {
             return (
               <Link
                 key={program.id}
-                to={`/studio/marketing/${program.id}`}
+                to={`/studio/campaigns/${program.id}`}
                 className={`rounded-2xl border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
                   isPrimary
                     ? 'border-teal-300 bg-teal-50/60 ring-1 ring-teal-200'
@@ -112,7 +112,7 @@ export function MarketingStudioPage() {
                   <p className="mt-3 text-xs text-slate-500">{program.tracks.join(' · ')}</p>
                 )}
                 <div className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal-800">
-                  Open Acquisition Workspace
+                  Open Campaigns
                   <ArrowRight className="h-3.5 w-3.5" />
                 </div>
               </Link>
@@ -128,7 +128,7 @@ export function MarketingStudioPage() {
             <h2 className="text-lg font-semibold text-slate-950">Roadmap</h2>
           </div>
           <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
-            <li className="font-medium text-teal-800">Sprint 1 — Program → Acquisition Workspace ✓</li>
+            <li className="font-medium text-teal-800">Sprint 1 — Program → Campaigns workspace ✓</li>
             <li className="font-medium text-teal-800">Sprint 2 — Campaign CRUD ✓</li>
             <li className="font-medium text-teal-800">Sprint 2b — Intent catalog (Amplify dogfood) ✓</li>
             <li className="font-medium text-teal-800">Sprint 3 — Creative Projects + Assets ✓</li>
@@ -145,14 +145,14 @@ export function MarketingStudioPage() {
             <h2 className="text-lg font-semibold text-slate-950">Live today: inbound WhatsApp</h2>
           </div>
           <p className="mt-2 text-sm text-slate-600">
-            Acquisition Intelligence already ingests WhatsApp into Person Timelines. Next sprints attach
+            People & inbox already ingests WhatsApp into person timelines. Next sprints attach
             that engagement to Program Campaigns and Program Interest.
           </p>
           <Link
-            to="/studio/acquisition"
+            to="/studio/people"
             className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-800 hover:text-teal-950"
           >
-            Open Acquisition Intelligence
+            Open People & inbox
             <ArrowRight className="h-4 w-4" />
           </Link>
           <p className="mt-4 text-xs text-slate-500">

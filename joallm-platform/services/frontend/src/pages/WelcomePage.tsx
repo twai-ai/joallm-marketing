@@ -301,7 +301,7 @@ export function WelcomePage() {
                 </h1>
                 <p className="mt-3 max-w-3xl text-base leading-7 text-gray-600 sm:mt-4 sm:text-lg sm:leading-relaxed md:text-xl">
                   {PLATFORM_CONSTITUTION} Use Chat and Knowledge to operate; open Studio to create via
-                  Media AI, Document AI, and Acquisition Intelligence.
+                  Media AI, Document AI, People & inbox, and Campaigns.
                 </p>
               </div>
 
@@ -387,7 +387,7 @@ export function WelcomePage() {
                     Choose the Studio that matches the job
                   </h2>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-600">
-                    Media AI, Acquisition Intelligence, and Document AI are live. Marketing Studio and Data
+                    Media AI, People & inbox, Campaigns, and Document AI are live. Data
                     Intelligence stay visible as Soon without looking ready to click.
                   </p>
                 </div>

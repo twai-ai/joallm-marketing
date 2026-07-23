@@ -139,15 +139,15 @@ const sections: Section[] = [
             <UL>
               <LI>Operate in Chat and Knowledge with grounded institutional answers</LI>
               <LI>Run Media AI and Document AI Studios to produce Knowledge Artifacts</LI>
-              <LI>Use Acquisition Intelligence — Channels via Connectors into Person Timelines</LI>
-              <LI>Prepare Marketing Studio for Marketing Assets published through Channels</LI>
+              <LI>Use People & inbox — Channels via Connectors into Person Timelines</LI>
+              <LI>Prepare Campaigns for Marketing Assets published through Channels</LI>
               <LI>Bring your own API keys for model routing and Creative AI providers</LI>
             </UL>
             <H2>Three layers</H2>
             <Table
               headers={['Layer', 'Role', 'Examples']}
               rows={[
-                ['Studio', 'Create / review / publish intent', 'Media AI, Document AI, Acquisition, Marketing Studio'],
+                ['Studio', 'Create / review / publish intent', 'Media AI, Document AI, People & inbox, Campaigns'],
                 ['Brain (Product)', 'Operate on outcomes', 'ATRISI Marketing — Chat, Knowledge, Timelines'],
                 ['Platform', 'Remember & execute', 'Connectors, Creative AI, Identity, Memory'],
               ]}

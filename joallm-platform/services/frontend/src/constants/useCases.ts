@@ -44,9 +44,9 @@ export const USE_CASES: UseCaseDefinition[] = [
   {
     id: 'acquisition',
     label: 'People & inbox',
-    shortLabel: 'Inbox',
-    homeRoute: '/studio/acquisition',
-    assetRoute: (assetId: string) => `/studio/acquisition/${assetId}`,
+    shortLabel: 'People & inbox',
+    homeRoute: '/studio/people',
+    assetRoute: (assetId: string) => `/studio/people/${assetId}`,
     status: 'active',
     description:
       'See who messaged ATRISI on WhatsApp, Messenger, Instagram, or Lead Ads — one shared person timeline for the team.',
@@ -85,8 +85,8 @@ export const USE_CASES: UseCaseDefinition[] = [
     id: 'marketing-studio',
     label: 'Campaigns',
     shortLabel: 'Campaigns',
-    homeRoute: '/studio/marketing',
-    assetRoute: (assetId: string) => `/studio/marketing/${assetId}`,
+    homeRoute: '/studio/campaigns',
+    assetRoute: (assetId: string) => `/studio/campaigns/${assetId}`,
     status: 'active',
     description:
       'Pick a program, create campaigns, generate creatives, and publish. Interest from outreach shows up for Education.',

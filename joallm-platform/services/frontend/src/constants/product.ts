@@ -22,9 +22,9 @@ export const PRODUCT_LABELS = {
   workflows: 'Studio',
   notebooks: 'Notebooks',
   documentation: 'Documentation',
-  acquisition: 'Acquisition Intelligence',
+  acquisition: 'People & inbox',
   documentAi: 'Document AI',
-  marketingStudio: 'Acquisition',
+  marketingStudio: 'Campaigns',
 } as const;
 
 export const PRODUCT_DESCRIPTIONS = {
@@ -35,9 +35,9 @@ export const PRODUCT_DESCRIPTIONS = {
   workflows: 'Guided Studio workspaces for create, review, and publish intent',
   notebooks: 'Advanced interactive sessions (Platform tooling)',
   documentation: 'Architecture notes and operator guides',
-  acquisition: 'Connect Channels into Person Timelines (toward Program Growth)',
+  acquisition: 'Shared inbox for WhatsApp, Messenger, Instagram, and Lead Ads',
   documentAi: 'Ingest document sets and launch grounded retrieval',
-  marketingStudio: 'Acquisition Workspace — Programs → Intents → Campaigns → Program Interest',
+  marketingStudio: 'Programs, goals, campaigns, creatives, and publish',
 } as const;
 
 export const PRODUCT_ROUTES = {
@@ -48,7 +48,7 @@ export const PRODUCT_ROUTES = {
   workflows: '/studio',
   notebooks: '/notebook',
   documentation: '/docs',
-  acquisition: '/studio/acquisition',
+  acquisition: '/studio/people',
   documentAi: '/studio/document-ai',
-  marketingStudio: '/studio/marketing',
+  marketingStudio: '/studio/campaigns',
 } as const;

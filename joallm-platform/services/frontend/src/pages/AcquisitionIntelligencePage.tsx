@@ -474,7 +474,7 @@ export function AcquisitionIntelligencePage() {
                 </span>
               )}
               <Link
-                to="/studio/marketing"
+                to="/studio/campaigns"
                 className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
               >
                 Campaigns
@@ -663,7 +663,7 @@ export function AcquisitionIntelligencePage() {
                       <button
                         key={person.id}
                         type="button"
-                        onClick={() => navigate(`/studio/acquisition/${person.id}`)}
+                        onClick={() => navigate(`/studio/people/${person.id}`)}
                         className={`mb-1 w-full rounded-xl px-3 py-3 text-left transition ${
                           selected
                             ? 'bg-slate-900 text-white'
@@ -729,7 +729,7 @@ export function AcquisitionIntelligencePage() {
                       </div>
                     </div>
                     <Link
-                      to="/studio/acquisition"
+                      to="/studio/people"
                       className="text-sm font-medium text-slate-500 hover:text-slate-900"
                     >
                       Clear

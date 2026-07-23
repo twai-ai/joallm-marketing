@@ -67,6 +67,22 @@ function LegacyMediaRedirect() {
   return <Navigate to="/studio/media-ai" replace />;
 }
 
+function LegacyPeopleRedirect() {
+  const { personId } = useParams();
+  if (personId) {
+    return <Navigate to={`/studio/people/${personId}`} replace />;
+  }
+  return <Navigate to="/studio/people" replace />;
+}
+
+function LegacyCampaignsRedirect() {
+  const { programId } = useParams();
+  if (programId) {
+    return <Navigate to={`/studio/campaigns/${programId}`} replace />;
+  }
+  return <Navigate to="/studio/campaigns" replace />;
+}
+
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -278,24 +294,45 @@ function AppLayout() {
                   <MediaAssetPage />
                 </ProtectedRoute>
               } />
-              <Route path="/studio/acquisition" element={
+              <Route path="/studio/people" element={
                 <ProtectedRoute>
                   <AcquisitionIntelligencePage />
                 </ProtectedRoute>
               } />
-              <Route path="/studio/acquisition/:personId" element={
+              <Route path="/studio/people/:personId" element={
                 <ProtectedRoute>
                   <AcquisitionIntelligencePage />
                 </ProtectedRoute>
               } />
-              <Route path="/studio/marketing" element={
+              <Route path="/studio/campaigns" element={
                 <ProtectedRoute>
                   <MarketingStudioPage />
                 </ProtectedRoute>
               } />
-              <Route path="/studio/marketing/:programId" element={
+              <Route path="/studio/campaigns/:programId" element={
                 <ProtectedRoute>
                   <AcquisitionWorkspacePage />
+                </ProtectedRoute>
+              } />
+              {/* Legacy aliases — keep bookmarks working */}
+              <Route path="/studio/acquisition" element={
+                <ProtectedRoute>
+                  <Navigate to="/studio/people" replace />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/acquisition/:personId" element={
+                <ProtectedRoute>
+                  <LegacyPeopleRedirect />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/marketing" element={
+                <ProtectedRoute>
+                  <Navigate to="/studio/campaigns" replace />
+                </ProtectedRoute>
+              } />
+              <Route path="/studio/marketing/:programId" element={
+                <ProtectedRoute>
+                  <LegacyCampaignsRedirect />
                 </ProtectedRoute>
               } />
               <Route path="/document-ai" element={

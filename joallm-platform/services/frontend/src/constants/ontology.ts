@@ -29,7 +29,7 @@ export const ONTOLOGY = {
     role: 'Brain',
     /** Transitional brand; constitutional name is Market Acquisition */
     capability: 'Market Acquisition',
-    workspace: 'Acquisition Workspace',
+    workspace: 'Campaigns',
     tagline: 'Institution Acquisition Platform',
     meaning:
       'Acquire Program Interest from the market. Marketing/ads are one strategy. Education converts & delivers — pulls Program Interest only, never campaigns/creatives.',

@@ -42,11 +42,11 @@ export function Header({ onToggleSidebar, onOpenSettings, currentView }: HeaderP
 
   const getViewTitle = () => {
     const path = location.pathname;
-    if (path.startsWith('/studio/marketing/')) {
+    if (path.startsWith('/studio/campaigns/')) {
       const programId = path.split('/')[3];
       const match = programId ? getProgramById(programId) : undefined;
-      if (match) return `${match.name} · Acquisition`;
-      return 'Acquisition Workspace';
+      if (match) return `${match.name} · Campaigns`;
+      return 'Campaigns';
     }
     const studioMatch = USE_CASES.find(
       (workspace) => path === workspace.homeRoute || path.startsWith(`${workspace.homeRoute}/`),

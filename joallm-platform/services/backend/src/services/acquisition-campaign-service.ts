@@ -4,10 +4,13 @@
  * intentId is stored in metadata (catalog is code-defined).
  */
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { acquisitionCampaigns, acquisitionInitiatives } from '../database/schema.js';
-import { resolveOrganizationIdForUser } from './organization-ownership.js';
+import {
+  buildOrgDualReadScope,
+  resolveOrganizationIdForUser,
+} from './organization-ownership.js';
 import { auditLog } from '../utils/audit.js';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'archived';
@@ -45,7 +48,42 @@ function mapCampaign(
   };
 }
 
-/** Ensure one initiative bucket per user + program (targeting id from atrisi.org). */
+async function stampInitiativeOrganization(
+  initiativeId: string,
+  organizationId: string | null,
+  currentOrganizationId: string | null | undefined,
+) {
+  if (!organizationId || currentOrganizationId) return;
+  await db
+    .update(acquisitionInitiatives)
+    .set({ organizationId, updatedAt: new Date() })
+    .where(eq(acquisitionInitiatives.id, initiativeId));
+}
+
+/**
+ * Prefer the initiative that already has campaigns so org dual-write never
+ * hides creatives under an empty duplicate bucket.
+ */
+async function pickInitiativeWithCampaigns(
+  candidates: Array<typeof acquisitionInitiatives.$inferSelect>,
+): Promise<typeof acquisitionInitiatives.$inferSelect | null> {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const counts = await Promise.all(
+    candidates.map(async (row) => {
+      const [result] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(acquisitionCampaigns)
+        .where(eq(acquisitionCampaigns.initiativeId, row.id));
+      return { row, count: Number(result?.count || 0) };
+    }),
+  );
+  counts.sort((a, b) => b.count - a.count || b.row.updatedAt.getTime() - a.row.updatedAt.getTime());
+  return counts[0]?.row || candidates[0];
+}
+
+/** Ensure one initiative bucket per tenant + program (targeting id from atrisi.org). */
 export async function ensureProgramInitiative(options: {
   ownerUserId: string;
   programId: string;
@@ -56,27 +94,22 @@ export async function ensureProgramInitiative(options: {
   const organizationId =
     options.organizationId ?? (await resolveOrganizationIdForUser(ownerUserId));
 
-  const existing = await db
+  const dualRead = buildOrgDualReadScope({
+    organizationId,
+    ownerUserId,
+    organizationColumn: acquisitionInitiatives.organizationId,
+    ownerColumn: acquisitionInitiatives.ownerUserId,
+  });
+
+  const byProgram = await db
     .select()
     .from(acquisitionInitiatives)
-    .where(
-      and(
-        organizationId
-          ? eq(acquisitionInitiatives.organizationId, organizationId)
-          : eq(acquisitionInitiatives.ownerUserId, ownerUserId),
-        eq(acquisitionInitiatives.programId, programId),
-      ),
-    )
-    .limit(1);
+    .where(and(dualRead, eq(acquisitionInitiatives.programId, programId)));
 
-  if (existing[0]) {
-    if (organizationId && !existing[0].organizationId) {
-      await db
-        .update(acquisitionInitiatives)
-        .set({ organizationId, updatedAt: new Date() })
-        .where(eq(acquisitionInitiatives.id, existing[0].id));
-    }
-    return { id: existing[0].id };
+  const picked = await pickInitiativeWithCampaigns(byProgram);
+  if (picked) {
+    await stampInitiativeOrganization(picked.id, organizationId, picked.organizationId);
+    return { id: picked.id };
   }
 
   // Fallback for DBs before program_id column: match by description marker
@@ -88,23 +121,39 @@ export async function ensureProgramInitiative(options: {
         eq(acquisitionInitiatives.ownerUserId, ownerUserId),
         eq(acquisitionInitiatives.description, `program:${programId}`),
       ),
-    )
-    .limit(1);
+    );
 
-  if (legacy[0]) {
+  const legacyPicked = await pickInitiativeWithCampaigns(legacy);
+  if (legacyPicked) {
     try {
       await db
         .update(acquisitionInitiatives)
         .set({
           programId,
-          organizationId: organizationId || legacy[0].organizationId,
+          organizationId: organizationId || legacyPicked.organizationId,
           updatedAt: new Date(),
         })
-        .where(eq(acquisitionInitiatives.id, legacy[0].id));
+        .where(eq(acquisitionInitiatives.id, legacyPicked.id));
     } catch {
       /* column may not exist yet on very old DBs */
     }
-    return { id: legacy[0].id };
+    return { id: legacyPicked.id };
+  }
+
+  // Last resort: owner+program rows that still lack organizationId (pre dual-write)
+  const ownerProgram = await db
+    .select()
+    .from(acquisitionInitiatives)
+    .where(
+      and(
+        eq(acquisitionInitiatives.ownerUserId, ownerUserId),
+        eq(acquisitionInitiatives.programId, programId),
+      ),
+    );
+  const ownerPicked = await pickInitiativeWithCampaigns(ownerProgram);
+  if (ownerPicked) {
+    await stampInitiativeOrganization(ownerPicked.id, organizationId, ownerPicked.organizationId);
+    return { id: ownerPicked.id };
   }
 
   const [created] = await db
@@ -126,21 +175,53 @@ export async function listProgramCampaigns(
   ownerUserId: string,
   programId: string,
 ): Promise<AcquisitionCampaignDto[]> {
-  const initiative = await ensureProgramInitiative({
+  const organizationId = await resolveOrganizationIdForUser(ownerUserId);
+  await ensureProgramInitiative({
     ownerUserId,
     programId,
     programName: programId,
+    organizationId,
   });
+
+  const initiativeScope = buildOrgDualReadScope({
+    organizationId,
+    ownerUserId,
+    organizationColumn: acquisitionInitiatives.organizationId,
+    ownerColumn: acquisitionInitiatives.ownerUserId,
+  });
+  const initiatives = await db
+    .select({ id: acquisitionInitiatives.id })
+    .from(acquisitionInitiatives)
+    .where(
+      and(
+        initiativeScope,
+        or(
+          eq(acquisitionInitiatives.programId, programId),
+          eq(acquisitionInitiatives.description, `program:${programId}`),
+        ),
+      ),
+    );
+  const initiativeIds = initiatives.map((row) => row.id);
+
+  const campaignScope = buildOrgDualReadScope({
+    organizationId,
+    ownerUserId,
+    organizationColumn: acquisitionCampaigns.organizationId,
+    ownerColumn: acquisitionCampaigns.ownerUserId,
+  });
+
+  const programMatch =
+    initiativeIds.length > 0
+      ? or(
+          inArray(acquisitionCampaigns.initiativeId, initiativeIds),
+          eq(acquisitionCampaigns.programId, programId),
+        )
+      : eq(acquisitionCampaigns.programId, programId);
 
   const rows = await db
     .select()
     .from(acquisitionCampaigns)
-    .where(
-      and(
-        eq(acquisitionCampaigns.ownerUserId, ownerUserId),
-        eq(acquisitionCampaigns.initiativeId, initiative.id),
-      ),
-    )
+    .where(and(campaignScope, programMatch))
     .orderBy(desc(acquisitionCampaigns.updatedAt));
 
   return rows.map((row) => mapCampaign(row, programId));

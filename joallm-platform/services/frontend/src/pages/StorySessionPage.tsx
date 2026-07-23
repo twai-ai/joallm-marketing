@@ -453,8 +453,13 @@ export function StorySessionPage() {
               <div className="mx-auto flex max-w-xl flex-col gap-2 sm:flex-row sm:items-stretch sm:justify-center">
                 <button
                   type="button"
-                  disabled={isBranding || isGeneratingSimilar || !selected.title?.trim()}
-                  onClick={() => void brandBeat({ beatId: selected.id, textMode: 'title' })}
+                  disabled={isBranding || isGeneratingSimilar}
+                  onClick={() =>
+                    void brandBeat({
+                      beatId: selected.id,
+                      textMode: selected.title?.trim() ? 'title' : 'none',
+                    })
+                  }
                   className="inline-flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-teal-600 px-4 py-2.5 text-white transition hover:bg-teal-500 disabled:opacity-40"
                 >
                   <span className="inline-flex items-center gap-2 text-sm font-semibold">
@@ -462,7 +467,9 @@ export function StorySessionPage() {
                     {isBranding ? 'Branding…' : 'Brand this beat'}
                   </span>
                   <span className="text-[10px] font-medium text-teal-100">
-                    ATRISI look + your title · keeps original
+                    {selected.title?.trim()
+                      ? 'Remix upload + your title · original kept'
+                      : 'Remix upload · add a title for on-image copy'}
                   </span>
                 </button>
                 <button
@@ -488,8 +495,8 @@ export function StorySessionPage() {
                 Brand look only (no on-image text)
               </button>
               {!selected.title?.trim() ? (
-                <p className="mt-2 text-center text-[11px] text-amber-200/90">
-                  Add a title in Edit beat to Brand with copy
+                <p className="mt-2 text-center text-[11px] text-slate-400">
+                  Tip: add a title in Edit to Brand with on-image copy
                 </p>
               ) : null}
             </div>
@@ -612,15 +619,22 @@ export function StorySessionPage() {
                     <div className="mt-2 flex flex-col gap-2">
                       <button
                         type="button"
-                        disabled={isBranding || isGeneratingSimilar || !selected.title?.trim()}
-                        onClick={() => void brandBeat({ beatId: selected.id, textMode: 'title' })}
+                        disabled={isBranding || isGeneratingSimilar}
+                        onClick={() =>
+                          void brandBeat({
+                            beatId: selected.id,
+                            textMode: selected.title?.trim() ? 'title' : 'none',
+                          })
+                        }
                         className="w-full rounded-xl bg-teal-700 px-4 py-2.5 text-left transition hover:bg-teal-800 disabled:opacity-40"
                       >
                         <span className="block text-sm font-semibold text-white">
                           {isBranding ? 'Branding…' : 'Brand this beat'}
                         </span>
                         <span className="mt-0.5 block text-[11px] text-teal-100">
-                          Look + title/caption on image · original kept
+                          {selected.title?.trim()
+                            ? 'Remix upload + title/caption · original kept'
+                            : 'Remix upload · original kept'}
                         </span>
                       </button>
                       <button

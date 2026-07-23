@@ -177,8 +177,7 @@ export function useStorySession(storyId: string | undefined) {
         ApiOk<StorySession> & { provider?: string; addedBeatId?: string }
       >(
         API_ENDPOINTS.story.brandBeat(storyId!, input.beatId),
-        // Default title = branding text from Story fields; none = visual-only
-        { textMode: input.textMode || 'title' },
+        { textMode: input.textMode ?? 'title' },
         { showErrorToast: false },
       );
       return res;

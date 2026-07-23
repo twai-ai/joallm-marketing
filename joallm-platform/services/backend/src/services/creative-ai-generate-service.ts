@@ -887,8 +887,11 @@ async function listExecutableProviders(
     order.push('ideogram');
   } else if (options?.preferLegibleText) {
     order.push('ideogram', 'flux');
+  } else if (options?.referenceMode === 'edit' && options?.hasReferences) {
+    // Subject-preserving remix — FLUX input_image first, Ideogram fallback
+    order.push('flux', 'ideogram');
   } else if (options?.hasReferences) {
-    // Ideogram first for both style + edit — FLUX remix is nice but often credit-limited
+    // Ideogram first for style refs — FLUX remix is nice but often credit-limited
     order.push('ideogram', 'flux');
   } else {
     for (const id of preferredProvidersForStyle(style)) {

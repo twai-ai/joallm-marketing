@@ -293,14 +293,17 @@ export function getStoryBrandKit(metadata: Record<string, unknown> | null | unde
   };
 }
 
+/**
+ * Beat image always first (subject to preserve), then logo, then style refs.
+ * Never drop the beat when the brand kit is full.
+ */
 function brandReferenceIds(kit: StoryBrandKit, beatFileId: string): string[] {
-  const ids: string[] = [];
-  if (kit.logoFileId) ids.push(kit.logoFileId);
+  const rest: string[] = [];
+  if (kit.logoFileId && kit.logoFileId !== beatFileId) rest.push(kit.logoFileId);
   for (const id of kit.styleFileIds || []) {
-    if (id && !ids.includes(id)) ids.push(id);
+    if (id && id !== beatFileId && !rest.includes(id)) rest.push(id);
   }
-  if (!ids.includes(beatFileId)) ids.push(beatFileId);
-  return ids.slice(0, 4);
+  return [beatFileId, ...rest].slice(0, 4);
 }
 
 export async function setStoryBrandKit(
@@ -351,8 +354,8 @@ export async function brandStoryBeat(
   const watermark = Boolean(kit.logoFileId) && kit.watermark !== false;
 
   const promptParts = [
-    'Restyle the subject reference into an ATRISI Marketing institutional acquisition visual.',
-    'Keep the core subject and composition recognizable.',
+    'Remix THIS uploaded subject photo into an ATRISI Marketing institutional acquisition visual.',
+    'Preserve the recognizable people, place, and composition from the first reference image.',
     'Apply ATRISI teal and slate brand, premium institutional look, clean visual hierarchy.',
   ];
 
@@ -372,6 +375,10 @@ export async function brandStoryBeat(
     );
   }
 
+  if (beat.vision?.what) {
+    promptParts.push(`Subject to keep: ${beat.vision.what}.`);
+  }
+
   if (watermark) {
     promptParts.push(
       'Place the official logo reference as a small corner mark (bottom-right preferred), about 8–12% of frame width. Prefer the logo graphic; do not invent extra seals.',
@@ -382,6 +389,9 @@ export async function brandStoryBeat(
     promptParts.push('Do not add fake logos.');
   }
 
+  // With brand copy → Ideogram for typography; without → edit remix prefers FLUX subject lock
+  const referenceMode = useBrandCopy ? 'style' : 'edit';
+
   const generated = await generateCreativeImages({
     ownerUserId,
     prompt: promptParts.join(' '),
@@ -390,7 +400,7 @@ export async function brandStoryBeat(
     aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
     titleHint: beat.title || 'ATRISI branded beat',
     referenceFileIds: brandReferenceIds(kit, beat.fileId),
-    referenceMode: 'style',
+    referenceMode,
     analyzeReferences: true,
     variantCount: 1,
     metadata: {
@@ -463,18 +473,35 @@ export async function generateSimilarStoryBeats(
   const watermark = Boolean(kit.logoFileId) && kit.watermark !== false;
 
   const promptParts = [
-    'Create a similar institutional acquisition scene inspired by the reference.',
-    'Same subject world and mood, fresh composition — not a duplicate.',
+    'Create a similar institutional acquisition scene inspired by the first reference photo.',
+    'Keep the same subject world, people types, setting, and mood — fresh composition, not a duplicate.',
     'ATRISI Marketing look: teal + slate, premium, trustworthy, sparse layout.',
-    'TEXT-FREE: absolutely no readable text, headlines, CTAs, logos-as-words, or gibberish letters. Clean visual only — Story editor owns typography.',
+    'TEXT-FREE OUTPUT (critical): zero readable text on the image — no headlines, CTAs, captions, signs, posters, numbers-as-typography, or gibberish. Story editor owns all copy.',
   ];
-  if (watermark) {
+
+  // Use Story + source-image language as scene direction only — never burn it as letters
+  const sceneBits: string[] = [];
+  if (beat.title?.trim()) sceneBits.push(beat.title.trim());
+  if (beat.caption?.trim()) sceneBits.push(beat.caption.trim().slice(0, 160));
+  if (beat.vision?.claimHint?.trim()) sceneBits.push(beat.vision.claimHint.trim());
+  if (beat.vision?.onImageText?.trim()) {
+    sceneBits.push(
+      `source creatives communicated: ${beat.vision.onImageText.trim().slice(0, 120)}`,
+    );
+  }
+  if (sceneBits.length) {
     promptParts.push(
-      'Place the official logo reference as a small corner watermark (bottom-right), ~10% width, no invented lettering.',
+      `Visual narrative to express (DO NOT render as letters or captions): ${sceneBits.join(' — ')}.`,
     );
   }
   if (beat.vision?.what) promptParts.push(`Reference scene: ${beat.vision.what}.`);
   if (beat.vision?.mood) promptParts.push(`Mood: ${beat.vision.mood}.`);
+
+  if (watermark) {
+    promptParts.push(
+      'Place the official logo reference as a small corner mark (bottom-right), ~10% width — logo graphic only, no invented lettering.',
+    );
+  }
 
   const refs = brandReferenceIds(kit, beat.fileId!);
   const similarRefs = [
@@ -490,7 +517,7 @@ export async function generateSimilarStoryBeats(
     aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
     titleHint: beat.title || 'Similar beat',
     referenceFileIds: similarRefs,
-    referenceMode: 'style',
+    referenceMode: 'edit',
     analyzeReferences: true,
     variantCount: count,
     metadata: {
@@ -506,8 +533,12 @@ export async function generateSimilarStoryBeats(
       brandTheme: ATRISI_STORY_BRAND_THEME,
       paletteType: 'institutional_navy',
       useLogoReference: watermark,
+      // Feed narrative into referenceVisualContext-adjacent avoid + scene via prompt only
+      referenceVisualContext: sceneBits.length
+        ? `Express without lettering: ${sceneBits.join(' | ').slice(0, 280)}`
+        : undefined,
       avoid:
-        'any readable text, gibberish letters, fake logos, watermarks text, neon, clutter, exact duplicate of reference',
+        'any readable text, gibberish letters, misspelled words, fake logos, captions, headlines, CTAs, signage, posters with words, neon, clutter, exact duplicate of reference',
     },
   });
 

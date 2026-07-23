@@ -13,6 +13,7 @@ import { generateCreativeImages } from './creative-ai-generate-service.js';
 import type { BrandThemeInput } from './creative-brand-theme.js';
 import {
   applyHeuristicFromVision,
+  combineVisionIntoStory,
   seeBeatVisionCards,
   speakStoryline,
   structureStoryline,
@@ -405,6 +406,8 @@ export async function proposeStoryline(
   story: StorySessionDto;
   source: 'vision-compose' | 'vision-heuristic' | 'heuristic';
   visionCount: number;
+  reordered: boolean;
+  thesis?: string;
 }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   if (!existing.beats.length) {
@@ -414,18 +417,40 @@ export async function proposeStoryline(
   }
 
   const refreshVision = Boolean(options?.refreshVision);
+  // Default: allow rearrange so upload order does not dictate the story
   const keepOrder = Boolean(options?.keepOrder);
 
-  // 1) See — Groq vision cards (cached on beats)
+  // 1) See — per-beat Groq vision cards
   const seen = await seeBeatVisionCards(ownerUserId, existing.beats, refreshVision);
 
-  // 2) Structure — order + roles from cards
-  const structure = await structureStoryline(existing.title, seen.beats, keepOrder);
+  // 2) Combine — fuse all vision into one thesis + reorder (multi-vision when 2–5 assets)
+  const combined = await combineVisionIntoStory(
+    ownerUserId,
+    existing.title,
+    seen.beats,
+    keepOrder,
+  );
+  const structure =
+    combined ||
+    (await structureStoryline(existing.title, seen.beats, keepOrder).then((s) =>
+      s
+        ? {
+            ...s,
+            thesis: s.thesis || '',
+            reordered: s.orderedIds.some((id, i) => id !== seen.beats[i]?.id),
+            method: 'structure' as const,
+          }
+        : null,
+    ));
 
   let proposal: { title: string; arc: string; tone: string; beats: StoryBeat[] };
   let source: 'vision-compose' | 'vision-heuristic' | 'heuristic' = 'heuristic';
+  let reordered = false;
+  let thesis = '';
 
   if (structure) {
+    reordered = Boolean(structure.reordered);
+    thesis = structure.thesis || '';
     const byId = new Map(seen.beats.map((b) => [b.id, b]));
     const structuredBeats: StoryBeat[] = structure.orderedIds
       .map((id, order) => {
@@ -439,8 +464,8 @@ export async function proposeStoryline(
       })
       .filter(Boolean) as StoryBeat[];
 
-    // 3) Speak — titles/captions grounded in vision + roles
-    const copy = await speakStoryline(structure.title, structuredBeats);
+    // 3) Speak — captions serve the unified thesis
+    const copy = await speakStoryline(structure.title, structuredBeats, thesis);
     if (copy) {
       proposal = {
         title: structure.title,
@@ -454,7 +479,7 @@ export async function proposeStoryline(
           return {
             ...beat,
             title: spoken?.title || beat.title,
-            caption: spoken?.caption || beat.vision?.what || beat.caption,
+            caption: spoken?.caption || beat.vision?.claimHint || beat.caption,
             notes: spoken?.notes || notesFromVision,
           };
         }),
@@ -466,6 +491,7 @@ export async function proposeStoryline(
     }
   } else {
     proposal = applyHeuristicFromVision(seen.beats, existing.title);
+    reordered = proposal.beats.some((b, i) => b.id !== seen.beats[i]?.id);
     source = seen.visionCount > 0 ? 'vision-heuristic' : 'heuristic';
   }
 
@@ -479,11 +505,14 @@ export async function proposeStoryline(
       lastProposeSource: source,
       lastProposedAt: new Date().toISOString(),
       lastVisionCount: seen.visionCount,
-      composePipeline: 'see_structure_speak',
+      lastThesis: thesis || undefined,
+      lastReordered: reordered,
+      composePipeline: 'see_combine_speak',
+      combineMethod: combined?.method || (structure ? 'structure' : 'heuristic'),
     },
   });
 
-  return { story, source, visionCount: seen.visionCount };
+  return { story, source, visionCount: seen.visionCount, reordered, thesis: thesis || undefined };
 }
 
 export async function exportStoryPptx(

@@ -227,6 +227,8 @@ export async function storyRoutes(fastify: FastifyInstance, _options: FastifyPlu
         data: result.story,
         source: result.source,
         visionCount: result.visionCount,
+        reordered: result.reordered,
+        thesis: result.thesis,
       });
     } catch (error) {
       return reply.status(statusFromError(error)).send({

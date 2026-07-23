@@ -301,68 +301,27 @@ export async function seeBeatVisionCards(
   return { beats: next, visionCount };
 }
 
-type StructureResult = {
+export type StoryCombineResult = {
   title: string;
   arc: string;
   tone: string;
+  thesis: string;
   orderedIds: string[];
   roles: Record<string, StoryBeat['arcRole']>;
+  reordered: boolean;
+  method: 'multi-vision' | 'card-combine' | 'structure' | 'heuristic';
 };
 
-/** Stage 2 — Structure: order + arc roles from vision cards (text LLM). */
-export async function structureStoryline(
-  title: string,
+function parseOrderAndRoles(
+  parsed: Record<string, unknown>,
   beats: StoryBeat[],
   keepOrder: boolean,
-): Promise<StructureResult | null> {
-  const cards = beats.map((b, index) => ({
-    id: b.id,
-    index,
-    currentTitle: b.title,
-    what: b.vision?.what || null,
-    onImageText: b.vision?.onImageText || null,
-    claimHint: b.vision?.claimHint || null,
-    audienceHint: b.vision?.audienceHint || null,
-    narrativeFit: b.vision?.narrativeFit || null,
-    signals: b.vision?.signals || [],
-    mood: b.vision?.mood || null,
-  }));
-
-  const system = `${ATRISI_STORY_BRIEF}
-
-You are the Structure stage. Using vision cards only, build the story spine.
-Return ONLY JSON:
-{
-  "title": "short story title for an acquisition narrative (not a filename)",
-  "arc": "context_proof_ask",
-  "tone": "atrisi_institutional",
-  "beats": [
-    { "id": "beat-id", "arcRole": "context|proof|ask|other", "order": 0 }
-  ]
-}
-Rules:
-- Include every beat id exactly once.
-- Use narrativeFit hints when sensible; still enforce overall Context → Proof → Ask pacing.
-- If the working title is meaningful (not "Untitled story"), respect its intent.
-- ${keepOrder ? 'KEEP the given index order; only assign arcRole.' : 'Reorder only when it clearly strengthens the acquisition argument.'}
-- Do not write captions or titles for beats here.`;
-
-  const parsed = await chatJson({
-    system,
-    user: JSON.stringify({
-      workingTitle: title,
-      keepOrder,
-      purpose: 'multi-medium acquisition story (deck/carousel/brochure)',
-      beats: cards,
-    }),
-    temperature: 0.25,
-  });
-  if (!parsed) return null;
-
+): { orderedIds: string[]; roles: Record<string, StoryBeat['arcRole']>; reordered: boolean } {
   const list = Array.isArray(parsed.beats) ? parsed.beats : [];
   const roles: Record<string, StoryBeat['arcRole']> = {};
   const orderedIds: string[] = [];
   const known = new Set(beats.map((b) => b.id));
+  const originalIds = beats.map((b) => b.id);
 
   for (const item of list) {
     if (!item || typeof item !== 'object') continue;
@@ -380,36 +339,290 @@ Rules:
   }
 
   if (keepOrder) {
-    orderedIds.splice(0, orderedIds.length, ...beats.map((b) => b.id));
+    orderedIds.splice(0, orderedIds.length, ...originalIds);
   }
 
-  // Prefer vision narrativeFit when model omitted a role
   for (const beat of beats) {
     if (!roles[beat.id] && beat.vision?.narrativeFit) {
       roles[beat.id] = beat.vision.narrativeFit;
     }
   }
 
-  const resolvedTitle =
-    typeof parsed.title === 'string' && parsed.title.trim()
-      ? parsed.title.trim()
-      : title?.trim() && title !== 'Untitled story'
-        ? title.trim()
-        : 'Program interest story';
+  const reordered =
+    !keepOrder &&
+    orderedIds.length === originalIds.length &&
+    orderedIds.some((id, i) => id !== originalIds[i]);
 
+  return { orderedIds, roles, reordered };
+}
+
+function cardsPayload(beats: StoryBeat[]) {
+  return beats.map((b, index) => ({
+    id: b.id,
+    uploadIndex: index,
+    currentTitle: b.title,
+    what: b.vision?.what || null,
+    onImageText: b.vision?.onImageText || null,
+    claimHint: b.vision?.claimHint || null,
+    audienceHint: b.vision?.audienceHint || null,
+    narrativeFit: b.vision?.narrativeFit || null,
+    signals: b.vision?.signals || [],
+    mood: b.vision?.mood || null,
+  }));
+}
+
+/**
+ * Heuristic reorder: Context → Proof → Ask using vision narrativeFit,
+ * then original upload order as tiebreaker.
+ */
+export function heuristicReorderBeats(beats: StoryBeat[]): StoryBeat[] {
+  const rank = (role?: string | null) =>
+    role === 'context' ? 0 : role === 'proof' ? 1 : role === 'ask' ? 2 : 1.5;
+  return [...beats]
+    .sort((a, b) => {
+      const ra = rank(a.vision?.narrativeFit || a.arcRole);
+      const rb = rank(b.vision?.narrativeFit || b.arcRole);
+      if (ra !== rb) return ra - rb;
+      return a.order - b.order;
+    })
+    .map((b, order) => ({
+      ...b,
+      order,
+      arcRole: b.arcRole || b.vision?.narrativeFit || (order === 0 ? 'context' : order === beats.length - 1 ? 'ask' : 'proof'),
+    }));
+}
+
+async function combineWithMultiVision(
+  ownerUserId: string,
+  title: string,
+  beats: StoryBeat[],
+  keepOrder: boolean,
+): Promise<StoryCombineResult | null> {
+  if (!isUsableKey(config.groqApiKey)) return null;
+  const withFiles = beats.filter((b) => b.fileId);
+  // Token/size safety: only glance all images together when few beats
+  if (withFiles.length < 2 || withFiles.length > 5) return null;
+
+  const client = new Groq({ apiKey: config.groqApiKey });
+  const content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } }
+  > = [];
+
+  const idList: string[] = [];
+  for (const beat of withFiles) {
+    const image = await loadBeatImage(ownerUserId, beat.fileId!);
+    if (!image) continue;
+    // Cap each image for multi-vision (~1.2MB base64 ≈ fine for small sets)
+    if (image.base64.length > 1_600_000) continue;
+    idList.push(beat.id);
+    content.push({
+      type: 'text',
+      text: `Beat id=${beat.id} (upload #${beats.findIndex((b) => b.id === beat.id)})`,
+    });
+    content.push({
+      type: 'image_url',
+      image_url: { url: `data:${image.mime};base64,${image.base64}` },
+    });
+  }
+
+  if (idList.length < 2) return null;
+
+  content.push({
+    type: 'text',
+    text: `${ATRISI_STORY_BRIEF}
+
+You are looking at ALL story assets together. Combine them into one acquisition narrative.
+Working title: ${title || 'Untitled story'}
+Beat ids in upload order: ${beats.map((b) => b.id).join(', ')}
+
+Return ONLY JSON:
+{
+  "thesis": "2-3 sentences: the single story these images tell together for Program Interest",
+  "title": "short story title",
+  "arc": "context_proof_ask",
+  "tone": "atrisi_institutional",
+  "beats": [
+    { "id": "beat-id", "arcRole": "context|proof|ask|other", "order": 0, "why": "one short reason" }
+  ]
+}
+Rules:
+- Include every beat id from the upload list exactly once (ids without images still belong in order).
+- ${keepOrder ? 'Keep upload order; only assign roles.' : 'YOU MUST reorder for the strongest Context → Proof → Ask. Do not leave weak upload order if a better sequence exists.'}
+- Thesis must unify the set — not summarize each image separately.`,
+  });
+
+  try {
+    let parsed: Record<string, unknown> | null = null;
+    for (const model of VISION_MODELS) {
+      try {
+        const response = await client.chat.completions.create({
+          model,
+          temperature: 0.2,
+          max_tokens: 900,
+          messages: [{ role: 'user', content }],
+          response_format: { type: 'json_object' },
+        });
+        parsed = parseJsonObject(response.choices[0]?.message?.content || '{}');
+        break;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('rate_limit')) await delay(900);
+      }
+    }
+    if (!parsed) return null;
+
+    const { orderedIds, roles, reordered } = parseOrderAndRoles(parsed, beats, keepOrder);
+    return {
+      title:
+        typeof parsed.title === 'string' && parsed.title.trim()
+          ? parsed.title.trim()
+          : title?.trim() && title !== 'Untitled story'
+            ? title.trim()
+            : 'Program interest story',
+      arc: typeof parsed.arc === 'string' ? parsed.arc : 'context_proof_ask',
+      tone: typeof parsed.tone === 'string' ? parsed.tone : 'atrisi_institutional',
+      thesis: typeof parsed.thesis === 'string' ? parsed.thesis.trim() : '',
+      orderedIds,
+      roles,
+      reordered,
+      method: 'multi-vision',
+    };
+  } catch (error) {
+    logger.warn('Story multi-vision combine failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Stage 2 — Combine: synthesize ALL vision cards into one thesis + reorder.
+ * Prefers multi-image vision when 2–5 assets; else card-combine text LLM.
+ */
+export async function combineVisionIntoStory(
+  ownerUserId: string,
+  title: string,
+  beats: StoryBeat[],
+  keepOrder = false,
+): Promise<StoryCombineResult | null> {
+  const multi = await combineWithMultiVision(ownerUserId, title, beats, keepOrder);
+  if (multi?.thesis && multi.orderedIds.length === beats.length) {
+    return multi;
+  }
+
+  const system = `${ATRISI_STORY_BRIEF}
+
+You are the Combine stage. You receive per-beat vision cards from See.
+Your job: fuse them into ONE acquisition story — not a list of isolated captions.
+Return ONLY JSON:
+{
+  "thesis": "2-3 sentences throughline connecting all beats toward Program Interest",
+  "title": "short story title",
+  "arc": "context_proof_ask",
+  "tone": "atrisi_institutional",
+  "beats": [
+    { "id": "beat-id", "arcRole": "context|proof|ask|other", "order": 0, "why": "why this position" }
+  ]
+}
+Rules:
+- Include every beat id exactly once.
+- ${keepOrder ? 'KEEP upload order; assign roles only.' : 'Reorder aggressively for Context → Proof → Ask. Upload order is usually wrong — fix it.'}
+- Prefer opening with world/who-for (context), middle with evidence (proof), close with next step (ask).
+- Deduplicate near-identical beats by placing the stronger one earlier in its role band.
+- Thesis must explain how the sequence works as one argument.`;
+
+  const parsed = await chatJson({
+    system,
+    user: JSON.stringify({
+      workingTitle: title,
+      keepOrder,
+      purpose: 'multi-medium acquisition story — combine vision into one spine',
+      uploadOrderIds: beats.map((b) => b.id),
+      beats: cardsPayload(beats),
+    }),
+    temperature: 0.2,
+  });
+
+  if (!parsed) return null;
+
+  const { orderedIds, roles, reordered } = parseOrderAndRoles(parsed, beats, keepOrder);
   return {
-    title: resolvedTitle,
+    title:
+      typeof parsed.title === 'string' && parsed.title.trim()
+        ? parsed.title.trim()
+        : title?.trim() && title !== 'Untitled story'
+          ? title.trim()
+          : 'Program interest story',
+    arc: typeof parsed.arc === 'string' ? parsed.arc : 'context_proof_ask',
+    tone: typeof parsed.tone === 'string' ? parsed.tone : 'atrisi_institutional',
+    thesis: typeof parsed.thesis === 'string' ? parsed.thesis.trim() : '',
+    orderedIds,
+    roles,
+    reordered,
+    method: 'card-combine',
+  };
+}
+
+type StructureResult = {
+  title: string;
+  arc: string;
+  tone: string;
+  orderedIds: string[];
+  roles: Record<string, StoryBeat['arcRole']>;
+};
+
+/** Fallback Structure if Combine fails — text-only card spine. */
+export async function structureStoryline(
+  title: string,
+  beats: StoryBeat[],
+  keepOrder: boolean,
+): Promise<(StructureResult & { thesis?: string }) | null> {
+  const system = `${ATRISI_STORY_BRIEF}
+
+Build the story spine from vision cards. MUST reorder for Context → Proof → Ask unless keepOrder is true.
+Return ONLY JSON:
+{
+  "title": "short story title",
+  "thesis": "2-3 sentence throughline",
+  "arc": "context_proof_ask",
+  "tone": "atrisi_institutional",
+  "beats": [{ "id": "beat-id", "arcRole": "context|proof|ask|other", "order": 0 }]
+}
+Include every beat id once. ${keepOrder ? 'Keep order.' : 'Reorder for strongest acquisition argument.'}`;
+
+  const parsed = await chatJson({
+    system,
+    user: JSON.stringify({
+      workingTitle: title,
+      keepOrder,
+      beats: cardsPayload(beats),
+    }),
+    temperature: 0.2,
+  });
+  if (!parsed) return null;
+
+  const { orderedIds, roles } = parseOrderAndRoles(parsed, beats, keepOrder);
+  return {
+    title:
+      typeof parsed.title === 'string' && parsed.title.trim()
+        ? parsed.title.trim()
+        : title?.trim() && title !== 'Untitled story'
+          ? title.trim()
+          : 'Program interest story',
     arc: typeof parsed.arc === 'string' ? parsed.arc : 'context_proof_ask',
     tone: typeof parsed.tone === 'string' ? parsed.tone : 'atrisi_institutional',
     orderedIds,
     roles,
+    thesis: typeof parsed.thesis === 'string' ? parsed.thesis.trim() : undefined,
   };
 }
 
-/** Stage 3 — Speak: titles/captions grounded in vision + assigned roles. */
+/** Stage 3 — Speak: titles/captions grounded in combined thesis + vision + roles. */
 export async function speakStoryline(
   storyTitle: string,
   beats: StoryBeat[],
+  thesis?: string,
 ): Promise<Map<string, { title: string; caption: string; notes: string }> | null> {
   const payload = beats.map((b, index) => ({
     id: b.id,
@@ -425,36 +638,35 @@ export async function speakStoryline(
 
   const system = `${ATRISI_STORY_BRIEF}
 
-You are the Speak stage. Write beat titles and captions for the acquisition story.
+You are the Speak stage. Write beat titles and captions that serve the UNIFIED story thesis.
 Return ONLY JSON:
 {
   "beats": [
     {
       "id": "beat-id",
-      "title": "≤6 words — argument headline, not a photo label",
-      "caption": "one sentence that moves Context/Proof/Ask forward",
-      "notes": "optional internal speaker hint"
+      "title": "≤6 words — argument headline for THIS step in the thesis",
+      "caption": "one sentence advancing the thesis (not a photo description)",
+      "notes": "optional"
     }
   ]
 }
 Rules:
-- Titles argue; they do not describe (“Students in lab” ❌ → “Practice that employers trust” ✅ when evidence supports it).
-- If onImageText has a strong headline/CTA, reuse or lightly polish it — do not invent a conflicting CTA.
-- Captions must match arcRole:
-  - context: who/what this is for
-  - proof: why it’s credible
-  - ask: the next step toward Program Interest
-- Never invent stats, brand claims, or program names absent from onImageText/claimHint.
-- Preserve every beat id. No “in this image” language.`;
+- Every caption must connect to the thesis — the set should read as one argument.
+- Titles argue; they do not label the photo.
+- If onImageText has a strong headline/CTA, reuse or lightly polish — do not invent conflicting CTAs.
+- Match arcRole: context = who/for; proof = why trust; ask = next step to Program Interest.
+- Never invent stats/names absent from onImageText/claimHint.
+- Preserve every beat id.`;
 
   const parsed = await chatJson({
     system,
     user: JSON.stringify({
       storyTitle,
-      purpose: 'acquisition narrative for institutional growth',
+      thesis: thesis || null,
+      purpose: 'unified acquisition narrative',
       beats: payload,
     }),
-    temperature: 0.35,
+    temperature: 0.3,
   });
   if (!parsed) return null;
 
@@ -480,9 +692,11 @@ export function applyHeuristicFromVision(beats: StoryBeat[], title: string): {
   tone: string;
   beats: StoryBeat[];
 } {
-  const n = beats.length;
-  const proposed = beats.map((beat, index) => {
-    let arcRole: StoryBeat['arcRole'] =
+  const reordered = heuristicReorderBeats(beats);
+  const n = reordered.length;
+  const proposed = reordered.map((beat, index) => {
+    const arcRole: StoryBeat['arcRole'] =
+      beat.arcRole ||
       beat.vision?.narrativeFit ||
       (n <= 1 ? 'ask' : index === 0 ? 'context' : index === n - 1 ? 'ask' : 'proof');
 
@@ -501,9 +715,7 @@ export function applyHeuristicFromVision(beats: StoryBeat[], title: string): {
       arcRole,
       title: (onText?.split(/[\n|]/)[0] || claim || beat.title || `Beat ${index + 1}`).slice(0, 48),
       caption: claim || roleCaption,
-      notes: beat.vision
-        ? `${arcRole} — ${beat.vision.what}`
-        : beat.notes,
+      notes: beat.vision ? `${arcRole} — ${beat.vision.what}` : beat.notes,
     };
   });
 

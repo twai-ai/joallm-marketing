@@ -311,6 +311,9 @@ export function StorySessionPage() {
             <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400">
               Edit beat
             </span>
+            {typeof story.metadata?.lastThesis === 'string' && story.metadata.lastThesis ? (
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">{story.metadata.lastThesis}</p>
+            ) : null}
             {selected ? (
               <div className="mt-5 space-y-4">
                 <div>

@@ -103,7 +103,12 @@ export function useStorySession(storyId: string | undefined) {
   const proposeMutation = useMutation({
     mutationFn: async (options?: { refreshVision?: boolean; keepOrder?: boolean }) => {
       const res = await apiClient.post<
-        ApiOk<StorySession> & { source?: string; visionCount?: number }
+        ApiOk<StorySession> & {
+          source?: string;
+          visionCount?: number;
+          reordered?: boolean;
+          thesis?: string;
+        }
       >(API_ENDPOINTS.story.propose(storyId!), options || {});
       return res;
     },
@@ -111,13 +116,16 @@ export function useStorySession(storyId: string | undefined) {
       queryClient.setQueryData(['story', storyId], res.data);
       queryClient.invalidateQueries({ queryKey: ['stories'] });
       const seen = typeof res.visionCount === 'number' ? res.visionCount : 0;
+      const bits: string[] = [];
       if (res.source === 'vision-compose') {
-        showSuccess(`Storyline proposed from vision (${seen} assets read)`);
+        bits.push(`Storyline from combined vision (${seen} assets)`);
       } else if (res.source === 'vision-heuristic') {
-        showSuccess(`Vision read ${seen} assets — used structured fallback copy`);
+        bits.push(`Vision read ${seen} — fallback spine`);
       } else {
-        showSuccess('Storyline proposed (heuristic — check Groq key for vision)');
+        bits.push('Heuristic storyline');
       }
+      if (res.reordered) bits.push('beats rearranged');
+      showSuccess(bits.join(' · '));
     },
     onError: () => showError('Could not propose storyline'),
   });

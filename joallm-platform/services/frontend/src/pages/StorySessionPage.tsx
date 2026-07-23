@@ -529,7 +529,7 @@ export function StorySessionPage() {
                 onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
                 className="mx-auto mt-2 block text-center text-[11px] text-slate-400 underline-offset-2 transition hover:text-slate-200 hover:underline disabled:opacity-40"
               >
-                Brand look only (no on-image text)
+                Brand look only (FLUX/BFL · no on-image text)
               </button>
               {!selected.title?.trim() ? (
                 <p className="mt-2 text-center text-[11px] text-slate-400">

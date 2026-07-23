@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authService } from '../services/authService';
 import { storage, STORAGE_KEYS } from '../utils/storage';
+import { isTransientNetworkError } from '../utils/fetchWithTimeout';
 import { showSuccess, showError } from '../utils/toast';
 
 export interface User {
@@ -62,6 +63,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const user = storage.getSecure<User>(STORAGE_KEYS.USER);
 
         if (token && user) {
+          const openWithCachedSession = () => {
+            // Slow/offline networks: open immediately with cached session
+            // instead of hanging on an unbounded profile fetch.
+            console.warn('Using cached session after network issue during auth bootstrap');
+            setAuthState({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+          };
+
           // Verify token is still valid by fetching profile (silently, no error toasts)
           try {
             const profile = await authService.getProfile(true); // silent mode
@@ -72,6 +85,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               isLoading: false,
             });
           } catch (error) {
+            if (isTransientNetworkError(error)) {
+              openWithCachedSession();
+              return;
+            }
+
             // Token is invalid or expired - try to refresh silently
             console.log('Token validation failed, attempting silent refresh...');
             const refreshToken = storage.getSecure<string>(STORAGE_KEYS.REFRESH_TOKEN);
@@ -92,6 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 console.log('✅ Token refreshed successfully');
                 return; // Successfully refreshed, exit early
               } catch (refreshError) {
+                if (isTransientNetworkError(refreshError)) {
+                  openWithCachedSession();
+                  return;
+                }
                 console.log('Token refresh failed, clearing auth data');
               }
             }
@@ -131,6 +153,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error('Failed to initialize auth:', error);
+        // Prefer opening with cached credentials over a blank login wall on transient failures
+        const token = storage.getSecure<string>(STORAGE_KEYS.AUTH_TOKEN);
+        const user = storage.getSecure<User>(STORAGE_KEYS.USER);
+        if (token && user && isTransientNetworkError(error)) {
+          setAuthState({
+            user,
+            token,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          return;
+        }
         await clearAuthData();
       }
     };

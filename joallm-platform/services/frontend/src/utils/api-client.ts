@@ -1,12 +1,17 @@
 // API client with error handling, retry logic, and authentication
 import { APIError } from '../types';
 import { storage, STORAGE_KEYS } from './storage';
+import { fetchWithTimeout, isTimeoutError } from './fetchWithTimeout';
 import { showError } from './toast';
+
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 interface RequestConfig extends RequestInit {
   retries?: number;
   retryDelay?: number;
   showErrorToast?: boolean;
+  /** Per-request timeout in ms (default 30s). */
+  timeoutMs?: number;
 }
 
 class APIClient {
@@ -108,24 +113,26 @@ class APIClient {
 
   private async retryRequest<T>(
     url: string,
-    config: RequestConfig,
+    config: RequestInit,
     retries: number = 3,
-    delay: number = 1000
+    delay: number = 1000,
+    timeoutMs: number = DEFAULT_TIMEOUT_MS
   ): Promise<T> {
     try {
-      const response = await fetch(url, config);
+      const response = await fetchWithTimeout(url, config, timeoutMs);
       return await this.handleResponse<T>(response);
     } catch (error) {
       if (retries > 0 && this.isRetriableError(error)) {
         await this.sleep(delay);
-        return this.retryRequest<T>(url, config, retries - 1, delay * 2);
+        return this.retryRequest<T>(url, config, retries - 1, delay * 2, timeoutMs);
       }
       throw error;
     }
   }
 
   private isRetriableError(error: any): boolean {
-    // Retry on network errors or 5xx server errors
+    // Retry on network errors, timeouts, or 5xx server errors
+    if (isTimeoutError(error)) return true;
     if (error instanceof TypeError) return true; // Network error
     if (error.status && error.status >= 500 && error.status < 600) return true;
     return false;
@@ -167,6 +174,7 @@ class APIClient {
       retries = 2,
       retryDelay = 1000,
       showErrorToast = true,
+      timeoutMs = DEFAULT_TIMEOUT_MS,
       ...fetchConfig
     } = config;
 
@@ -187,12 +195,16 @@ class APIClient {
         url,
         { ...fetchConfig, headers },
         retries,
-        retryDelay
+        retryDelay,
+        timeoutMs
       );
     } catch (error) {
       if (showErrorToast && error instanceof Object && 'message' in error) {
+        const message = isTimeoutError(error)
+          ? 'Request timed out. Check your connection and try again.'
+          : (error.message as string);
         showError(
-          error.message as string,
+          message,
           error instanceof Object && 'details' in error ? this.formatErrorDetails(error.details) : undefined
         );
       }
@@ -240,7 +252,7 @@ class APIClient {
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    const response = await fetch(url, { method: 'GET', headers });
+    const response = await fetchWithTimeout(url, { method: 'GET', headers }, 60_000);
     if (!response.ok) {
       let message = `Download failed (${response.status})`;
       try {
@@ -279,16 +291,23 @@ class APIClient {
     const url = endpoint.startsWith('http') ? endpoint : `${this.baseURL}${endpoint}`;
     
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData,
-        headers,
-      });
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          body: formData,
+          headers,
+        },
+        60_000
+      );
       return await this.handleResponse<T>(response);
     } catch (error) {
       if (error instanceof Object && 'message' in error) {
+        const message = isTimeoutError(error)
+          ? 'Upload timed out. Check your connection and try again.'
+          : (error.message as string);
         showError(
-          error.message as string,
+          message,
           error instanceof Object && 'details' in error ? this.formatErrorDetails(error.details) : undefined
         );
       }

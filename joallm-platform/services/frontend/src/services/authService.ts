@@ -1,6 +1,11 @@
 import { API_ENDPOINTS } from '../config/api';
 import { User } from '../contexts/AuthContext';
+import { fetchWithTimeout, isTimeoutError, TimeoutError } from '../utils/fetchWithTimeout';
 import { showError } from '../utils/toast';
+
+/** Keep auth bootstrap snappy on slow networks; login can wait a bit longer. */
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 10_000;
+const AUTH_REQUEST_TIMEOUT_MS = 20_000;
 
 export interface LoginRequest {
   email: string;
@@ -39,15 +44,33 @@ export class AuthService {
     return user as User;
   }
 
+  private rethrowPreservingTimeout(error: unknown, fallbackMessage: string): never {
+    if (isTimeoutError(error)) {
+      throw error instanceof TimeoutError
+        ? error
+        : new TimeoutError(error instanceof Error ? error.message : fallbackMessage);
+    }
+    const message = error instanceof Error ? error.message : fallbackMessage;
+    throw new Error(message || fallbackMessage);
+  }
+
   // Helper method for unauthenticated requests
-  private async makeUnauthenticatedRequest<T>(endpoint: string, data: any): Promise<T> {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+  private async makeUnauthenticatedRequest<T>(
+    endpoint: string,
+    data: any,
+    timeoutMs: number = AUTH_REQUEST_TIMEOUT_MS
+  ): Promise<T> {
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
       },
-      body: JSON.stringify(data),
-    });
+      timeoutMs
+    );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -58,20 +81,28 @@ export class AuthService {
   }
 
   // Helper method for authenticated requests
-  private async makeAuthenticatedRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async makeAuthenticatedRequest<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    timeoutMs: number = AUTH_REQUEST_TIMEOUT_MS
+  ): Promise<T> {
     const { storage } = await import('../utils/storage');
     const { STORAGE_KEYS } = await import('../utils/storage');
     
     const token = storage.getSecure<string>(STORAGE_KEYS.AUTH_TOKEN);
     
-    const response = await fetch(endpoint, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-        ...options.headers,
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+          ...options.headers,
+        },
       },
-    });
+      timeoutMs
+    );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -107,9 +138,11 @@ export class AuthService {
         preAuthToken: response.preAuthToken,
       };
     } catch (error: any) {
-      const errorMessage = error.message || 'Login failed. Please check your credentials.';
+      const errorMessage = isTimeoutError(error)
+        ? 'Login timed out. Check your connection and try again.'
+        : error.message || 'Login failed. Please check your credentials.';
       showError(errorMessage);
-      throw new Error(errorMessage);
+      this.rethrowPreservingTimeout(error, errorMessage);
     }
   }
 
@@ -129,9 +162,11 @@ export class AuthService {
         message: response.message
       };
     } catch (error: any) {
-      const errorMessage = error.message || 'Registration failed. Please try again.';
+      const errorMessage = isTimeoutError(error)
+        ? 'Registration timed out. Check your connection and try again.'
+        : error.message || 'Registration failed. Please try again.';
       showError(errorMessage);
-      throw new Error(errorMessage);
+      this.rethrowPreservingTimeout(error, errorMessage);
     }
   }
 
@@ -146,14 +181,20 @@ export class AuthService {
 
   async getProfile(silent: boolean = false): Promise<User> {
     try {
-      const response = await this.makeAuthenticatedRequest<{ user: User } | User>(API_ENDPOINTS.auth.profile);
+      const response = await this.makeAuthenticatedRequest<{ user: User } | User>(
+        API_ENDPOINTS.auth.profile,
+        {},
+        AUTH_BOOTSTRAP_TIMEOUT_MS
+      );
       return this.normalizeUser(response);
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to fetch profile';
+      const errorMessage = isTimeoutError(error)
+        ? 'Profile request timed out'
+        : error.message || 'Failed to fetch profile';
       if (!silent) {
         showError(errorMessage);
       }
-      throw new Error(errorMessage);
+      this.rethrowPreservingTimeout(error, errorMessage);
     }
   }
 
@@ -196,11 +237,15 @@ export class AuthService {
         throw new Error('No refresh token available');
       }
 
-      const response = await fetch(API_ENDPOINTS.auth.refresh, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
+      const response = await fetchWithTimeout(
+        API_ENDPOINTS.auth.refresh,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        },
+        AUTH_BOOTSTRAP_TIMEOUT_MS
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -215,24 +260,30 @@ export class AuthService {
       }
       return { token };
     } catch (error: any) {
-      const errorMessage = error.message || 'Failed to refresh token';
+      const errorMessage = isTimeoutError(error)
+        ? 'Session refresh timed out'
+        : error.message || 'Failed to refresh token';
       if (!silent) {
         showError(errorMessage);
       }
-      throw new Error(errorMessage);
+      this.rethrowPreservingTimeout(error, errorMessage);
     }
   }
 
   async verifyTwoFactorLogin(code: string, preAuthToken: string): Promise<AuthResponse> {
     try {
-      const response = await fetch(API_ENDPOINTS.security.verify2FA, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${preAuthToken}`,
+      const response = await fetchWithTimeout(
+        API_ENDPOINTS.security.verify2FA,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${preAuthToken}`,
+          },
+          body: JSON.stringify({ code }),
         },
-        body: JSON.stringify({ code }),
-      });
+        AUTH_REQUEST_TIMEOUT_MS
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -248,9 +299,11 @@ export class AuthService {
         message: payload.message,
       };
     } catch (error: any) {
-      const errorMessage = error.message || '2FA verification failed';
+      const errorMessage = isTimeoutError(error)
+        ? '2FA verification timed out. Check your connection and try again.'
+        : error.message || '2FA verification failed';
       showError(errorMessage);
-      throw new Error(errorMessage);
+      this.rethrowPreservingTimeout(error, errorMessage);
     }
   }
 

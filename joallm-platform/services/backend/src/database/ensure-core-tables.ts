@@ -128,9 +128,18 @@ export async function ensureCorePlatformTables(): Promise<void> {
         "chunk_index" integer NOT NULL,
         "metadata" jsonb,
         "embedding" text,
+        "embedding_model" text,
         "created_at" timestamp DEFAULT NOW() NOT NULL
       )
     `,
+  );
+  await exec(
+    'document_chunks.embedding_model',
+    sql`ALTER TABLE "document_chunks" ADD COLUMN IF NOT EXISTS "embedding_model" text`,
+  );
+  await exec(
+    'document_chunks.embedding_model_idx',
+    sql`CREATE INDEX IF NOT EXISTS "document_chunks_embedding_model_idx" ON "document_chunks" ("embedding_model")`,
   );
 
   await exec(

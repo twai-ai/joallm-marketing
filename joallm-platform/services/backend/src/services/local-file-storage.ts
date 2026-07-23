@@ -20,7 +20,12 @@ export class LocalFileStorage {
     return join(this.baseDir, key);
   }
 
-  async uploadFile(buffer: Buffer, key: string, contentType: string): Promise<string> {
+  async uploadFile(
+    buffer: Buffer,
+    key: string,
+    contentType: string,
+    _metadata?: Record<string, string>,
+  ): Promise<string> {
     try {
       const filePath = this.getFilePath(key);
       

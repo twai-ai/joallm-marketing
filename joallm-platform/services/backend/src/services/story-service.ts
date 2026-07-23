@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { createRequire } from 'module';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../database/connection.js';
 import { files, storySessions, type StoryBeat } from '../database/schema.js';
@@ -23,6 +24,8 @@ import {
   resolveOrganizationIdForUser,
 } from './organization-ownership.js';
 import { logger } from '../utils/logger.js';
+
+const requirePptx = createRequire(import.meta.url);
 
 /** Default ATRISI Marketing visual theme for Story Creative AI actions */
 export const ATRISI_STORY_BRAND_THEME: BrandThemeInput = {
@@ -630,10 +633,25 @@ export async function exportStoryPptx(
     throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
   }
 
-  const pptxMod = await import('pptxgenjs');
-  // CJS/ESM interop across Node + bundlers
-  const PptxCtor = (pptxMod as unknown as { default?: new () => any }).default
-    || (pptxMod as unknown as new () => any);
+  // Load CJS build explicitly — ESM entry (`import JSZip from 'jszip'`) breaks under Node dist.
+  let PptxCtor: new () => any;
+  try {
+    const pptxMod = requirePptx('pptxgenjs');
+    PptxCtor = pptxMod?.default || pptxMod;
+    if (typeof PptxCtor !== 'function') {
+      throw new Error('pptxgenjs did not export a constructor');
+    }
+  } catch (error) {
+    logger.error('Story PPTX dependency load failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw Object.assign(
+      new Error(
+        'PPTX export unavailable on this server. Use Visual pack (HTML) or Carousel brief (MD) instead.',
+      ),
+      { statusCode: 503 },
+    );
+  }
   const pptx = new PptxCtor();
   pptx.author = 'ATRISI Marketing';
   pptx.title = story.title;
@@ -779,24 +797,35 @@ export async function exportStoryMarkdown(
   const lines = [
     `# ${story.title || 'Untitled story'}`,
     '',
-    `> ATRISI Marketing · Story export`,
+    `> ATRISI Marketing · Story export · Context → Proof → Ask`,
     thesis ? `> Thesis: ${thesis}` : '',
-    '',
-    '## Arc',
     '',
   ].filter((line, index, arr) => !(line === '' && arr[index - 1] === ''));
 
-  for (const [index, beat] of beats.entries()) {
-    const role = ARC_LABELS[beat.arcRole || 'other'] || 'Beat';
-    lines.push(`### ${index + 1}. ${role} — ${beat.title || 'Untitled beat'}`);
+  const byArc: Record<string, typeof beats> = {
+    context: [],
+    proof: [],
+    ask: [],
+    other: [],
+  };
+  for (const beat of beats) {
+    const role = beat.arcRole && byArc[beat.arcRole] ? beat.arcRole : 'other';
+    byArc[role].push(beat);
+  }
+
+  for (const role of ['context', 'proof', 'ask', 'other'] as const) {
+    const group = byArc[role];
+    if (group.length === 0) continue;
+    lines.push(`## ${ARC_LABELS[role] || 'Beat'}`);
     lines.push('');
-    if (beat.caption) {
-      lines.push(beat.caption);
+    for (const [index, beat] of group.entries()) {
+      lines.push(`### ${index + 1}. ${beat.title || 'Untitled beat'}`);
       lines.push('');
+      if (beat.caption) {
+        lines.push(beat.caption);
+        lines.push('');
+      }
     }
-    lines.push(`- Arc role: ${role}`);
-    if (beat.fileId) lines.push(`- Asset file: ${beat.fileId}`);
-    lines.push('');
   }
 
   lines.push('---');
@@ -864,22 +893,41 @@ export async function exportStoryHtml(
       : '';
 
   const cards: string[] = [];
-  for (const [index, beat] of beats.entries()) {
-    const role = ARC_LABELS[beat.arcRole || 'other'] || 'Beat';
-    let img = '';
-    if (beat.fileId) {
-      const image = await loadBeatImageForExport(ownerUserId, beat.fileId, { allowWebp: true });
-      if (image) {
-        img = `<img src="data:${image.mime};base64,${image.base64}" alt="" />`;
+  const byArc: Record<string, typeof beats> = {
+    context: [],
+    proof: [],
+    ask: [],
+    other: [],
+  };
+  for (const beat of beats) {
+    const role = beat.arcRole && byArc[beat.arcRole] ? beat.arcRole : 'other';
+    byArc[role].push(beat);
+  }
+
+  let globalIndex = 0;
+  for (const role of ['context', 'proof', 'ask', 'other'] as const) {
+    const group = byArc[role];
+    if (group.length === 0) continue;
+    cards.push(`<h2 class="arc">${escapeHtml(ARC_LABELS[role] || 'Beat')}</h2>`);
+    for (const beat of group) {
+      globalIndex += 1;
+      let img = '';
+      if (beat.fileId) {
+        const image = await loadBeatImageForExport(ownerUserId, beat.fileId, { allowWebp: true });
+        if (image) {
+          img = `<img src="data:${image.mime};base64,${image.base64}" alt="" />`;
+        } else {
+          img = `<p class="missing">Image unavailable — re-upload this beat asset</p>`;
+        }
       }
-    }
-    cards.push(`
+      cards.push(`
 <article class="beat">
-  <p class="role">${escapeHtml(role)} · ${index + 1}/${beats.length}</p>
-  <h2>${escapeHtml(beat.title || 'Beat')}</h2>
+  <p class="role">${escapeHtml(ARC_LABELS[role] || 'Beat')} · ${globalIndex}/${beats.length}</p>
+  <h3>${escapeHtml(beat.title || 'Beat')}</h3>
   ${img}
   <p class="caption">${escapeHtml(beat.caption || '')}</p>
 </article>`);
+    }
   }
 
   const html = `<!DOCTYPE html>
@@ -896,18 +944,20 @@ export async function exportStoryHtml(
   header .brand { font-family: system-ui, sans-serif; letter-spacing:.18em; text-transform:uppercase; font-size:.7rem; color:var(--teal); font-weight:700; }
   header h1 { font-size:2rem; margin:.5rem 0; }
   header .thesis { color:var(--muted); line-height:1.5; }
-  main { max-width:720px; margin:0 auto; padding:0 1.5rem 3rem; display:grid; gap:1.5rem; }
+  main { max-width:720px; margin:0 auto; padding:0 1.5rem 3rem; display:grid; gap:1rem; }
+  .arc { font-family: system-ui, sans-serif; font-size:.75rem; letter-spacing:.16em; text-transform:uppercase; color:var(--teal); margin:1.5rem 0 0.25rem; }
   .beat { background:#fff; padding:1.25rem; border-radius:4px; }
   .beat .role { font-family: system-ui, sans-serif; font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--teal); margin:0 0 .5rem; }
-  .beat h2 { margin:0 0 1rem; font-size:1.35rem; }
+  .beat h3 { margin:0 0 1rem; font-size:1.35rem; }
   .beat img { width:100%; height:auto; display:block; margin:0 0 1rem; background:#e2e8f0; }
   .beat .caption { margin:0; color:#334155; line-height:1.55; font-size:1rem; }
+  .beat .missing { margin:0 0 1rem; padding:1rem; background:#f8fafc; color:var(--muted); font-family:system-ui,sans-serif; font-size:.85rem; }
   footer { text-align:center; padding:2rem; color:var(--muted); font-size:.8rem; font-family:system-ui,sans-serif; }
 </style>
 </head>
 <body>
 <header>
-  <p class="brand">ATRISI · Story</p>
+  <p class="brand">ATRISI · Story · Context → Proof → Ask</p>
   <h1>${escapeHtml(story.title || 'Untitled story')}</h1>
   ${thesis ? `<p class="thesis">${escapeHtml(thesis)}</p>` : ''}
 </header>

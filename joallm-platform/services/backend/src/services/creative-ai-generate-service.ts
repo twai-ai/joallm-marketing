@@ -475,11 +475,13 @@ async function ingestGeneratedImage(options: {
     .returning({ id: files.id });
 
   const fileId = row.id;
-  const storageKey = `creatives/${options.ownerUserId}/${fileId}/original.${ext}`;
+  // Same layout as Story uploads so previews/export recovery share one tree
+  const storageKey = `images/${options.ownerUserId}/${fileId}/original.${ext}`;
+  const contentType = options.contentType.startsWith('image/') ? options.contentType : 'image/png';
   const storageUrl = await storageProvider.uploadFile(
     options.buffer,
     storageKey,
-    options.contentType.startsWith('image/') ? options.contentType : 'image/png',
+    contentType,
     {
       'user-id': options.ownerUserId,
       'file-id': fileId,
@@ -487,6 +489,26 @@ async function ingestGeneratedImage(options: {
       source: 'creative_ai',
     },
   );
+
+  // Confirm bytes landed — ephemeral disks / bad mounts fail here instead of later
+  try {
+    const verify = await storageProvider.downloadFile(storageKey);
+    if (!verify?.length) {
+      throw new Error('Uploaded creative has zero bytes');
+    }
+  } catch (error) {
+    logger.error('Creative AI ingest verify failed — storage volume may be misconfigured', {
+      storageKey,
+      storagePathHint: 'Set STORAGE_PATH to the Railway volume mount (e.g. /app/data/uploads)',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw Object.assign(
+      new Error(
+        'Generated image could not be saved to storage. Check Railway volume mount / STORAGE_PATH, then retry.',
+      ),
+      { statusCode: 503 },
+    );
+  }
 
   await db
     .update(files)

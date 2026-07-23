@@ -147,6 +147,17 @@ if (!parseResult.success) {
 
 export const config = parseResult.data;
 
+// Prefer Railway volume mount when STORAGE_PATH is unset / still on ephemeral default
+{
+  const mount = (config.volumeMountPath || '').trim().replace(/\/$/, '');
+  const path = (config.storagePath || '').trim();
+  if (mount && (!path || path === '/app/data/uploads')) {
+    const resolved = `${mount}/uploads`;
+    (config as { storagePath: string }).storagePath = resolved;
+    console.info(`📁 STORAGE_PATH resolved from VOLUME_MOUNT_PATH → ${resolved}`);
+  }
+}
+
 // Railway often injects host-only values; Google requires an absolute redirect URI.
 {
   const raw = (config.googleRedirectUri || '').trim();

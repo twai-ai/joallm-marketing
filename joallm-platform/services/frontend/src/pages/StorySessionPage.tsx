@@ -210,7 +210,7 @@ export function StorySessionPage() {
           >
             Preview
           </button>
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               type="button"
               disabled={beats.length === 0 || isExporting}
@@ -224,31 +224,60 @@ export function StorySessionPage() {
               <>
                 <button
                   type="button"
-                  className="fixed inset-0 z-40 cursor-default"
+                  className="fixed inset-0 z-40 cursor-default bg-transparent"
                   aria-label="Close export menu"
                   onClick={() => setExportOpen(false)}
                 />
-                <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                <div
+                  role="menu"
+                  className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+                >
+                  <p className="border-b border-slate-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Story pack · Context → Proof → Ask
+                  </p>
                   {(
                     [
-                      { id: 'pptx' as const, label: 'Deck (PPTX)', hint: 'Slides by arc' },
-                      { id: 'html' as const, label: 'Visual pack (HTML)', hint: 'Images + copy' },
-                      { id: 'markdown' as const, label: 'Carousel brief (MD)', hint: 'Titles & captions' },
-                      { id: 'json' as const, label: 'Story JSON', hint: 'Structured handoff' },
+                      {
+                        id: 'html' as const,
+                        label: 'Visual board',
+                        hint: 'HTML · images + copy by arc',
+                      },
+                      {
+                        id: 'markdown' as const,
+                        label: 'Copy brief',
+                        hint: 'Markdown · titles & captions by arc',
+                      },
+                      {
+                        id: 'pptx' as const,
+                        label: 'Slide deck',
+                        hint: 'PPTX · one slide per beat',
+                      },
+                      {
+                        id: 'json' as const,
+                        label: 'Data pack',
+                        hint: 'JSON · structured handoff',
+                      },
                     ] as const
                   ).map((option) => (
                     <button
                       key={option.id}
                       type="button"
-                      className="flex w-full flex-col items-start px-4 py-2.5 text-left transition hover:bg-slate-50"
+                      role="menuitem"
+                      className="flex w-full items-start gap-3 border-b border-slate-50 px-3 py-2.5 text-left last:border-b-0 hover:bg-slate-50"
                       onClick={() => {
                         setExportOpen(false);
                         setIsExporting(true);
                         void exportStory(option.id).finally(() => setIsExporting(false));
                       }}
                     >
-                      <span className="text-sm font-medium text-slate-900">{option.label}</span>
-                      <span className="text-[11px] text-slate-400">{option.hint}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium leading-snug text-slate-900">
+                          {option.label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
+                          {option.hint}
+                        </span>
+                      </span>
                     </button>
                   ))}
                 </div>

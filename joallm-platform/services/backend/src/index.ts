@@ -36,6 +36,16 @@ async function buildServer() {
   // Register monitoring middleware (must be early in the pipeline)
   registerMonitoring(fastify);
 
+  // Allow empty JSON bodies (logout / some clients send Content-Type without payload)
+  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) => {
+    try {
+      const text = typeof body === 'string' ? body.trim() : '';
+      done(null, text ? JSON.parse(text) : {});
+    } catch (error) {
+      done(error as Error, undefined);
+    }
+  });
+
   const configuredOrigins = config.corsOrigin
     .split(',')
     .map(origin => origin.trim())

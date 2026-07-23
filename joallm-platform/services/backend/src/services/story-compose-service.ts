@@ -14,7 +14,7 @@ import { canActorAccessOwnerResource } from './organization-ownership.js';
 import { logger } from '../utils/logger.js';
 
 const VISION_MODELS = [
-  'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'qwen/qwen3.6-27b',
   'meta-llama/llama-4-scout-17b-16e-instruct',
 ] as const;
 

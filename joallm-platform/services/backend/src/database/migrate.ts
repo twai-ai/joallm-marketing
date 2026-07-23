@@ -1,6 +1,6 @@
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { sql } from 'drizzle-orm';
-import { db, initializeExtensions } from './connection.js';
+import { db, initializeExtensions, repairEmbeddingIndexes } from './connection.js';
 import { logger } from '../utils/logger.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -473,6 +473,7 @@ export async function runMigrations(): Promise<void> {
 
     // Initialize pgvector extension first (non-blocking if it fails)
     await initializeExtensions();
+    await repairEmbeddingIndexes();
 
     // Use path relative to the compiled file location
     const migrationsFolder = join(__dirname, 'migrations');
@@ -495,6 +496,8 @@ export async function runMigrations(): Promise<void> {
     logger.warn('⚠️ If pgvector is missing, please install it in Railway Dashboard');
     logger.warn('⚠️ Attempting core-table bootstrap so chat/auth can still work…');
     try {
+      await initializeExtensions();
+      await repairEmbeddingIndexes();
       await ensureUsersTable();
       await ensureApiUsageTable();
       await ensureCorePlatformTables();

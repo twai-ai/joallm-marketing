@@ -21,9 +21,9 @@ export interface FrameAnalysis {
 }
 
 // Vision models in preference order — all on Groq, same API key.
-// llama-3.2-*-vision-preview was decommissioned April 2026; Llama 4 Scout is the replacement.
+// Llama 4 Maverick was shut down ~2026-03-09; Scout may still work; Qwen 3.6 is current vision.
 const VISION_MODELS = [
-  'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'qwen/qwen3.6-27b',
   'meta-llama/llama-4-scout-17b-16e-instruct',
 ] as const;
 
@@ -50,6 +50,16 @@ function isUsableKey(value?: string | null): value is string {
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isUnavailableVisionModelError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('decommissioned') ||
+    message.includes('model_not_found') ||
+    message.includes('does not exist') ||
+    message.includes('do not have access')
+  );
 }
 
 function isRateLimitedVisionError(error: unknown): boolean {
@@ -197,13 +207,11 @@ export async function analyseVideoFrames(
         succeeded = true;
         break;
       } catch (error: any) {
-        const isDecommissioned =
-          error?.status === 400 &&
-          (error?.message ?? '').includes('decommissioned');
+        const isUnavailable = isUnavailableVisionModelError(error);
         const isRateLimited = isRateLimitedVisionError(error);
-        if ((isDecommissioned || isRateLimited) && mi < VISION_MODELS.length - 1) {
+        if ((isUnavailable || isRateLimited) && mi < VISION_MODELS.length - 1) {
           logger.warn(
-            `${isDecommissioned ? 'Model decommissioned' : 'Vision model rate-limited'} for ${model} — trying ${VISION_MODELS[mi + 1]}`,
+            `${isUnavailable ? 'Vision model unavailable' : 'Vision model rate-limited'} for ${model} — trying ${VISION_MODELS[mi + 1]}`,
           );
           continue;
         }
@@ -347,11 +355,11 @@ export async function describeCreativeReferenceImages(
         break;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        const isDecommissioned = message.includes('decommissioned');
+        const isUnavailable = isUnavailableVisionModelError(error);
         const isRateLimited = isRateLimitedVisionError(error);
-        if ((isDecommissioned || isRateLimited) && mi < VISION_MODELS.length - 1) {
+        if ((isUnavailable || isRateLimited) && mi < VISION_MODELS.length - 1) {
           logger.warn(
-            `Creative vision ${isDecommissioned ? 'model decommissioned' : 'rate-limited'} for ${model} — trying next`,
+            `Creative vision ${isUnavailable ? 'model unavailable' : 'rate-limited'} for ${model} — trying next`,
           );
           continue;
         }

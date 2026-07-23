@@ -54,14 +54,42 @@ export async function closeDatabaseConnection(): Promise<void> {
   }
 }
 
-// Initialize pgvector extension
-export async function initializeExtensions(): Promise<void> {
+// Initialize pgvector extension when the Postgres image supports it.
+export async function initializeExtensions(): Promise<boolean> {
   try {
     await client`CREATE EXTENSION IF NOT EXISTS vector`;
     console.log('✅ pgvector extension initialized successfully');
+    return true;
   } catch (error) {
-    console.warn('⚠️ Failed to initialize pgvector extension (RAG features will be disabled):', error);
-    // Don't throw - allow server to start without pgvector
-    // This enables deployment before pgvector is set up
+    console.warn(
+      '⚠️ Failed to initialize pgvector extension (RAG vector search disabled). ' +
+        'Use a Railway "Postgres + pgvector" plugin/template, then redeploy.',
+      error instanceof Error ? error.message : error,
+    );
+    return false;
+  }
+}
+
+/** Drop legacy btree embedding indexes that overflow without pgvector/ivfflat. */
+export async function repairEmbeddingIndexes(): Promise<void> {
+  try {
+    const rows = await client`
+      SELECT indexdef
+      FROM pg_indexes
+      WHERE indexname = 'document_chunks_embedding_idx'
+    `;
+    const indexDef = String(rows[0]?.indexdef || '');
+    if (indexDef && /using btree/i.test(indexDef)) {
+      await client`DROP INDEX IF EXISTS "document_chunks_embedding_idx"`;
+      console.warn(
+        '⚠️ Dropped legacy btree document_chunks_embedding_idx (row size exceeds btree limit). ' +
+          'Install pgvector and recreate an ivfflat/hnsw index for RAG.',
+      );
+    }
+  } catch (error) {
+    console.warn(
+      '⚠️ Could not inspect/repair embedding index:',
+      error instanceof Error ? error.message : error,
+    );
   }
 }

@@ -24,9 +24,10 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   // Groq Models - Llama 3.3 Series
   'llama-3.3-70b-versatile': { input: 0.059, output: 0.079 }, // $0.59/1M in, $0.79/1M out
   
-  // Groq Models - Llama 4 Series
+  // Groq Models - Llama 4 / current vision
   'meta-llama/llama-4-scout-17b-16e-instruct': { input: 0.011, output: 0.034 }, // $0.11/1M in, $0.34/1M out
-  'meta-llama/llama-4-maverick-17b-128e-instruct': { input: 0.020, output: 0.060 }, // $0.20/1M in, $0.60/1M out
+  'meta-llama/llama-4-maverick-17b-128e-instruct': { input: 0.020, output: 0.060 }, // deprecated on Groq
+  'qwen/qwen3.6-27b': { input: 0.015, output: 0.045 },
   
   // Groq Models - Llama 3.1 Series
   'llama-3.1-8b-instant': { input: 0.005, output: 0.008 }, // $0.05/1M in, $0.08/1M out

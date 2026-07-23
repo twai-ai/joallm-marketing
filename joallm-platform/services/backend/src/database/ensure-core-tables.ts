@@ -142,6 +142,89 @@ export async function ensureCorePlatformTables(): Promise<void> {
     sql`CREATE INDEX IF NOT EXISTS "document_chunks_embedding_model_idx" ON "document_chunks" ("embedding_model")`,
   );
 
+  // Legacy btree on embedding rows overflows Postgres btree max size when
+  // embeddings are stored as text/json. Drop it; ivfflat needs pgvector.
+  await exec(
+    'document_chunks.drop_btree_embedding_idx',
+    sql`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_indexes
+          WHERE indexname = 'document_chunks_embedding_idx'
+            AND indexdef ILIKE '% USING btree %'
+        ) THEN
+          DROP INDEX IF EXISTS "document_chunks_embedding_idx";
+        END IF;
+      END $$;
+    `,
+  );
+
+  await exec(
+    'search_history',
+    sql`
+      CREATE TABLE IF NOT EXISTS "search_history" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+        "query" text NOT NULL,
+        "results_count" integer DEFAULT 0,
+        "search_time" integer DEFAULT 0,
+        "average_score" real,
+        "file_ids" jsonb,
+        "success" boolean DEFAULT true,
+        "error_message" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+  await exec(
+    'search_history.user_id_idx',
+    sql`CREATE INDEX IF NOT EXISTS "search_history_user_id_idx" ON "search_history" ("user_id")`,
+  );
+  await exec(
+    'search_history.created_at_idx',
+    sql`CREATE INDEX IF NOT EXISTS "search_history_created_at_idx" ON "search_history" ("created_at")`,
+  );
+  await exec(
+    'search_history.query_idx',
+    sql`CREATE INDEX IF NOT EXISTS "search_history_query_idx" ON "search_history" ("query")`,
+  );
+
+  await exec(
+    'message_feedback',
+    sql`
+      CREATE TABLE IF NOT EXISTS "message_feedback" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "message_id" uuid NOT NULL REFERENCES "messages"("id") ON DELETE CASCADE,
+        "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "session_id" uuid REFERENCES "chat_sessions"("id") ON DELETE SET NULL,
+        "rating" text NOT NULL,
+        "feedback_type" text DEFAULT 'rating',
+        "corrected_text" text,
+        "flag_reason" text,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL,
+        CONSTRAINT "message_feedback_user_message_unique" UNIQUE ("message_id", "user_id")
+      )
+    `,
+  );
+  await exec(
+    'message_feedback.message_id_idx',
+    sql`CREATE INDEX IF NOT EXISTS "message_feedback_message_id_idx" ON "message_feedback" ("message_id")`,
+  );
+  await exec(
+    'message_feedback.user_id_idx',
+    sql`CREATE INDEX IF NOT EXISTS "message_feedback_user_id_idx" ON "message_feedback" ("user_id")`,
+  );
+  await exec(
+    'message_feedback.rating_idx',
+    sql`CREATE INDEX IF NOT EXISTS "message_feedback_rating_idx" ON "message_feedback" ("rating")`,
+  );
+  await exec(
+    'message_feedback.created_at_idx',
+    sql`CREATE INDEX IF NOT EXISTS "message_feedback_created_at_idx" ON "message_feedback" ("created_at")`,
+  );
+
   await exec(
     'workflows',
     sql`
@@ -434,6 +517,54 @@ export async function ensureCorePlatformTables(): Promise<void> {
   await exec(
     'workspaces.settings',
     sql`ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "settings" jsonb DEFAULT '{}'::jsonb`,
+  );
+
+  await exec(
+    'inference_runs',
+    sql`
+      CREATE TABLE IF NOT EXISTS "inference_runs" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "organization_id" uuid REFERENCES "organizations"("id") ON DELETE SET NULL,
+        "workspace_id" uuid REFERENCES "workspaces"("id") ON DELETE SET NULL,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+        "provider" text NOT NULL,
+        "model" text NOT NULL,
+        "status" text NOT NULL DEFAULT 'queued',
+        "input" jsonb,
+        "output" jsonb,
+        "error_message" text,
+        "prompt_tokens" integer,
+        "completion_tokens" integer,
+        "total_tokens" integer,
+        "cost" integer,
+        "latency_ms" integer,
+        "started_at" timestamp,
+        "completed_at" timestamp,
+        "metadata" jsonb DEFAULT '{}'::jsonb,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      )
+    `,
+  );
+  await exec(
+    'inference_runs.organization_id_idx',
+    sql`CREATE INDEX IF NOT EXISTS "inference_runs_organization_id_idx" ON "inference_runs" ("organization_id")`,
+  );
+  await exec(
+    'inference_runs.workspace_id_idx',
+    sql`CREATE INDEX IF NOT EXISTS "inference_runs_workspace_id_idx" ON "inference_runs" ("workspace_id")`,
+  );
+  await exec(
+    'inference_runs.user_id_idx',
+    sql`CREATE INDEX IF NOT EXISTS "inference_runs_user_id_idx" ON "inference_runs" ("user_id")`,
+  );
+  await exec(
+    'inference_runs.status_idx',
+    sql`CREATE INDEX IF NOT EXISTS "inference_runs_status_idx" ON "inference_runs" ("status")`,
+  );
+  await exec(
+    'inference_runs.created_at_idx',
+    sql`CREATE INDEX IF NOT EXISTS "inference_runs_created_at_idx" ON "inference_runs" ("created_at")`,
   );
 
   await exec(

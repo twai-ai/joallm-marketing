@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Sparkles, ShieldCheck, Workflow, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { LoginForm } from '../components/common/FormValidation';
 import { StandaloneLogo } from '../components/ui/Logo';
@@ -43,134 +42,91 @@ export function LoginPage() {
   };
 
   return (
-    <div className="atrisi-page min-h-screen flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <div className="flex justify-center mb-6">
-            <StandaloneLogo />
-          </div>
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800 shadow-sm">
-            <Sparkles className="h-4 w-4 text-teal-600" />
-            ATRISI Marketing
-          </div>
-          <h2 className="text-3xl font-bold text-slate-950 mb-2">Welcome back</h2>
-          <p className="text-slate-600">
-            Sign in to operate the Brain (Chat, Knowledge) and create in Studio (Media, Documents, Acquisition).
+    <div className="relative min-h-screen overflow-hidden">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 55% at 15% 10%, rgba(15,118,110,0.16), transparent 55%), radial-gradient(ellipse 50% 40% at 90% 0%, rgba(15,23,42,0.1), transparent 45%), linear-gradient(165deg, #0f172a 0%, #1e293b 42%, #0f766e 140%)',
+        }}
+        aria-hidden
+      />
+
+      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-10 px-4 py-12 lg:flex-row lg:items-center lg:gap-16 lg:px-8">
+        <div className="max-w-md text-white lg:flex-1">
+          <StandaloneLogo />
+          <p className="app-display mt-8 text-xs font-semibold uppercase tracking-[0.24em] text-teal-200/90">
+            ATRISI
+          </p>
+          <h1 className="app-display mt-3 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+            Marketing operations for the institution
+          </h1>
+          <p className="mt-4 text-base leading-relaxed text-slate-300">
+            Sign in with your @atrisi.org account to work Acquisition, Studio, and publishing
+            alongside the team.
           </p>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-          <div className="atrisi-accent-line w-full" aria-hidden />
-          <div className="p-8">
-            {errors.general && (
-              <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
-                <p className="text-sm text-red-600">{errors.general}</p>
-              </div>
-            )}
+        <div className="w-full max-w-md lg:flex-1">
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl shadow-slate-950/30">
+            <div className="border-b border-slate-100 px-8 py-6">
+              <h2 className="app-display text-2xl font-semibold text-slate-950">Sign in</h2>
+              <p className="mt-1 text-sm text-slate-500">Institution members only</p>
+            </div>
 
-            {preAuthToken ? (
-              <form onSubmit={handleTwoFactorVerify} className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Two-Factor Code
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={twoFactorCode}
-                    onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
-                    className="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-teal-200"
-                    placeholder="Enter 6-digit code"
-                  />
-                  {twoFactorMessage && (
-                    <p className="mt-2 text-sm text-slate-600">{twoFactorMessage}</p>
-                  )}
+            <div className="px-8 py-7">
+              {errors.general && (
+                <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
+                  <p className="text-sm text-red-700">{errors.general}</p>
                 </div>
-                <button
-                  type="submit"
-                  disabled={isLoading || twoFactorCode.length !== 6}
-                  className="btn-atrisi-primary w-full rounded-lg px-4 py-3 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Verify and Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPreAuthToken(null);
-                    setTwoFactorCode('');
-                    setTwoFactorMessage('');
-                    setErrors({});
-                  }}
-                  className="w-full rounded-lg border border-slate-300 px-4 py-3 text-slate-700 hover:bg-slate-50"
-                >
-                  Back to Login
-                </button>
-              </form>
-            ) : (
-              <LoginForm onSubmit={handleLogin} loading={isLoading} />
-            )}
+              )}
 
-            {!preAuthToken && (
-              <>
-                <div className="mb-6 mt-6">
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-slate-200" />
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="bg-white px-4 text-slate-500">Or continue with</span>
-                    </div>
+              {preAuthToken ? (
+                <form onSubmit={handleTwoFactorVerify} className="space-y-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Two-factor code
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={twoFactorCode}
+                      onChange={(e) => setTwoFactorCode(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none ring-[#0f766e]/25 focus:ring-2"
+                      placeholder="123456"
+                      required
+                    />
+                    {twoFactorMessage && (
+                      <p className="mt-2 text-xs text-slate-500">{twoFactorMessage}</p>
+                    )}
                   </div>
-                </div>
-                <GoogleLoginButton className="mb-3 w-full" />
-                <button
-                  type="button"
-                  onClick={() => handleLogin({ email: 'demo@joallm.ai', password: 'demo123' })}
-                  disabled={isLoading}
-                  className="flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-200 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Sparkles className="mr-2 h-5 w-5 text-teal-700" />
-                  Try Demo Account
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="btn-atrisi-primary w-full rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+                  >
+                    {isLoading ? 'Verifying…' : 'Verify and continue'}
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <LoginForm onSubmit={handleLogin} isLoading={isLoading} />
+                  <div className="my-5 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="text-xs uppercase tracking-wide text-slate-400">or</span>
+                    <div className="h-px flex-1 bg-slate-200" />
+                  </div>
+                  <GoogleLoginButton />
+                </>
+              )}
 
-        <div className="text-center">
-          <p className="text-slate-600">
-            Don't have an account?{' '}
-            <Link
-              to="/register"
-              className="font-medium text-teal-700 transition-colors hover:text-teal-800"
-            >
-              Sign up for free
-            </Link>
-          </p>
-        </div>
-
-        <div className="mt-8 rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur-sm">
-          <h3 className="mb-4 text-center text-lg font-semibold text-slate-950">
-            What the platform includes:
-          </h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center text-slate-600">
-              <Workflow className="mr-2 h-4 w-4 text-teal-700" />
-              Studio workspaces
-            </div>
-            <div className="flex items-center text-slate-600">
-              <Search className="mr-2 h-4 w-4 text-teal-700" />
-              Knowledge & Timelines
-            </div>
-            <div className="flex items-center text-slate-600">
-              <Sparkles className="mr-2 h-4 w-4 text-teal-700" />
-              Acquisition Channels
-            </div>
-            <div className="flex items-center text-slate-600">
-              <ShieldCheck className="mr-2 h-4 w-4 text-teal-700" />
-              Platform Connectors
+              <p className="mt-6 text-center text-sm text-slate-500">
+                Need an account?{' '}
+                <Link to="/register" className="font-medium text-[#0f766e] hover:underline">
+                  Register
+                </Link>
+              </p>
             </div>
           </div>
         </div>

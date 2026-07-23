@@ -62,11 +62,11 @@ export async function registerDomains(fastify: FastifyInstance) {
   fastify.register(studioRoutes, { prefix: '/api/studio' });
 
   // Creative AI Platform — Generation Profiles / image provider catalog
-  fastify.register(creativeAiRoutes, { prefix: '/api/creative' });
+  await fastify.register(creativeAiRoutes, { prefix: '/api/creative' });
 
   // Story — Studio multi-medium narrative compose (free-floating until attach)
-  fastify.register(storyRoutes, { prefix: '/api/story' });
+  await fastify.register(storyRoutes, { prefix: '/api/story' });
 
   // Operations Experience — Team Activity + ownership cutover tools
-  fastify.register(operationsRoutes, { prefix: '/api/operations' });
+  await fastify.register(operationsRoutes, { prefix: '/api/operations' });
 }

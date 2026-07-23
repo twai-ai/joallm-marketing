@@ -8,7 +8,6 @@ import { randomUUID } from 'crypto';
 import { and, desc, eq } from 'drizzle-orm';
 import Groq from 'groq-sdk';
 import OpenAI from 'openai';
-import PptxGenJS from 'pptxgenjs';
 import { config } from '../config/config.js';
 import { db } from '../database/connection.js';
 import { files, storySessions, type StoryBeat } from '../database/schema.js';
@@ -396,6 +395,7 @@ export async function exportStoryPptx(
     throw Object.assign(new Error('Story has no beats to export'), { statusCode: 400 });
   }
 
+  const PptxGenJS = (await import('pptxgenjs')).default;
   const pptx = new PptxGenJS();
   pptx.author = 'ATRISI Marketing';
   pptx.title = story.title;

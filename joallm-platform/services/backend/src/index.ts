@@ -16,6 +16,7 @@ import { securityHeaders } from './middleware/security.js';
 import { registerMonitoring } from './middleware/monitoring.js';
 
 const fastify = Fastify({
+  ignoreTrailingSlash: true,
   logger: {
     level: config.logLevel,
     transport: config.nodeEnv === 'development' ? {

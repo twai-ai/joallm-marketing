@@ -58,9 +58,6 @@ export function StorySessionPage() {
   const [dragId, setDragId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [moreVisualsTextMode, setMoreVisualsTextMode] = useState<
-    'none' | 'title' | 'title_caption'
-  >('title');
 
   useEffect(() => {
     if (!story) return;
@@ -434,29 +431,42 @@ export function StorySessionPage() {
         <section className="relative flex min-h-[50vh] flex-col bg-slate-950 lg:min-h-0">
           <div className="relative flex flex-1 items-center justify-center p-6">
             {selected?.fileId ? (
-              <AuthPreviewImage
-                fileId={selected.fileId}
-                alt={selected.title}
-                className="max-h-[min(68vh,640px)] w-full object-contain"
-              />
+              <div className="relative max-h-[min(68vh,640px)] w-full max-w-4xl">
+                <AuthPreviewImage
+                  fileId={selected.fileId}
+                  alt={selected.title}
+                  className="max-h-[min(68vh,640px)] w-full object-contain"
+                />
+                {selected.title || selected.caption ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-5 pb-5 pt-20">
+                    {selected.arcRole && selected.arcRole !== 'other' ? (
+                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-teal-300/90">
+                        {ARC_LABEL[selected.arcRole]}
+                      </p>
+                    ) : null}
+                    {selected.title ? (
+                      <p className="mt-1 text-xl font-semibold tracking-tight text-white drop-shadow">
+                        {selected.title}
+                      </p>
+                    ) : null}
+                    {selected.caption ? (
+                      <p className="mt-1 max-w-2xl text-sm text-slate-200/95 drop-shadow">
+                        {selected.caption}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.14em] text-white/45">
+                      Overlay · edit in sidebar
+                    </p>
+                  </div>
+                ) : (
+                  <p className="pointer-events-none absolute inset-x-0 bottom-4 text-center text-[11px] text-white/50">
+                    Add a title in Edit to overlay copy on this photo
+                  </p>
+                )}
+              </div>
             ) : (
               <p className="text-sm text-slate-500">Select or add an asset</p>
             )}
-            {selected?.title || selected?.caption ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-6 pb-5 pt-16">
-                {selected.arcRole && selected.arcRole !== 'other' ? (
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-teal-300/90">
-                    {ARC_LABEL[selected.arcRole]}
-                  </p>
-                ) : null}
-                {selected.title ? (
-                  <p className="mt-1 text-xl font-semibold text-white">{selected.title}</p>
-                ) : null}
-                {selected.caption ? (
-                  <p className="mt-1 max-w-2xl text-sm text-slate-300">{selected.caption}</p>
-                ) : null}
-              </div>
-            ) : null}
           </div>
           {selected?.fileId ? (
             <div className="border-t border-white/10 px-4 py-3">
@@ -478,50 +488,23 @@ export function StorySessionPage() {
                   </span>
                   <span className="text-[10px] font-medium text-teal-100">
                     {selected.title?.trim()
-                      ? 'Ideogram + brand kit · title on image'
-                      : 'FLUX/BFL remix of this photo · add title for copy'}
+                      ? 'Burns title into the image (Ideogram)'
+                      : 'Add a title first to burn text in'}
                   </span>
                 </button>
                 <button
                   type="button"
                   disabled={isBranding || isGeneratingSimilar}
-                  onClick={() =>
-                    void generateSimilar({
-                      beatId: selected.id,
-                      count: 1,
-                      textMode: moreVisualsTextMode,
-                    })
-                  }
+                  onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
                   className="inline-flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 text-white transition hover:bg-white/10 disabled:opacity-40"
                 >
                   <span className="text-sm font-semibold">
                     {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                   </span>
                   <span className="text-[10px] font-medium text-slate-300">
-                    {moreVisualsTextMode === 'none'
-                      ? 'FLUX/BFL · fresh angle · no brand kit'
-                      : moreVisualsTextMode === 'title_caption'
-                        ? 'Ideogram poster · title + caption'
-                        : 'Ideogram poster · title only'}
+                    FLUX photo only · overlay your title
                   </span>
                 </button>
-              </div>
-              <div className="mx-auto mt-2 flex max-w-xl items-center justify-center gap-2">
-                <label htmlFor="more-visuals-text" className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                  On-image text
-                </label>
-                <select
-                  id="more-visuals-text"
-                  value={moreVisualsTextMode}
-                  onChange={(e) =>
-                    setMoreVisualsTextMode(e.target.value as 'none' | 'title' | 'title_caption')
-                  }
-                  className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 outline-none"
-                >
-                  <option value="title">Title only (recommended)</option>
-                  <option value="title_caption">Title + caption</option>
-                  <option value="none">None (scrub text)</option>
-                </select>
               </div>
               <button
                 type="button"
@@ -529,13 +512,13 @@ export function StorySessionPage() {
                 onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
                 className="mx-auto mt-2 block text-center text-[11px] text-slate-400 underline-offset-2 transition hover:text-slate-200 hover:underline disabled:opacity-40"
               >
-                Brand look only (FLUX/BFL · no on-image text)
+                Brand look only (FLUX · no burned-in text)
               </button>
-              {!selected.title?.trim() ? (
-                <p className="mt-2 text-center text-[11px] text-slate-400">
-                  Tip: add a title in Edit so Brand and More visuals can put copy on the image
-                </p>
-              ) : null}
+              <p className="mt-2 text-center text-[11px] text-slate-500">
+                {selected.title?.trim()
+                  ? 'Brand = text in pixels · More visuals = clean photo + title overlay from Edit'
+                  : 'Tip: write a title in Edit, then Brand to burn it in — or More visuals for a clean photo'}
+              </p>
             </div>
           ) : null}
           {beats.length > 1 ? (
@@ -618,7 +601,10 @@ export function StorySessionPage() {
 
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                    2 · Copy for Brand &amp; More visuals
+                    2 · Write on top
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                    Overlay on More visuals photos. Brand burns the title into pixels.
                   </p>
                   <label className="sr-only" htmlFor="story-beat-title">
                     Title
@@ -628,7 +614,7 @@ export function StorySessionPage() {
                     value={selected.title}
                     onChange={(e) => updateSelected({ title: e.target.value })}
                     onBlur={() => void commitSelected()}
-                    placeholder="Headline (on-image for Brand & More visuals)"
+                    placeholder="Headline overlay"
                     className="mt-2 w-full border-0 border-b border-slate-200 bg-transparent py-2 text-base font-semibold text-slate-950 outline-none placeholder:text-slate-300 focus:border-teal-500"
                   />
                   <label className="sr-only" htmlFor="story-caption">
@@ -639,7 +625,7 @@ export function StorySessionPage() {
                     value={selected.caption}
                     onChange={(e) => updateSelected({ caption: e.target.value })}
                     onBlur={() => void commitSelected()}
-                    placeholder="Caption / supporting line"
+                    placeholder="Supporting line (overlay)"
                     rows={3}
                     className="mt-1 w-full resize-none border-0 bg-transparent py-2 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300"
                   />
@@ -670,56 +656,30 @@ export function StorySessionPage() {
                         </span>
                         <span className="mt-0.5 block text-[11px] text-teal-100">
                           {selected.title?.trim()
-                            ? 'Ideogram + brand kit · original kept'
-                            : 'FLUX/BFL subject remix · original kept'}
+                            ? 'Ideogram burns your title into the image'
+                            : 'Add a title above to burn text in'}
                         </span>
                       </button>
                       <button
                         type="button"
                         disabled={isBranding || isGeneratingSimilar}
-                        onClick={() =>
-                          void generateSimilar({
-                            beatId: selected.id,
-                            count: 1,
-                            textMode: moreVisualsTextMode,
-                          })
-                        }
+                        onClick={() => void generateSimilar({ beatId: selected.id, count: 1 })}
                         className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
                       >
                         <span className="block text-sm font-semibold text-slate-800">
                           {isGeneratingSimilar ? 'Generating…' : 'More visuals'}
                         </span>
                         <span className="mt-0.5 block text-[11px] text-slate-500">
-                          {moreVisualsTextMode === 'none'
-                            ? 'FLUX/BFL associated photo · no brand kit'
-                            : moreVisualsTextMode === 'title_caption'
-                              ? 'Ideogram · title + caption poster'
-                              : 'Ideogram · title-only poster'}
+                          FLUX text-free photo · title overlays from Edit
                         </span>
                       </button>
-                      <label className="block text-[11px] text-slate-500">
-                        On-image text for More visuals
-                        <select
-                          value={moreVisualsTextMode}
-                          onChange={(e) =>
-                            setMoreVisualsTextMode(
-                              e.target.value as 'none' | 'title' | 'title_caption',
-                            )
-                          }
-                          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none"
-                        >
-                          <option value="title">Title only (recommended)</option>
-                          <option value="title_caption">Title + caption</option>
-                          <option value="none">None (scrub text)</option>
-                        </select>
-                      </label>
                       <button
                         type="button"
                         disabled={isBranding || isGeneratingSimilar}
                         onClick={() => void brandBeat({ beatId: selected.id, textMode: 'none' })}
                         className="text-left text-[11px] text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline disabled:opacity-40"
                       >
-                        Brand look only (FLUX/BFL · no on-image text)
+                        Brand look only (FLUX · no burned-in text)
                       </button>
                     </div>
                   </div>
@@ -852,24 +812,31 @@ export function StorySessionPage() {
           >
             <ChevronRight className="h-7 w-7" />
           </button>
-          <div className="max-w-5xl text-center">
-            <p className="text-sm text-slate-400">
-              {previewIndex + 1} / {beats.length}
-            </p>
-            <h3 className="mt-2 text-2xl font-semibold text-white">
-              {beats[previewIndex]?.title || 'Beat'}
-            </h3>
+          <div className="relative mx-auto mt-6 max-w-5xl">
             {beats[previewIndex]?.fileId ? (
-              <AuthPreviewImage
-                fileId={beats[previewIndex].fileId!}
-                className="mx-auto mt-6 max-h-[70vh] object-contain"
-              />
+              <div className="relative">
+                <AuthPreviewImage
+                  fileId={beats[previewIndex].fileId!}
+                  className="mx-auto max-h-[70vh] object-contain"
+                />
+                {(beats[previewIndex]?.title || beats[previewIndex]?.caption) && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-6 pb-6 pt-24 text-left">
+                    <p className="text-2xl font-semibold text-white drop-shadow">
+                      {beats[previewIndex]?.title || 'Beat'}
+                    </p>
+                    {beats[previewIndex]?.caption ? (
+                      <p className="mt-2 max-w-xl text-sm text-slate-200">
+                        {beats[previewIndex].caption}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
             ) : null}
-            {beats[previewIndex]?.caption ? (
-              <p className="mx-auto mt-4 max-w-xl text-sm text-slate-300">
-                {beats[previewIndex].caption}
-              </p>
-            ) : null}
+            <p className="mt-3 text-center text-sm text-slate-400">
+              {previewIndex + 1} / {beats.length}
+              {!beats[previewIndex]?.title ? ' · add a title in Edit to overlay' : ' · overlay from Edit'}
+            </p>
           </div>
         </div>
       ) : null}

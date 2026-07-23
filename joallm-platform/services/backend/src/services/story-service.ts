@@ -511,18 +511,15 @@ export async function brandStoryBeat(
 }
 
 /**
- * More visuals — alternate associated shots (not a brand-kit pass).
- *
- * Providers (distinct from Brand):
- * - textMode=none → BFL/FLUX only: fresh angle / framing of the same subject
- * - textMode=title|title_caption → Ideogram only: new poster from scene description + Story copy
- *   (no brand kit / logo watermark — use Brand for that)
+ * More visuals — BFL/FLUX associated photos only (always text-free).
+ * Write title/caption in Edit; they overlay in Studio preview and exports.
+ * Use Brand this beat when you need lettering burned into the pixels.
  */
 export async function generateSimilarStoryBeats(
   ownerUserId: string,
   storyId: string,
   beatId: string,
-  options?: { count?: number; textMode?: 'none' | 'title' | 'title_caption' },
+  options?: { count?: number },
 ): Promise<{ story: StorySessionDto; provider: string; addedBeatIds: string[] }> {
   const existing = await getOwnedStory(ownerUserId, storyId);
   const beat = findBeatOrThrow(existing.beats, beatId);
@@ -531,32 +528,18 @@ export async function generateSimilarStoryBeats(
   }
   const perProvider = Math.min(Math.max(options?.count || 1, 1), 2);
 
-  const headline = cleanStoryTypography(beat.title, 56);
-  const cta = cleanStoryTypography(beat.caption?.split(/[.!?\n]/)[0] || '', 40);
-  const requestedMode = options?.textMode;
-  const textMode: 'none' | 'title' | 'title_caption' =
-    requestedMode || (headline ? 'title' : 'none');
-  const useCopy = textMode !== 'none' && Boolean(headline);
-  const includeCaption = textMode === 'title_caption' && Boolean(cta) && cta !== headline;
-
-  const promptParts = useCopy
-    ? [
-        'New institutional acquisition marketing visual inspired by this scene description.',
-        'Fresh framing and composition — an associated shot, not a brand-kit restyle of the same frame.',
-        'Premium look, natural lighting, recognizable subject from the description.',
-        'Do not add logos or watermarks.',
-      ]
-    : [
-        'Associated photograph matching the first reference image — fresh angle or framing, not a duplicate.',
-        'Same people, place, and lighting. Subject-locked photo remix (BFL/FLUX).',
-        'Premium natural photo. Do not apply brand logos or poster layouts.',
-        'Critical: strip all text — no letters, signs, captions, or watermarks. Blank surfaces for later copy.',
-      ];
+  const promptParts = [
+    'Associated photograph matching the first reference image — fresh angle or framing, not a duplicate.',
+    'Same people, place, and lighting. Subject-locked photo remix (BFL/FLUX).',
+    'Premium natural photo for ATRISI institutional storytelling. Do not apply brand logos or poster layouts.',
+    'Critical: strip all text — no letters, signs, captions, watermarks, or gibberish.',
+    'Blank clean surfaces and empty margins so a human can overlay typography later.',
+  ];
 
   if (beat.vision?.what) {
     promptParts.push(`Keep recognizable: ${beat.vision.what}.`);
   }
-  if (!useCopy && beat.vision?.onImageText) {
+  if (beat.vision?.onImageText) {
     promptParts.push(
       'The reference contains on-image lettering — erase it completely; do not redraw or invent replacement words.',
     );
@@ -565,57 +548,43 @@ export async function generateSimilarStoryBeats(
     promptParts.push(`Mood: ${beat.vision.mood}.`);
   }
 
-  // More visuals: Ideogram for copy posters; FLUX/BFL alone for photo variants (not both)
-  const providerOverride = useCopy ? 'ideogram' : 'flux';
-
   let batch;
   try {
     batch = await generateCreativeImages({
       ownerUserId,
       prompt: promptParts.join(' '),
-      style: useCopy ? 'marketing_poster' : 'photo_realistic',
+      style: 'photo_realistic',
       quality: 'standard',
       aspectRatio: getStoryAspectRatio(existing.metadata as Record<string, unknown>),
-      titleHint: useCopy ? beat.title || 'Story visual' : 'Similar visual',
+      titleHint: 'Similar visual',
       referenceFileIds: [beat.fileId],
-      referenceMode: useCopy ? 'style' : 'edit',
-      visionOnlyReferences: useCopy,
+      referenceMode: 'edit',
       analyzeReferences: true,
       variantCount: perProvider,
-      providerOverride,
+      providerOverride: 'flux',
       metadata: {
         source: 'story_generate_similar',
         storyId,
         beatId,
         referenceFileId: beat.fileId,
-        textFree: !useCopy,
-        withCopy: useCopy,
-        textMode,
-        providerRole: useCopy ? 'ideogram_story_poster' : 'flux_associated_photo',
+        textFree: true,
+        providerRole: 'flux_associated_photo',
         format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
       },
       precision: {
-        textFree: !useCopy,
-        headline: useCopy ? headline : undefined,
-        cta: includeCaption ? cta : undefined,
-        mustIncludeText: useCopy ? headline : undefined,
+        textFree: true,
         brandTheme: ATRISI_STORY_BRAND_THEME,
         paletteType: 'atrisi_institute',
         useLogoReference: false,
-        avoid: useCopy
-          ? 'any text except the quoted headline' +
-            (includeCaption ? '/supporting line' : '') +
-            ', gibberish, misspellings, extra slogans, fake CTAs, Apply Now, Learn More, logos, watermarks, badge stacks, neon, purple glow, fuchsia, cyan cyberpunk, gold seals, clutter'
-          : 'any readable text, letters, words, gibberish, captions, headlines, CTAs, logos, watermarks, signage, posters, subtitles, UI chrome, neon, purple glow, fuchsia, cyan, gold seals, clutter, exact duplicate of reference',
+        avoid:
+          'any readable text, letters, words, gibberish, captions, headlines, CTAs, logos, watermarks, signage, posters, subtitles, UI chrome, neon, purple glow, fuchsia, cyan, gold seals, clutter, exact duplicate of reference',
       },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw Object.assign(
       new Error(
-        useCopy
-          ? `More visuals failed (Ideogram). ${message}`
-          : `More visuals failed (FLUX/BFL). ${message} — add a BFL key in Settings for photo variants, or set on-image text to Title for Ideogram posters.`,
+        `More visuals failed (FLUX/BFL). ${message} — add a BFL key in Settings. For burned-in text use Brand this beat.`,
       ),
       { statusCode: (error as { statusCode?: number })?.statusCode || 502 },
     );
@@ -634,11 +603,10 @@ export async function generateSimilarStoryBeats(
     id: randomUUID(),
     fileId: item.fileId,
     sourceFileId: beat.fileId,
+    // Keep story copy for Studio overlay / export — image itself stays text-free
     title: beat.title || `Visual ${index + 1}`,
     caption: beat.caption || '',
-    notes: useCopy
-      ? `More visuals · Ideogram poster · ${textMode === 'title_caption' ? 'title+caption' : 'title only'} · no brand kit`
-      : `More visuals · FLUX/BFL associated photo · text-free`,
+    notes: `More visuals · FLUX/BFL · text-free photo — overlay title in Edit`,
     order: insertAt + 1 + index,
     arcRole: beat.arcRole || 'other',
     vision: null,

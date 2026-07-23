@@ -180,13 +180,16 @@ export function useStorySession(storyId: string | undefined) {
         { textMode: input.textMode ?? 'title' },
         { showErrorToast: false },
       );
-      return res;
+      return { ...res, textMode: input.textMode ?? 'title' };
     },
     onSuccess: (res) => {
       queryClient.setQueryData(['story', storyId], res.data);
+      const withText = res.textMode === 'title';
       showSuccess(
         res.provider
-          ? `Branded variant added (${res.provider}) — original kept`
+          ? withText
+            ? `Branded with title burned in (${res.provider}) — original kept`
+            : `Brand look added (${res.provider}) — original kept`
           : 'Branded variant added — original kept',
       );
     },
@@ -204,16 +207,11 @@ export function useStorySession(storyId: string | undefined) {
   });
 
   const similarBeatMutation = useMutation({
-    mutationFn: async (input: {
-      beatId: string;
-      count?: number;
-      textMode?: 'none' | 'title' | 'title_caption';
-    }) => {
+    mutationFn: async (input: { beatId: string; count?: number }) => {
       const res = await apiClient.post<
         ApiOk<StorySession> & { provider?: string; addedBeatIds?: string[] }
       >(API_ENDPOINTS.story.similarBeat(storyId!, input.beatId), {
         count: input.count || 1,
-        textMode: input.textMode,
       }, { showErrorToast: false });
       return res;
     },
@@ -222,8 +220,8 @@ export function useStorySession(storyId: string | undefined) {
       const n = res.addedBeatIds?.length || 1;
       showSuccess(
         n > 1
-          ? `${n} visuals added (${res.provider || 'AI'})`
-          : `Visual added (${res.provider || 'AI'})`,
+          ? `${n} text-free photos added (${res.provider || 'FLUX'}) — edit title to overlay`
+          : `Text-free photo added (${res.provider || 'FLUX'}) — edit title to overlay`,
       );
     },
     onError: (error: unknown) => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getAuthenticatedPreviewObjectUrl } from '../utils/downloadFile';
+import { getAuthenticatedPreviewObjectUrl } from '../../utils/downloadFile';
 
 /** Image that loads Platform file previews with Bearer auth. */
 export function AuthPreviewImage({

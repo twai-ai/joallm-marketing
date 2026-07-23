@@ -23,7 +23,7 @@ const VISION_DELAY_MS = 200;
 const MAX_IMAGE_BYTES = 4_500_000;
 
 /** Invalidate cached vision when this changes */
-export const STORY_VISION_PROMPT_VERSION = 'atrisi-v4';
+export const STORY_VISION_PROMPT_VERSION = 'atrisi-v5';
 
 /**
  * Shared product brief for every compose stage.
@@ -581,7 +581,7 @@ Beat ids in upload order: ${beats.map((b) => b.id).join(', ')}
 
 Return ONLY JSON:
 {
-  "thesis": "2-3 sentences: the single story these images tell together for Program Interest",
+  "thesis": "2-3 sentences: the single human story these images tell together",
   "title": "short story title",
   "arc": "context_proof_ask",
   "tone": "atrisi_institutional",
@@ -592,8 +592,9 @@ Return ONLY JSON:
 Rules:
 - Include every beat id from the upload list exactly once (ids without images still belong in order).
 - ${keepOrder ? 'Keep upload order; only assign roles.' : 'YOU MUST reorder for the strongest Context → Proof → Ask. Do not leave weak upload order if a better sequence exists.'}
-- Thesis must unify the set as one Program Interest argument — not summarize each image separately.
-- Prefer opening with who/for (context), middle with visible evidence (proof), close with a soft ask.`,
+- Thesis must unify the set as one natural story — not summarize each image separately.
+- Prefer opening with who/where (context), middle with visible evidence (proof), close with a quiet invite (ask).
+- Do not use the words acquisition or Program Interest in the thesis title.`,
   });
 
   try {
@@ -661,7 +662,7 @@ You are the Combine stage. You receive per-beat vision cards from See.
 Your job: fuse them into ONE acquisition story — not a list of isolated captions.
 Return ONLY JSON:
 {
-  "thesis": "2-3 sentences throughline connecting all beats toward Program Interest",
+  "thesis": "2-3 sentences throughline connecting all beats as one natural story",
   "title": "short story title",
   "arc": "context_proof_ask",
   "tone": "atrisi_institutional",
@@ -764,7 +765,7 @@ Include every beat id once. ${keepOrder ? 'Keep order.' : 'Reorder for strongest
   };
 }
 
-/** Stage 3 — Speak: titles/captions grounded in thesis + vision; fit on-image and acquisition arc. */
+/** Stage 3 — Speak: natural titles/captions that belong on each beat; arc stays internal. */
 export async function speakStoryline(
   storyTitle: string,
   beats: StoryBeat[],
@@ -782,33 +783,36 @@ export async function speakStoryline(
     mood: b.vision?.mood || null,
   }));
 
-  const system = `${ATRISI_STORY_BRIEF}
+  const system = `You write on-image headlines for ATRISI institutional stories.
+Internal brief (do NOT put these words on the image): Context → Proof → Ask; help people discover a program.
+The reader should feel a natural story about the people and place — never marketing meta-language.
 
-You are the Speak stage. Write beat titles and captions for an Institution Acquisition story.
-Each title will be burned onto that beat’s image — it must feel native on THAT visual while advancing the thesis.
 Return ONLY JSON:
 {
   "beats": [
     {
       "id": "beat-id",
-      "title": "≤6 words, ≤48 chars — acquisition headline for THIS beat",
-      "caption": "≤14 words — one supporting line (not a photo description)",
-      "notes": "optional: how this beat serves Program Interest"
+      "title": "≤6 words, ≤48 chars — natural headline for THIS image",
+      "caption": "≤14 words — quiet supporting line",
+      "notes": "optional craft note for editors only"
     }
   ]
 }
-Role patterns (follow arcRole):
-- context: who it’s for / the frame / the opportunity — grounded in what you see (people, campus, setting)
-- proof: trust / outcomes / community / craft — grounded in visible evidence (not invented metrics)
-- ask: soft next step toward Program Interest — e.g. “Talk with us”, “Explore the program”, “Take the next step”
-  Only reuse a hard CTA (Apply / Register / Enroll) if it already appears in onImageText
+
+How to write (follow arcRole silently — do not say context/proof/ask in the copy):
+- context: set the scene — who / where / what’s unfolding, from what you see
+- proof: what the image quietly proves — craft, care, community, outcome you can see
+- ask: a human next step if it fits — or a closing line that invites, without sounding like an ad
 
 Hard rules:
-- Ground every title in that beat’s "what" (setting/people/object) so it belongs on the image — not a floating slogan.
-- The full set must read as one Context → Proof → Ask argument toward Program Interest.
-- Prefer polishing onImageText when it is already a strong institutional headline.
+- Sound like editorial / documentary captions, not campaign slogans.
+- Belong on THIS photo (use "what") — concrete, specific, calm.
+- Prefer polishing onImageText when it is already a strong natural headline.
 - Never invent stats, program names, campuses, or dates absent from onImageText/claimHint.
-- Ban fluff: unlock, empower, journey, excellence awaits, transform your future, shape tomorrow.
+- NEVER use these words/phrases in title or caption: acquisition, Program Interest, prospect,
+  funnel, CTA, beat, slide, story arc, context, proof, ask, ATRISI Marketing, unlock, empower,
+  journey, excellence, transform your future.
+- Do not prefix with “This story…”, “Our story…”, “Acquisition…”, or “In this image…”.
 - Preserve every beat id.`;
 
   const parsed = await chatJson({
@@ -816,10 +820,10 @@ Hard rules:
     user: JSON.stringify({
       storyTitle,
       thesis: thesis || null,
-      purpose: 'acquisition narrative — titles must sit well on each beat image',
+      purpose: 'natural on-image lines for each beat — no acquisition jargon',
       beats: payload,
     }),
-    temperature: 0.25,
+    temperature: 0.3,
   });
   if (!parsed) return null;
 
@@ -842,30 +846,40 @@ Hard rules:
 const FLUFF_TITLE =
   /\b(unlock|empower|journey|excellence awaits|transform your future|shape (the )?tomorrow|dream big|limitless)\b/i;
 
+const META_JARGON =
+  /\b(acquisition(\s+story)?|program interest|prospects?|funnel|atrisi marketing|story arc|this beat|this slide)\b/gi;
+
+/** Strip meta / campaign jargon so titles feel native on the image. */
+function stripMetaLanguage(text: string): string {
+  let t = text.trim();
+  t = t.replace(/^(this\s+)?(acquisition\s+)?story\s*[:\-–—]\s*/i, '');
+  t = t.replace(/^(our|the)\s+acquisition\s+(story|journey)\s*[:\-–—]?\s*/i, '');
+  t = t.replace(META_JARGON, ' ');
+  t = t.replace(/\s+/g, ' ').trim();
+  return t;
+}
+
 /** Keep Speak output short enough for Ideogram / Brand on-image burn. */
 export function sanitizeBeatTitle(raw: string): string {
-  let t = raw.trim().replace(/\s+/g, ' ');
+  let t = stripMetaLanguage(raw);
   if (!t) return '';
   if (FLUFF_TITLE.test(t)) {
     t = t.replace(FLUFF_TITLE, '').replace(/\s+/g, ' ').trim();
   }
-  // Drop trailing punctuation noise
   t = t.replace(/[|•·]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (t.length > 48) {
     const sliced = t.slice(0, 48);
     const lastSpace = sliced.lastIndexOf(' ');
     t = (lastSpace > 24 ? sliced.slice(0, lastSpace) : sliced).trim();
   }
-  // Prefer ≤6 words for on-image
   const words = t.split(/\s+/).filter(Boolean);
   if (words.length > 6) t = words.slice(0, 6).join(' ');
   return t;
 }
 
 export function sanitizeBeatCaption(raw: string): string {
-  let c = raw.trim().replace(/\s+/g, ' ');
+  let c = stripMetaLanguage(raw);
   if (!c) return '';
-  // First sentence only
   const sentence = c.split(/(?<=[.!?])\s+/)[0] || c;
   c = sentence.replace(/^["']+|["']+$/g, '').trim();
   const words = c.split(/\s+/).filter(Boolean);
@@ -893,10 +907,10 @@ export function applyHeuristicFromVision(beats: StoryBeat[], title: string): {
     const what = beat.vision?.what;
     const roleCaption =
       arcRole === 'context'
-        ? 'Built for people ready to grow.'
+        ? 'Where the work begins.'
         : arcRole === 'proof'
-          ? 'Trust earned in practice.'
-          : 'Take the next step with us.';
+          ? 'Made real in practice.'
+          : 'When you’re ready to begin.';
 
     const fallbackTitle =
       (onText?.split(/[\n|]/)[0] || claim || what || beat.title || `Beat ${index + 1}`).slice(0, 48);

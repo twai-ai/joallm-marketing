@@ -200,21 +200,47 @@ async function seeOneImage(
 
   for (const model of VISION_MODELS) {
     try {
-      const response = await client.chat.completions.create({
-        model,
-        temperature: 0.1,
-        max_tokens: 420,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
-              { type: 'text', text: seeUserText },
-            ],
-          },
-        ],
-        response_format: { type: 'json_object' },
-      });
+      const runSee = async (useJsonMode: boolean) =>
+        client.chat.completions.create({
+          model,
+          temperature: 0.1,
+          max_tokens: 420,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
+                {
+                  type: 'text',
+                  text: useJsonMode
+                    ? seeUserText
+                    : `${seeUserText}\n\nReply with raw JSON only — no markdown fences.`,
+                },
+              ],
+            },
+          ],
+          ...(useJsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+        });
+
+      let response;
+      try {
+        response = await runSee(true);
+      } catch (jsonModeError: unknown) {
+        const message =
+          jsonModeError instanceof Error ? jsonModeError.message : String(jsonModeError);
+        if (
+          !message.includes('json_validate_failed') &&
+          !message.includes('Failed to validate JSON')
+        ) {
+          throw jsonModeError;
+        }
+        logger.warn('Story vision json_object failed — retrying without JSON mode', {
+          fileId,
+          model,
+        });
+        response = await runSee(false);
+      }
+
       const parsed = parseJsonObject(response.choices[0]?.message?.content || '{}');
       const signals = Array.isArray(parsed.signals)
         ? parsed.signals.filter((s): s is string => typeof s === 'string').slice(0, 8)

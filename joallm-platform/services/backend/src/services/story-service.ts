@@ -524,7 +524,7 @@ export async function brandStoryBeat(
 }
 
 /**
- * More visuals — BFL/FLUX associated photos only (always text-free).
+ * More visuals — text-free associated photos (FLUX first, Ideogram fallback).
  * Write title/caption in Edit; they overlay in Studio preview and exports.
  * Use Brand this beat when you need lettering burned into the pixels.
  */
@@ -548,7 +548,7 @@ export async function generateSimilarStoryBeats(
 
   const promptParts = [
     'Associated photograph matching the first reference image — fresh angle or framing, not a duplicate.',
-    'Same people, place, and lighting. Subject-locked photo remix (BFL/FLUX).',
+    'Same people, place, and lighting. Subject-locked photo remix.',
     'Premium natural photo for ATRISI institutional storytelling. Do not apply brand logos or poster layouts.',
     'Critical: strip all text — no letters, signs, captions, watermarks, or gibberish.',
     'Blank clean surfaces and empty margins so a human can overlay typography later.',
@@ -577,16 +577,17 @@ export async function generateSimilarStoryBeats(
       titleHint: 'Similar visual',
       referenceFileIds: [beat.fileId],
       referenceMode: 'edit',
-      analyzeReferences: true,
+      // Beat vision already available; Groq JSON vision often fails on large refs and only wastes time.
+      analyzeReferences: false,
       variantCount: perProvider,
-      providerOverride: 'flux',
+      // No providerOverride — edit mode tries FLUX then Ideogram so one key failure is not a hard 502.
       metadata: {
         source: 'story_generate_similar',
         storyId,
         beatId,
         referenceFileId: beat.fileId,
         textFree: true,
-        providerRole: 'flux_associated_photo',
+        providerRole: 'associated_photo_text_free',
         format: getStoryFormat(existing.metadata as Record<string, unknown>).id,
       },
       precision: {
@@ -602,7 +603,7 @@ export async function generateSimilarStoryBeats(
     const message = error instanceof Error ? error.message : String(error);
     throw Object.assign(
       new Error(
-        `More visuals failed (FLUX/BFL). ${message} — add a BFL key in Settings. For burned-in text use Brand this beat.`,
+        `More visuals failed. ${message} — ensure BFL_API_KEY and/or IDEOGRAM_API_KEY are set (or BYOK in Settings). For burned-in text use Brand this beat.`,
       ),
       { statusCode: (error as { statusCode?: number })?.statusCode || 502 },
     );
@@ -617,6 +618,7 @@ export async function generateSimilarStoryBeats(
   }
 
   const insertAt = existing.beats.findIndex((b) => b.id === beatId);
+  const providerLabel = batch.provider === 'ideogram' ? 'Ideogram' : 'FLUX/BFL';
   const added: StoryBeat[] = collected.map((item, index) => ({
     id: randomUUID(),
     fileId: item.fileId,
@@ -624,7 +626,7 @@ export async function generateSimilarStoryBeats(
     // Keep story copy for Studio overlay / export — image itself stays text-free
     title: beat.title || `Visual ${index + 1}`,
     caption: beat.caption || '',
-    notes: `More visuals · FLUX/BFL · text-free photo — overlay title in Edit`,
+    notes: `More visuals · ${providerLabel} · text-free photo — overlay title in Edit`,
     order: insertAt + 1 + index,
     arcRole: beat.arcRole || 'other',
     vision: null,

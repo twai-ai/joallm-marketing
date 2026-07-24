@@ -886,9 +886,19 @@ async function generateWithFlux(options: {
   };
 
   if (!submit.ok) {
-    throw new Error(
-      `FLUX submit failed (${submit.status}): ${submitted.detail || submitted.message || submit.statusText}`,
-    );
+    const detail =
+      submitted.detail ||
+      submitted.message ||
+      (typeof submitted === 'object' ? JSON.stringify(submitted).slice(0, 400) : '') ||
+      submit.statusText;
+    logger.error('FLUX submit rejected', {
+      status: submit.status,
+      model: activeModel,
+      detail,
+      refCount: refs.length,
+      refBytes: refs.map((r) => r.buffer.length),
+    });
+    throw new Error(`FLUX submit failed (${submit.status}): ${detail}`);
   }
 
   const pollingUrl = submitted.polling_url;
@@ -1215,20 +1225,21 @@ export async function generateCreativeImages(
       break;
     } catch (error) {
       lastError = error;
+      const candidateIndex = providerCandidates.indexOf(candidate);
+      const hasNext = candidateIndex >= 0 && candidateIndex < providerCandidates.length - 1;
       logger.error('Creative AI generate failed', {
         provider,
         error: error instanceof Error ? error.message : String(error),
-        willRetry: isProviderBillingError(error) && providerCandidates.indexOf(candidate) < providerCandidates.length - 1,
+        billingRelated: isProviderBillingError(error),
+        willRetry: hasNext,
+        next: hasNext ? providerCandidates[candidateIndex + 1]?.provider : undefined,
       });
-      if (!isProviderBillingError(error) || providerCandidates.indexOf(candidate) >= providerCandidates.length - 1) {
-        // Non-billing errors: still try next provider when available (e.g. FLUX down)
-        const hasNext = providerCandidates.indexOf(candidate) < providerCandidates.length - 1;
-        if (!hasNext) throw error;
-        logger.warn('Creative AI trying next provider after failure', {
-          failed: provider,
-          next: providerCandidates[providerCandidates.indexOf(candidate) + 1]?.provider,
-        });
-      }
+      // Always try the next provider when available (billing, API errors, bad refs, etc.)
+      if (!hasNext) throw error;
+      logger.warn('Creative AI trying next provider after failure', {
+        failed: provider,
+        next: providerCandidates[candidateIndex + 1]?.provider,
+      });
     }
   }
 
